@@ -84,9 +84,9 @@ export default {
         const body: any = await request.json();
 
         // Validate required fields
-        if (!body.prompt || !body.duration || !body.videoConfig || !body.userId || !body.seriesId || !body.title) {
+        if (!body.prompt || !body.duration || !body.videoConfig || !body.userId || !body.seriesId) {
           return jsonResponse(
-            { error: 'Missing required fields: prompt, duration, videoConfig, userId, seriesId, title' },
+            { error: 'Missing required fields: prompt, duration, videoConfig, userId, seriesId' },
             400
           );
         }
@@ -155,7 +155,7 @@ export default {
           createdStory = await storyService.createStory({
             userId: body.userId,
             seriesId: body.seriesId,
-            title: body.title,
+            title: scriptResult.story?.title,
             videoType: body.videoConfig?.videoType || 'faceless-video',
             story: storyData,
             status: ProjectStatus.PROCESSING,

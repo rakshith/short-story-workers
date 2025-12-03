@@ -8,8 +8,8 @@
     "dev:remote": "wrangler dev --remote",
     "deploy": "wrangler deploy --env=\"\"",
     "log": "wrangler tail --format pretty",
-    "deploy:staging": "wrangler deploy --env staging",
-    "deploy:production": "wrangler deploy --env production"
+    "deploy:stg": "wrangler deploy --env staging",
+    "deploy:prod": "wrangler deploy --env production"
   },
   "keywords": [
     "cloudflare-workers",
