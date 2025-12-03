@@ -6,6 +6,7 @@ import { generateShortStoryPath, generateUUID } from '../utils/storage';
 import { uploadToDefaultBucket } from '../utils/image-upload';
 import { FOLDER_NAMES } from '../config/table-config';
 import { v4 as uuidv4 } from 'uuid';
+import { VideoConfigData } from './supabase';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -17,6 +18,7 @@ export interface ImageGenerationParams {
   output_quality?: number;
   aspect_ratio?: string;
   seed?: number;
+  videoConfig: VideoConfigData;
 }
 
 export interface ImageGenerationResult {
@@ -53,7 +55,7 @@ export async function generateAndUploadImages(
 
   // Prepare input for Replicate
   const input: any = {
-    prompt: params.prompt,
+    prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt}`,
     width: params.width,
     height: params.height,
     num_outputs: params.num_outputs || 1,

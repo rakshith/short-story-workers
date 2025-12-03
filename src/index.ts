@@ -196,25 +196,22 @@ export default {
         await Promise.all(imagePromises);
         console.log(`[Generate Story] Queued ${storyData.scenes.length} image generation jobs`);
 
-        // Queue audio generation jobs
+        // Queue audio generation jobs for ALL scenes
         for (let i = 0; i < storyData.scenes.length; i++) {
-          const scene = storyData.scenes[i];
-          if (scene.narration) {
-            const message: QueueMessage = {
-              jobId,
-              userId: body.userId,
-              seriesId: body.seriesId,
-              storyId,
-              title: body.title,
-              storyData,
-              videoConfig: body.videoConfig,
-              sceneIndex: i,
-              type: 'audio',
-            };
-            await env.STORY_QUEUE.send(message);
-          }
+          const message: QueueMessage = {
+            jobId,
+            userId: body.userId,
+            seriesId: body.seriesId,
+            storyId,
+            title: body.title,
+            storyData,
+            videoConfig: body.videoConfig,
+            sceneIndex: i,
+            type: 'audio',
+          };
+          await env.STORY_QUEUE.send(message);
         }
-        console.log(`[Generate Story] Queued audio generation jobs`);
+        console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs`);
 
         // Queue finalization job
         const finalizeMessage: QueueMessage = {
@@ -352,26 +349,23 @@ export default {
         await Promise.all(imagePromises);
         console.log(`[Create Story] Queued ${storyData.scenes.length} image generation jobs`);
 
-        // Queue audio generation jobs sequentially (to avoid rate limits)
-        // Audio jobs are queued immediately; both image and audio process in parallel in the queue consumer
+        // Queue audio generation jobs for ALL scenes
+        // Both image and audio process in parallel in the queue consumer
         for (let i = 0; i < storyData.scenes.length; i++) {
-          const scene = storyData.scenes[i];
-          if (scene.narration) {
-            const message: QueueMessage = {
-              jobId,
-              userId: body.userId,
-              seriesId: body.seriesId,
-              storyId,
-              title: body.title,
-              storyData,
-              videoConfig: body.videoConfig,
-              sceneIndex: i,
-              type: 'audio',
-            };
-            await env.STORY_QUEUE.send(message);
-          }
+          const message: QueueMessage = {
+            jobId,
+            userId: body.userId,
+            seriesId: body.seriesId,
+            storyId,
+            title: body.title,
+            storyData,
+            videoConfig: body.videoConfig,
+            sceneIndex: i,
+            type: 'audio',
+          };
+          await env.STORY_QUEUE.send(message);
         }
-        console.log(`[Create Story] Queued audio generation jobs`);
+        console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs`);
 
         // Queue finalization job
         const finalizeMessage: QueueMessage = {
@@ -535,7 +529,13 @@ export default {
         } else if (data.type === 'audio') {
           console.log(`[AUDIO] Processing scene ${data.sceneIndex}, storyId: ${data.storyId}`);
           const result = await processSceneAudio(data, env);
-          console.log(`[AUDIO] Result:`, { success: result.success, audioUrl: result.audioUrl, captions: result.captions?.length });
+          console.log(`[AUDIO] Result:`, { 
+            success: result.success, 
+            audioUrl: result.audioUrl, 
+            captionsCount: result.captions?.length || 0,
+            audioDuration: result.audioDuration,
+            error: result.error
+          });
           
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -560,16 +560,30 @@ export default {
             // Update the specific scene with audio and captions - merge with existing scene data
             const updatedStory = { ...story.story };
             if (updatedStory.scenes[data.sceneIndex]) {
-              updatedStory.scenes[data.sceneIndex] = {
+              const sceneUpdate: any = {
                 ...updatedStory.scenes[data.sceneIndex],
-                audioUrl: result.audioUrl,
-                audioDuration: result.audioDuration,
-                captions: result.captions,
-                ...(result.success ? {} : { audioGenerationError: result.error }),
               };
+              
+              // Only update audio fields if audio was actually generated
+              if (result.audioUrl) {
+                sceneUpdate.audioUrl = result.audioUrl;
+                sceneUpdate.audioDuration = result.audioDuration;
+                sceneUpdate.captions = result.captions || [];
+              }
+              
+              // Set error if generation failed
+              if (!result.success && result.error) {
+                sceneUpdate.audioGenerationError = result.error;
+              }
+              
+              updatedStory.scenes[data.sceneIndex] = sceneUpdate;
             }
             
-            console.log(`[AUDIO] Updating scene ${data.sceneIndex} with audioUrl: ${result.audioUrl}, captions: ${result.captions?.length || 0}`);
+            console.log(`[AUDIO] Updating scene ${data.sceneIndex}:`, {
+              hasAudioUrl: !!result.audioUrl,
+              captionsCount: result.captions?.length || 0,
+              hasError: !!result.error,
+            });
             
             // Save updated story
             const { error: updateError } = await supabase
@@ -581,20 +595,20 @@ export default {
             if (updateError) {
               console.error(`[AUDIO] Failed to update story:`, updateError);
             } else {
-              console.log(`[AUDIO] Story updated successfully with captions!`);
+              console.log(`[AUDIO] Story updated successfully!`);
             }
           } else {
             console.error(`[AUDIO] Story not found in database!`, { userId: data.userId, storyId: data.storyId });
           }
           
-          // Update job progress
+          // Update job progress - count as complete even if no audio (no narration case)
           const { data: jobData } = await supabase
             .from('story_jobs')
             .select('*')
             .eq('job_id', data.jobId)
             .single();
 
-          const audioGenerated = (jobData?.audio_generated || 0) + (result.success ? 1 : 0);
+          const audioGenerated = (jobData?.audio_generated || 0) + 1; // Always increment, even if skipped
           const imagesGenerated = jobData?.images_generated || 0;
           const progress = Math.round(50 + (audioGenerated / data.storyData.scenes.length) * 50); // Audio is 50-100% of progress
 
@@ -617,24 +631,46 @@ export default {
         } else if (data.type === 'finalize') {
           console.log(`[FINALIZE] Starting finalization for job ${data.jobId}, storyId: ${data.storyId}`);
           
-          // Wait a bit to ensure all images and audio are processed
-          await new Promise(resolve => setTimeout(resolve, 5000));
-          
           const { createClient } = await import('@supabase/supabase-js');
           const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
           
-          // Get final job status
+          // Get current job status to check if all scenes are processed
           const { data: jobData } = await supabase
             .from('story_jobs')
             .select('*')
             .eq('job_id', data.jobId)
             .single();
 
+          const totalScenes = data.storyData.scenes.length;
+          const imagesGenerated = jobData?.images_generated || 0;
+          const audioGenerated = jobData?.audio_generated || 0;
+
           console.log(`[FINALIZE] Job status:`, {
-            imagesGenerated: jobData?.images_generated,
-            audioGenerated: jobData?.audio_generated,
-            totalScenes: data.storyData.scenes.length,
+            imagesGenerated,
+            audioGenerated,
+            totalScenes,
+            imagesComplete: imagesGenerated >= totalScenes,
+            audioComplete: audioGenerated >= totalScenes,
           });
+
+          // Check if all scenes are processed
+          const allImagesComplete = imagesGenerated >= totalScenes;
+          const allAudioComplete = audioGenerated >= totalScenes;
+
+          if (!allImagesComplete || !allAudioComplete) {
+            console.log(`[FINALIZE] Not all scenes processed yet, re-queuing finalization`, {
+              missingImages: totalScenes - imagesGenerated,
+              missingAudio: totalScenes - audioGenerated,
+            });
+            
+            // Re-queue finalization to check again in a few seconds
+            await new Promise(resolve => setTimeout(resolve, 3000));
+            await env.STORY_QUEUE.send(data);
+            message.ack();
+            return;
+          }
+
+          console.log(`[FINALIZE] All scenes processed, finalizing story`);
 
           // Update story status to DRAFT (images and audio were already saved incrementally)
           const { error: updateError } = await supabase
@@ -657,9 +693,9 @@ export default {
               user_id: data.userId,
               status: 'completed',
               progress: 100,
-              total_scenes: data.storyData.scenes.length,
-              images_generated: jobData?.images_generated || data.storyData.scenes.length,
-              audio_generated: jobData?.audio_generated || data.storyData.scenes.length,
+              total_scenes: totalScenes,
+              images_generated: imagesGenerated,
+              audio_generated: audioGenerated,
               story_id: data.storyId,
               updated_at: new Date().toISOString(),
             }, {

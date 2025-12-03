@@ -6,6 +6,13 @@ export interface CaptionToken {
   endTime: number;
 }
 
+export interface LanguageOption {
+  code: string;
+  name: string;
+  nativeName: string;
+  enabled?: boolean;
+}
+
 export interface Caption {
   text: string;
   startTime: number;
@@ -19,7 +26,6 @@ export interface Scene {
   model?: string;
   sceneNumber: number;
   duration: number;
-  details: string;
   narration: string;
   imagePrompt: string;
   cameraAngle: string;

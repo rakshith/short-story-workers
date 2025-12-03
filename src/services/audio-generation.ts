@@ -151,10 +151,8 @@ async function generateElevenLabsAudio(
   const validatedSpeed = validateSpeed(requestedSpeed);
   const finalVoiceId = voiceId === 'alloy' ? (defaultVoiceId || voiceId) : voiceId;
 
-  // Use the text-to-speech endpoint with timestamps
-  // Note: This requires ElevenLabs API v1 with output_format that includes timestamps
-  // For now, we'll use the standard endpoint and estimate timing
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}`, {
+  // Use the text-to-speech endpoint with alignment data
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}/with-timestamps`, {
     method: 'POST',
     headers: {
       'xi-api-key': elevenLabsApiKey,
@@ -179,73 +177,41 @@ async function generateElevenLabsAudio(
     throw new Error(`ElevenLabs API error: ${error}`);
   }
 
-  const audioBuffer = await response.arrayBuffer();
-
-  // Estimate audio duration based on text length and speed
-  // Average speaking rate: ~150 words per minute = ~2.5 words per second
-  // With speed adjustment: actualRate = baseRate * speed
-  const wordCount = narration.split(/\s+/).length;
-  const baseWordsPerSecond = 2.5;
-  const actualWordsPerSecond = baseWordsPerSecond * validatedSpeed;
-  const estimatedDuration = wordCount / actualWordsPerSecond;
-
-  // Create a simple alignment estimate for caption generation
-  // This is a simplified version - for production, you may want to use
-  // ElevenLabs' actual alignment data if available on your plan
-  const characters = narration.split('');
-  const charDuration = estimatedDuration / characters.length;
-  const alignment: ElevenLabsAlignment = {
-    characters: characters,
-    character_start_times_seconds: characters.map((_, i) => i * charDuration),
-    character_end_times_seconds: characters.map((_, i) => (i + 1) * charDuration),
+  const responseData = await response.json() as {
+    audio_base64: string;
+    alignment: {
+      characters: string[];
+      character_start_times_seconds: number[];
+      character_end_times_seconds: number[];
+    };
   };
+
+  // Convert base64 audio to ArrayBuffer
+  const audioBase64 = responseData.audio_base64;
+  const binaryString = atob(audioBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  const audioBuffer = bytes.buffer;
+
+  // Get actual alignment data from ElevenLabs
+  const alignment: ElevenLabsAlignment = {
+    characters: responseData.alignment.characters,
+    character_start_times_seconds: responseData.alignment.character_start_times_seconds,
+    character_end_times_seconds: responseData.alignment.character_end_times_seconds,
+  };
+
+  // Calculate actual audio duration from alignment
+  const audioDuration = alignment.character_end_times_seconds[alignment.character_end_times_seconds.length - 1] || 0;
 
   return { 
     audioBuffer, 
     alignment, 
-    audioDuration: estimatedDuration 
+    audioDuration 
   };
 }
 
-async function generateOpenAIAudio(
-  narration: string,
-  voice: string,
-  openAiApiKey: string
-): Promise<{ audioBuffer: ArrayBuffer; audioDuration: number }> {
-  const response = await fetch('https://api.openai.com/v1/audio/speech', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${openAiApiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'tts-1-hd',
-      voice: voice,
-      input: narration,
-      response_format: 'mp3',
-      speed: 1.0,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(`OpenAI TTS error: ${error}`);
-  }
-
-  const audioBuffer = await response.arrayBuffer();
-  const wordCount = narration.split(/\s+/).length;
-  const audioDuration = Math.ceil(wordCount / 2.75);
-
-  return { audioBuffer, audioDuration };
-}
-
-function getTtsProviderByVoiceId(voice: string): 'elevenlabs' | 'openai' {
-  // Simple heuristic - adjust based on your voice IDs
-  if (voice === 'alloy' || voice === 'echo' || voice === 'fable' || voice === 'onyx' || voice === 'nova' || voice === 'shimmer') {
-    return 'openai';
-  }
-  return 'elevenlabs';
-}
 
 export async function generateSceneAudio(
   narration: string,
@@ -259,38 +225,28 @@ export async function generateSceneAudio(
   openAiApiKey: string,
   defaultVoiceId?: string
 ): Promise<AudioGenerationResult> {
-  const ttsProvider = getTtsProviderByVoiceId(voice);
-  let audioBuffer: ArrayBuffer;
-  let audioDuration: number;
+  // Always use ElevenLabs for all voices with character alignment
+  const result = await generateElevenLabsAudio(
+    narration,
+    voice,
+    sceneDuration,
+    speed,
+    elevenLabsApiKey,
+    defaultVoiceId
+  );
+
+  const audioBuffer = result.audioBuffer;
+  const audioDuration = result.audioDuration;
   let captions: Caption[] = [];
 
-  if (ttsProvider === 'elevenlabs') {
-    const result = await generateElevenLabsAudio(
-      narration,
-      voice,
-      sceneDuration,
-      speed,
-      elevenLabsApiKey,
-      defaultVoiceId
+  // Generate captions from ElevenLabs character alignment
+  if (result.alignment.characters.length > 0) {
+    const wordCaptions = convertCharacterTimestampsToWords(
+      result.alignment.characters,
+      result.alignment.character_start_times_seconds,
+      result.alignment.character_end_times_seconds
     );
-
-    audioBuffer = result.audioBuffer;
-    audioDuration = result.audioDuration;
-
-    // Generate captions from alignment
-    if (result.alignment.characters.length > 0) {
-      const wordCaptions = convertCharacterTimestampsToWords(
-        result.alignment.characters,
-        result.alignment.character_start_times_seconds,
-        result.alignment.character_end_times_seconds
-      );
-      captions = createTikTokStylePages(wordCaptions);
-    }
-  } else {
-    const result = await generateOpenAIAudio(narration, voice, openAiApiKey);
-    audioBuffer = result.audioBuffer;
-    audioDuration = result.audioDuration;
-    captions = [];
+    captions = createTikTokStylePages(wordCaptions);
   }
 
   // Upload audio to R2

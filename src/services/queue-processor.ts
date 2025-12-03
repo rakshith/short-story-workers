@@ -87,6 +87,7 @@ export async function processSceneImage(
         output_quality: 90,
         aspect_ratio: videoConfig.aspectRatio,
         seed: videoConfig.preset.seed,
+        videoConfig: videoConfig,
       },
         {
           userId,
@@ -142,32 +143,66 @@ export async function processSceneAudio(
   const { storyData, videoConfig, userId, sceneIndex } = message;
   const scene = storyData.scenes[sceneIndex];
 
-  if (!scene || !scene.narration) {
+  if (!scene) {
     return {
       sceneIndex,
       audioUrl: null,
       audioDuration: 0,
       captions: [],
       success: false,
-      error: 'No narration provided',
+      error: 'Scene not found',
+    };
+  }
+
+  // Check if narration exists and is not empty/whitespace
+  const narration = scene.narration?.trim();
+  if (!narration) {
+    processorLogger.warn(`Scene ${sceneIndex} has no narration, skipping audio generation`, {
+      sceneIndex,
+      sceneNumber: scene.sceneNumber,
+    });
+    return {
+      sceneIndex,
+      audioUrl: null,
+      audioDuration: 0,
+      captions: [],
+      success: true, // Mark as success since there's nothing to generate
+      error: undefined,
     };
   }
 
   try {
     const selectedVoice = videoConfig.voice || 'alloy';
 
-    const result = await generateSceneAudio(
-      scene.narration,
-      selectedVoice,
-      scene.duration,
-      userId,
-      scene.sceneNumber,
-      1.0,
-      env.AUDIO_BUCKET,
-      env.ELEVENLABS_API_KEY,
-      env.OPENAI_API_KEY,
-      env.ELEVENLABS_DEFAULT_VOICE_ID
+    processorLogger.info(`Audio generation starting`, {
+      sceneIndex,
+      voice: selectedVoice,
+      narrationLength: narration.length,
+    });
+
+    const result = await processorLogger.logApiCall(
+      'generateSceneAudio',
+      () => generateSceneAudio(
+        narration,
+        selectedVoice,
+        scene.duration,
+        userId,
+        scene.sceneNumber,
+        1.0,
+        env.AUDIO_BUCKET,
+        env.ELEVENLABS_API_KEY,
+        env.OPENAI_API_KEY,
+        env.ELEVENLABS_DEFAULT_VOICE_ID
+      ),
+      { sceneIndex, voice: selectedVoice }
     );
+
+    processorLogger.info(`Audio generated successfully`, {
+      sceneIndex,
+      audioUrl: result.audioUrl,
+      captionsCount: result.captions?.length || 0,
+      audioDuration: result.audioDuration,
+    });
 
     return {
       sceneIndex,
@@ -177,7 +212,10 @@ export async function processSceneAudio(
       success: true,
     };
   } catch (error) {
-    console.error(`[Queue Processor] Error generating audio for scene ${sceneIndex}:`, error);
+    processorLogger.error(`Error generating audio for scene ${sceneIndex}`, error, {
+      sceneIndex,
+      userId,
+    });
     return {
       sceneIndex,
       audioUrl: null,
