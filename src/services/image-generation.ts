@@ -154,7 +154,7 @@ export async function generateAndUploadImages(
     }
 
     // Generate public URL
-    const publicUrl = `https://image.artflicks.app/images/${key}`;
+    const publicUrl = `https://image.artflicks.app/${key}`;
     console.log(`[IMAGE-GEN] Generated public URL: ${publicUrl}`);
     storageUrls.push(publicUrl);
   }

@@ -314,7 +314,7 @@ export async function generateSceneAudio(
   // Note: Update this with your actual R2 public URL or custom domain
   // Format: https://<account-id>.r2.cloudflarestorage.com/<bucket-name>/<key>
   // Or use a custom domain if configured
-  const audioUrl = `https://audio.artflicks.app/audio/${key}`;
+  const audioUrl = `https://audio.artflicks.app/${key}`;
 
   return {
     audioUrl,
