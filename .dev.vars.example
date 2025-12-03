@@ -1,0 +1,23 @@
+# Development environment variables for local testing
+# Copy this file to .dev.vars and fill in your actual values
+# .dev.vars is gitignored and will not be committed
+
+# Supabase
+SUPABASE_URL=your-supabase-url
+SUPABASE_ANON_KEY=your-supabase-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-supabase-service-role-key
+
+# Replicate (for image generation)
+REPLICATE_API_TOKEN=your-replicate-api-token
+
+# OpenAI (for audio and script generation)
+OPENAI_API_KEY=your-openai-api-key
+
+# ElevenLabs (for voice generation)
+ELEVENLABS_API_KEY=your-elevenlabs-api-key
+ELEVENLABS_DEFAULT_VOICE_ID=your-default-voice-id
+ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
+
+# Cloudflare Account ID (optional)
+CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
+

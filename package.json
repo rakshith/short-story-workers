@@ -1,0 +1,32 @@
+{
+  "name": "cloudflare-workers-create-story",
+  "version": "1.0.0",
+  "description": "Cloudflare Workers service for creating short stories with AI-generated images and audio",
+  "main": "src/index.ts",
+  "scripts": {
+    "dev": "wrangler dev",
+    "dev:remote": "wrangler dev --remote",
+    "deploy": "wrangler deploy --env=\"\"",
+    "log": "wrangler tail --format pretty",
+    "deploy:staging": "wrangler deploy --env staging",
+    "deploy:production": "wrangler deploy --env production"
+  },
+  "keywords": [
+    "cloudflare-workers",
+    "ai",
+    "story-generation"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20241106.0",
+    "typescript": "^5.3.3",
+    "wrangler": "^4.51.0"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.3",
+    "openai": "^4.104.0",
+    "replicate": "^1.4.0",
+    "uuid": "^13.0.0"
+  }
+}

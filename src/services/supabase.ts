@@ -1,0 +1,88 @@
+// Supabase service for Cloudflare Workers
+
+import { createClient } from '@supabase/supabase-js';
+import { StoryTimeline, ProjectStatusType } from '../types';
+
+export interface VideoConfigData {
+  aspectRatio: string;
+  model: string;
+  music: string;
+  musicVolume?: number;
+  preset: any;
+  voice: string;
+  outputFormat?: string;
+  captionStylePreset?: any;
+  watermark?: any;
+  transitionPreset?: string;
+  durationInFrames?: number;
+  videoType?: string;
+  estimatedCredits?: number;
+}
+
+export interface Story {
+  id: string;
+  user_id: string;
+  title: string;
+  video_type: string;
+  story: StoryTimeline;
+  video_config?: VideoConfigData;
+  story_cost?: number;
+  created_at: string;
+  updated_at: string;
+  status: ProjectStatusType;
+  final_video_url?: string;
+}
+
+export interface CreateStoryParams {
+  userId: string;
+  title: string;
+  seriesId: string;
+  videoType: string;
+  story: StoryTimeline;
+  status: ProjectStatusType;
+  videoConfig?: VideoConfigData;
+  storyCost?: number;
+}
+
+export class StoryService {
+  private supabase: any;
+
+  constructor(supabaseUrl: string, supabaseKey: string) {
+    this.supabase = createClient(supabaseUrl, supabaseKey);
+  }
+
+  async createStory(params: CreateStoryParams): Promise<Story> {
+    const upsertData: any = {
+      user_id: params.userId,
+      title: params.title,
+      series_id: params.seriesId,
+      video_type: params.videoType,
+      story: params.story,
+      status: params.status,
+    };
+
+    if (params.videoConfig) {
+      upsertData.video_config = params.videoConfig;
+    }
+
+    if (params.storyCost !== undefined) {
+      upsertData.story_cost = params.storyCost;
+    }
+
+    const { data, error } = await this.supabase
+      .from('stories')
+      .upsert(upsertData, {
+        onConflict: 'user_id,title',
+        ignoreDuplicates: false,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      throw new Error(`Failed to create/update story: ${error.message}`);
+    }
+
+    return data;
+  }
+}
+
