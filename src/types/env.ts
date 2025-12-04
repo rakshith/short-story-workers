@@ -1,6 +1,6 @@
 // Environment types for Cloudflare Workers
 
-import { R2Bucket, Queue } from '@cloudflare/workers-types';
+import { R2Bucket, Queue, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { StoryTimeline } from '.';
 import { VideoConfigData } from '../services/supabase';
 
@@ -25,6 +25,9 @@ export interface Env {
 
   // Queue
   STORY_QUEUE: Queue<QueueMessage>;
+
+  // Durable Objects
+  STORY_COORDINATOR: DurableObjectNamespace;
 
   // Supabase
   SUPABASE_URL: string;

@@ -5,10 +5,26 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
+# Durable Objects
+[durable_objects]
+bindings = [
+  { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
+]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["StoryCoordinator"]
+
 [env.staging]
 name = "create-story-worker-staging"
 workers_dev = true
 preview_urls = true
+
+# Durable Objects for staging
+[env.staging.durable_objects]
+bindings = [
+  { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
+]
 
 # R2 Bucket bindings for staging
 [[env.staging.r2_buckets]]
@@ -35,6 +51,12 @@ max_batch_timeout = 30
 name = "create-story-worker-production"
 workers_dev = true
 preview_urls = true
+
+# Durable Objects for production
+[env.production.durable_objects]
+bindings = [
+  { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
+]
 
 # R2 Bucket bindings for production
 [[env.production.r2_buckets]]
