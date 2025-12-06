@@ -129,7 +129,7 @@ export default {
           {
             prompt: body.prompt,
             duration: body.duration,
-            language: body.language || 'en',
+            language: body.language || body.videoConfig?.language || 'en',
             model: body.model || 'gpt-4o',
           },
           env.OPENAI_API_KEY
