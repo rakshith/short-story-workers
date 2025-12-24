@@ -169,9 +169,9 @@ async function generateElevenLabsAudio(
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
         stability: audioSettings.stability,
-        similarity_boost: audioSettings.similarityBoost,
+        similarityBoost: audioSettings.similarityBoost,
         style: audioSettings.style,
-        use_speaker_boost: audioSettings.useSpeakerBoost,
+        useSpeakerBoost: audioSettings.useSpeakerBoost,
         speed: validatedSpeed,
       },
       output_format: 'mp3_44100_128',
