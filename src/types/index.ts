@@ -30,7 +30,9 @@ export interface Scene {
   imagePrompt: string;
   cameraAngle: string;
   mood: string;
+  details?: string;
   generatedImageUrl?: string;
+
   isGenerating?: boolean;
   generationError?: string;
   audioUrl?: string;
