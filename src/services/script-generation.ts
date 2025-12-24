@@ -25,27 +25,36 @@ export async function generateScript(
 ): Promise<ScriptGenerationResult> {
   const { prompt, duration, language = 'en', model } = params;
 
-  // Calculate scene guidance
+  // Calculate scene guidance dynamically based on duration
   let sceneGuidance = '';
   let recommendedScenes = 0;
   let sceneDuration = '';
+  let targetAvgSceneDuration = 0;
 
   if (duration <= 30) {
-    recommendedScenes = 6;
+    // Short videos: 5 seconds per scene on average
+    targetAvgSceneDuration = 5;
+    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
     sceneDuration = '4-6 seconds';
-    sceneGuidance = 'Keep the story concise and impactful. Focus on a single key message or moment. Each scene should be punchy with minimal narration (10-15 words per scene).';
+    sceneGuidance = 'Keep the story concise and impactful. Focus on a single key message or moment. Each scene should be punchy with minimal narration.';
   } else if (duration <= 60) {
-    recommendedScenes = 10;
+    // Medium videos: 6 seconds per scene on average
+    targetAvgSceneDuration = 6;
+    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
     sceneDuration = '5-7 seconds';
-    sceneGuidance = 'Tell a complete short story with a clear beginning, middle, and end. Keep narration concise (12-17 words per scene).';
+    sceneGuidance = 'Tell a complete short story with a clear beginning, middle, and end. Keep narration concise.';
   } else if (duration <= 120) {
-    recommendedScenes = 12;
+    // Longer videos: 9 seconds per scene on average
+    targetAvgSceneDuration = 9;
+    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
     sceneDuration = '8-10 seconds';
-    sceneGuidance = 'Develop a richer narrative with character development. Narration can be more substantial (20-25 words per scene).';
+    sceneGuidance = 'Develop a richer narrative with character development. Narration can be more substantial.';
   } else {
-    recommendedScenes = 15;
-    sceneDuration = '10-12 seconds';
-    sceneGuidance = 'Create a fully developed story with multiple acts. Make it cinematic and memorable. Narration can be fuller (25-30 words per scene).';
+    // Long-form videos (3+ minutes): 12 seconds per scene on average
+    targetAvgSceneDuration = 12;
+    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
+    sceneDuration = '10-14 seconds';
+    sceneGuidance = `Create a fully developed story with multiple acts. Make it cinematic and memorable. IMPORTANT: You have exactly ${duration} seconds - average ${targetAvgSceneDuration} seconds per scene across ${recommendedScenes} scenes to fill the entire duration.`;
   }
 
   const detailsGuidance = duration <= 60
