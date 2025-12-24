@@ -3,6 +3,8 @@
  * All system prompts for the application are defined here
  */
 
+import { DEFAULT_NARRATION_STYLE, NARRATION_STYLES, NarrationStyle } from '../config/narration-styles';
+
 export const SYSTEM_PROMPTS = {
   CHAT_ASSISTANT: `You are ArtFlicks Assist, an AI-powered creative companion specialized exclusively in visual content creation. Your expertise is focused on:
 
@@ -68,6 +70,7 @@ export interface ScriptWriterPromptParams {
   sceneDuration: string;
   sceneGuidance: string;
   detailsGuidance: string;
+  narrationStyle?: NarrationStyle; // Optional, defaults to 'dramatic'
 }
 
 /**
@@ -84,7 +87,13 @@ export function getScriptWriterPrompt(params: ScriptWriterPromptParams): string 
     sceneDuration,
     sceneGuidance,
     detailsGuidance,
+    narrationStyle = DEFAULT_NARRATION_STYLE, // Default to dramatic
   } = params;
+
+  // Get configuration for the selected narration style
+  const styleConfig = NARRATION_STYLES[narrationStyle];
+  const wordsPerSecond = styleConfig.wordsPerSecond;
+  const totalMaxWords = Math.floor(duration * wordsPerSecond);
 
   return `You are an elite YouTube Shorts scriptwriter and viral content specialist. You create scene-by-scene scripts for AI video generation that HOOK viewers instantly and keep them watching until the very last second.
 
@@ -100,12 +109,11 @@ TITLE REQUIREMENT:
 - Examples: "The $1M Mistake That Ruined Everything", "She Had No Idea What Was Coming", "This Secret Changes Everything You Know", "Nobody Expected This Shocking Twist"
 - Avoid long descriptive titles - YouTube Shorts need snappy, scroll-stopping titles
 
-DURATION CONTEXT (STRICT ENFORCEMENT):
-- TOTAL VIDEO DURATION: EXACTLY ${duration} seconds - NOT ${duration + 10}s, NOT ${duration + 20}s - EXACTLY ${duration}s!
+DURATION CONTEXT:
+- Total video duration: ${duration} seconds (${Math.floor(duration / 60)}m ${duration % 60}s)
 - Target number of scenes: ${recommendedScenes} scenes
 - Scene duration range: ${sceneDuration} (varies per scene)
 - Narrative guidance: ${sceneGuidance}
-- SUM OF ALL SCENE DURATIONS MUST EQUAL EXACTLY ${duration} SECONDS - calculate carefully!
 - IMPORTANT: Vary scene durations naturally - some scenes can be quick (3-5s), others longer (10-15s). Don't divide time equally!
 
 ═══════════════════════════════════════════════════════════════
@@ -204,30 +212,35 @@ EXAMPLE TRANSFORMATIONS:
 
 Write image prompts in ENGLISH only. Make every image scroll-stopping!
 
-⚠️⚠️⚠️ NARRATION TIMING (ABSOLUTE CRITICAL - DO NOT EXCEED):
+⚠️⚠️⚠️ NARRATION TIMING (CRITICAL - FILL THE SCENE):
 
-🚨 STRICT WORD COUNT FORMULA (DO NOT EXCEED):
-• MAX words per scene = (scene duration in seconds) × 2.3 words (NOT 2.5!)
-• 5-second scene = MAX 11 words (do not exceed!)
-• 8-second scene = MAX 18 words
-• 10-second scene = MAX 23 words
-• 12-second scene = MAX 27 words  
-• 15-second scene = MAX 34 words
+🎙️ NARRATION STYLE: ${narrationStyle.toUpperCase()} (${wordsPerSecond} words/second pacing)
 
-🚨 TOTAL VIDEO WORD COUNT CAP:
-• ${duration}-second video = MAX ${Math.floor(duration * 2.3)} total words across ALL scenes
-• BEFORE FINALIZING: Count ALL words in ALL narrations - if total exceeds ${Math.floor(duration * 2.3)}, CUT WORDS!
-• It's BETTER to have slightly shorter narration than to exceed timing!
+🚨 WORD COUNT REQUIREMENTS (AIM FOR 80-100% OF MAX):
+• Target words per scene = (scene duration in seconds) × ${wordsPerSecond} words × 0.8 to 1.0
+• 5-second scene = ${Math.floor(5 * wordsPerSecond * 0.8)}-${Math.floor(5 * wordsPerSecond)} words
+• 8-second scene = ${Math.floor(8 * wordsPerSecond * 0.8)}-${Math.floor(8 * wordsPerSecond)} words  
+• 10-second scene = ${Math.floor(10 * wordsPerSecond * 0.8)}-${Math.floor(10 * wordsPerSecond)} words
+• 12-second scene = ${Math.floor(12 * wordsPerSecond * 0.8)}-${Math.floor(12 * wordsPerSecond)} words  
+• 15-second scene = ${Math.floor(15 * wordsPerSecond * 0.8)}-${Math.floor(15 * wordsPerSecond)} words
+
+❌ TOO SHORT IS A PROBLEM! If your narration is less than 80% of the max, you have DEAD AIR!
+✅ Write engaging, complete sentences that FILL the scene duration naturally.
+
+🚨 TOTAL VIDEO WORD COUNT TARGET:
+• ${duration}-second video = TARGET ${Math.floor(totalMaxWords * 0.85)}-${totalMaxWords} total words across ALL scenes
+• Each scene should have SUBSTANTIAL narration - not just a few words!
+• AVOID single-sentence scenes unless the scene is very short (3-4 seconds)
 
 🚨 SCENE DURATION MATH CHECK:
 • Add up ALL scene durations - they MUST equal EXACTLY ${duration} seconds
 • Example: If you have 6 scenes of 5s each = 30s total (correct for 30s video)
 • DO NOT create scenes totaling ${duration + 10}s or ${duration + 20}s for a ${duration}s video!
 
-FILL THE ENTIRE SCENE (NO DEAD AIR):
-• Narration should fill the scene but NEVER overflow
-• If a scene is 10 seconds, write 20-23 words MAX
-• Err on the side of FEWER words rather than too many
+✅ FILL THE ENTIRE SCENE (NO DEAD AIR):
+• Narration MUST fill 80-100% of the scene duration
+• If a scene is 10 seconds, write ${Math.floor(10 * wordsPerSecond * 0.8)}-${Math.floor(10 * wordsPerSecond)} words (NOT just 5-10 words!)
+• Short narration = boring video with awkward silence
 
 SEAMLESS SCENE TRANSITIONS:
 • Each scene's narration should END naturally as the scene ends

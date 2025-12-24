@@ -3,6 +3,7 @@
 import { R2Bucket } from '@cloudflare/workers-types';
 import { Caption } from '../types';
 import { generateUUID } from '../utils/storage';
+import { DEFAULT_NARRATION_STYLE, NARRATION_STYLES, NarrationStyle } from '../config/narration-styles';
 
 export interface AudioGenerationResult {
   audioUrl: string;
@@ -146,10 +147,15 @@ async function generateElevenLabsAudio(
   sceneDuration: number,
   requestedSpeed: number = 1.0,
   elevenLabsApiKey: string,
-  defaultVoiceId?: string
+  defaultVoiceId?: string,
+  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE
 ): Promise<{ audioBuffer: ArrayBuffer; alignment: ElevenLabsAlignment; audioDuration: number }> {
   const validatedSpeed = validateSpeed(requestedSpeed);
   const finalVoiceId = voiceId === 'alloy' ? (defaultVoiceId || voiceId) : voiceId;
+
+  // Get audio settings from narration style configuration
+  const styleConfig = NARRATION_STYLES[narrationStyle];
+  const audioSettings = styleConfig.audioSettings;
 
   // Use the text-to-speech endpoint with alignment data
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}/with-timestamps`, {
@@ -162,10 +168,10 @@ async function generateElevenLabsAudio(
       text: narration,
       model_id: ELEVENLABS_MODEL,
       voice_settings: {
-        stability: 0.55,
-        similarity_boost: 0.85,
-        style: 0.5,
-        use_speaker_boost: false,
+        stability: audioSettings.stability,
+        similarity_boost: audioSettings.similarityBoost,
+        style: audioSettings.style,
+        use_speaker_boost: audioSettings.useSpeakerBoost,
         speed: validatedSpeed,
       },
       output_format: 'mp3_44100_128',
@@ -205,10 +211,10 @@ async function generateElevenLabsAudio(
   // Calculate actual audio duration from alignment
   const audioDuration = alignment.character_end_times_seconds[alignment.character_end_times_seconds.length - 1] || 0;
 
-  return { 
-    audioBuffer, 
-    alignment, 
-    audioDuration 
+  return {
+    audioBuffer,
+    alignment,
+    audioDuration
   };
 }
 
@@ -223,7 +229,8 @@ export async function generateSceneAudio(
   audioBucket: R2Bucket,
   elevenLabsApiKey: string,
   openAiApiKey: string,
-  defaultVoiceId?: string
+  defaultVoiceId?: string,
+  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE
 ): Promise<AudioGenerationResult> {
   // Always use ElevenLabs for all voices with character alignment
   const result = await generateElevenLabsAudio(
@@ -232,7 +239,8 @@ export async function generateSceneAudio(
     sceneDuration,
     speed,
     elevenLabsApiKey,
-    defaultVoiceId
+    defaultVoiceId,
+    narrationStyle
   );
 
   const audioBuffer = result.audioBuffer;
