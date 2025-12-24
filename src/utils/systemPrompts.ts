@@ -100,11 +100,12 @@ TITLE REQUIREMENT:
 - Examples: "The $1M Mistake That Ruined Everything", "She Had No Idea What Was Coming", "This Secret Changes Everything You Know", "Nobody Expected This Shocking Twist"
 - Avoid long descriptive titles - YouTube Shorts need snappy, scroll-stopping titles
 
-DURATION CONTEXT:
-- Total video duration: ${duration} seconds (${Math.floor(duration / 60)}m ${duration % 60}s)
+DURATION CONTEXT (STRICT ENFORCEMENT):
+- TOTAL VIDEO DURATION: EXACTLY ${duration} seconds - NOT ${duration + 10}s, NOT ${duration + 20}s - EXACTLY ${duration}s!
 - Target number of scenes: ${recommendedScenes} scenes
 - Scene duration range: ${sceneDuration} (varies per scene)
 - Narrative guidance: ${sceneGuidance}
+- SUM OF ALL SCENE DURATIONS MUST EQUAL EXACTLY ${duration} SECONDS - calculate carefully!
 - IMPORTANT: Vary scene durations naturally - some scenes can be quick (3-5s), others longer (10-15s). Don't divide time equally!
 
 ═══════════════════════════════════════════════════════════════
@@ -203,41 +204,43 @@ EXAMPLE TRANSFORMATIONS:
 
 Write image prompts in ENGLISH only. Make every image scroll-stopping!
 
-⚠️ NARRATION TIMING (CRITICAL FOR PERFECT YOUTUBE SHORTS):
+⚠️⚠️⚠️ NARRATION TIMING (ABSOLUTE CRITICAL - DO NOT EXCEED):
 
-WORD COUNT FORMULA:
-• Target words = (scene duration in seconds) × 2.5 words
-• 5-second scene = 12-13 words
-• 8-second scene = 20 words
-• 10-second scene = 25 words  
-• 12-second scene = 30 words
-• 15-second scene = 37-38 words
+🚨 STRICT WORD COUNT FORMULA (DO NOT EXCEED):
+• MAX words per scene = (scene duration in seconds) × 2.3 words (NOT 2.5!)
+• 5-second scene = MAX 11 words (do not exceed!)
+• 8-second scene = MAX 18 words
+• 10-second scene = MAX 23 words
+• 12-second scene = MAX 27 words  
+• 15-second scene = MAX 34 words
+
+🚨 TOTAL VIDEO WORD COUNT CAP:
+• ${duration}-second video = MAX ${Math.floor(duration * 2.3)} total words across ALL scenes
+• BEFORE FINALIZING: Count ALL words in ALL narrations - if total exceeds ${Math.floor(duration * 2.3)}, CUT WORDS!
+• It's BETTER to have slightly shorter narration than to exceed timing!
+
+🚨 SCENE DURATION MATH CHECK:
+• Add up ALL scene durations - they MUST equal EXACTLY ${duration} seconds
+• Example: If you have 6 scenes of 5s each = 30s total (correct for 30s video)
+• DO NOT create scenes totaling ${duration + 10}s or ${duration + 20}s for a ${duration}s video!
 
 FILL THE ENTIRE SCENE (NO DEAD AIR):
-• Narration must FILL the complete scene duration - no empty silence at the end!
-• If a scene is 10 seconds, write exactly ~25 words to fill those 10 seconds
-• Don't write too few words leaving awkward silence
-• Don't write too many words causing cutoff
+• Narration should fill the scene but NEVER overflow
+• If a scene is 10 seconds, write 20-23 words MAX
+• Err on the side of FEWER words rather than too many
 
 SEAMLESS SCENE TRANSITIONS:
 • Each scene's narration should END naturally as the scene ends
 • The NEXT scene's narration should BEGIN immediately - no gaps!
 • Create a continuous, flowing story experience
 • Transitions should feel like one unbroken narrative, not choppy segments
-• Use sentence flow that bridges scenes: end one thought, immediately begin the next
-• Example flow: Scene 1 ends "...and that's when he saw it." → Scene 2 starts "The door creaked open..."
-
-NO AWKWARD BREAKS:
-• The entire ${duration}-second video should feel like ONE continuous voiceover
-• Viewers should never feel silence or disjointed pauses between scenes
-• Write narration as if it's one continuous script, just divided by visual changes
 
 VISUAL CONTINUITY:
 • Maintain consistent character appearances across scenes
 • Build visual momentum toward climactic moments
 • End with a memorable final image
 
-TOTAL DURATION MUST EQUAL EXACTLY ${duration} SECONDS.
+🚨 FINAL CHECK: TOTAL DURATION MUST EQUAL EXACTLY ${duration} SECONDS - NOT MORE!
 
 Be creative, cinematic, emotionally compelling, and above all—create content that viewers CAN'T scroll past. Every second should have purpose, every word should grip the viewer.`;
 }
