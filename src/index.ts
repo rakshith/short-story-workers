@@ -108,6 +108,7 @@ export default {
             totalScenes: 0,
             imagesGenerated: 0,
             audioGenerated: 0,
+            teamId: body.teamId,
           }, env);
           console.log(`[Generate Story] Job ${jobId} initialized at 0%`);
         } catch (error) {
@@ -146,6 +147,7 @@ export default {
             imagesGenerated: 0,
             audioGenerated: 0,
             error: scriptResult.error || 'Failed to generate script',
+            teamId: body.teamId,
           }, env);
           return jsonResponse(
             { error: 'Failed to generate script', details: scriptResult.error },
@@ -174,6 +176,7 @@ export default {
             status: ProjectStatus.PROCESSING,
             videoConfig: body.videoConfig,
             storyCost: body.videoConfig?.estimatedCredits,
+            teamId: body.teamId,
           });
           console.log(`[Generate Story] Initial story created in database with ID: ${createdStory.id}`);
 
@@ -187,6 +190,7 @@ export default {
             imagesGenerated: 0,
             audioGenerated: 0,
             storyId: createdStory.id,
+            teamId: body.teamId,
           }, env);
           console.log(`[Generate Story] Progress updated to 25% - Script & story created`);
         } catch (error) {
@@ -200,6 +204,7 @@ export default {
             imagesGenerated: 0,
             audioGenerated: 0,
             error: error instanceof Error ? error.message : 'Failed to create story',
+            teamId: body.teamId,
           }, env);
           return jsonResponse(
             {
@@ -345,6 +350,7 @@ export default {
             status: ProjectStatus.PROCESSING,
             videoConfig: body.videoConfig,
             storyCost: body.videoConfig?.estimatedCredits,
+            teamId: body.teamId,
           });
           console.log(`[Create Story] Initial story created in database with ID: ${createdStory.id}`);
 
@@ -358,6 +364,7 @@ export default {
             imagesGenerated: 0,
             audioGenerated: 0,
             storyId: createdStory.id,
+            teamId: body.teamId,
           }, env);
           console.log(`[Create Story] Progress updated to 25% - Story created`);
         } catch (error) {
@@ -371,6 +378,7 @@ export default {
             imagesGenerated: 0,
             audioGenerated: 0,
             error: error instanceof Error ? error.message : 'Failed to create story',
+            teamId: body.teamId,
           }, env);
           return jsonResponse(
             {

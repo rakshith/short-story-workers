@@ -42,6 +42,7 @@ export interface CreateStoryParams {
   status: ProjectStatusType;
   videoConfig?: VideoConfigData;
   storyCost?: number;
+  teamId?: string;
 }
 
 export class StoryService {
@@ -59,6 +60,7 @@ export class StoryService {
       video_type: params.videoType,
       story: params.story,
       status: params.status,
+      team_id: params.teamId,
     };
 
     if (params.videoConfig) {

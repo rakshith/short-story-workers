@@ -23,6 +23,7 @@ export interface JobStatus {
   audioGenerated: number;
   error?: string;
   storyId?: string;
+  teamId: string;
 }
 
 /**
@@ -77,18 +78,18 @@ export async function processSceneImage(
     const result = await processorLogger.logApiCall(
       'generateAndUploadImages',
       () => generateAndUploadImages(
-      {
-        prompt,
-        model: selectedModel,
-        width,
-        height,
-        num_outputs: 1,
-        output_format: videoConfig.outputFormat || 'jpg',
-        output_quality: 90,
-        aspect_ratio: videoConfig.aspectRatio,
-        seed: videoConfig.preset.seed,
-        videoConfig: videoConfig,
-      },
+        {
+          prompt,
+          model: selectedModel,
+          width,
+          height,
+          num_outputs: 1,
+          output_format: videoConfig.outputFormat || 'jpg',
+          output_quality: 90,
+          aspect_ratio: videoConfig.aspectRatio,
+          seed: videoConfig.preset.seed,
+          videoConfig: videoConfig,
+        },
         {
           userId,
           seriesId,
@@ -305,7 +306,7 @@ export async function updateJobStatus(
 ): Promise<void> {
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  
+
   const { error } = await supabase
     .from('story_jobs')
     .upsert({
@@ -319,6 +320,7 @@ export async function updateJobStatus(
       error: status.error,
       story_id: status.storyId,
       updated_at: new Date().toISOString(),
+      team_id: status.teamId,
     }, {
       onConflict: 'job_id',
     });
@@ -327,7 +329,7 @@ export async function updateJobStatus(
     console.error(`[Update Job Status] Failed to update job ${jobId}:`, error);
     throw new Error(`Failed to update job status: ${error.message}`);
   }
-  
+
   console.log(`[Update Job Status] Successfully updated job ${jobId} with status: ${status.status}`);
 }
 

@@ -77,6 +77,7 @@ export interface CreateStoryRequest {
   };
   userId: string;
   seriesId: string;
+  teamId: string;
   title: string;
 }
 
