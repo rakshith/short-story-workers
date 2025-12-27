@@ -270,21 +270,8 @@ export default {
         await Promise.all(audioPromises);
         console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs`);
 
-        // Queue finalization job with a delay to ensure all scene jobs are picked up first
-        // The finalization job will check if all scenes are complete and re-queue if needed
-        const finalizeMessage: QueueMessage = {
-          jobId,
-          userId: body.userId,
-          seriesId: body.seriesId,
-          storyId,
-          title: body.title,
-          storyData,
-          videoConfig: body.videoConfig,
-          sceneIndex: 0,
-          type: 'finalize',
-        };
-        // Use delaySeconds to ensure finalization starts after scene processing begins
-        await env.STORY_QUEUE.send(finalizeMessage, { delaySeconds: 10 });
+        // Finalization will be triggered automatically by the queue consumer 
+        // once all scene images and audio are generated.
         console.log(`[Generate Story] Queued finalization job with 10s delay`);
 
         return jsonResponse({
@@ -445,21 +432,7 @@ export default {
         await Promise.all(audioPromises);
         console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs`);
 
-        // Queue finalization job with a delay to ensure all scene jobs are picked up first
-        // The finalization job will check if all scenes are complete and re-queue if needed
-        const finalizeMessage: QueueMessage = {
-          jobId,
-          userId: body.userId,
-          seriesId: body.seriesId,
-          storyId,
-          title: storyData.title,
-          storyData,
-          videoConfig: body.videoConfig,
-          sceneIndex: 0,
-          type: 'finalize',
-        };
-        // Use delaySeconds to ensure finalization starts after scene processing begins
-        await env.STORY_QUEUE.send(finalizeMessage, { delaySeconds: 10 });
+        // Finalization will be triggered automatically by the queue consumer
 
         // Return job ID immediately
         return jsonResponse({
@@ -538,8 +511,7 @@ export default {
           const result = await processSceneImage(data, env);
           console.log(`[IMAGE] Scene ${data.sceneIndex} result:`, { success: result.success, imageUrl: result.imageUrl });
 
-          // Update via Durable Object (no race condition)
-          await coordinator.fetch(new Request('http://do/updateImage', {
+          const updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
             method: 'POST',
             body: JSON.stringify({
               sceneIndex: data.sceneIndex,
@@ -548,6 +520,11 @@ export default {
             }),
           }));
 
+          const status = await updateRes.json() as any;
+          if (status.isComplete) {
+            await syncStoryToSupabase(data, coordinator, env);
+          }
+
           message.ack();
         } else if (data.type === 'audio') {
           // Generate the audio
@@ -555,7 +532,7 @@ export default {
           console.log(`[AUDIO] Scene ${data.sceneIndex} result:`, { success: result.success, audioUrl: result.audioUrl });
 
           // Update via Durable Object (no race condition)
-          await coordinator.fetch(new Request('http://do/updateAudio', {
+          const updateRes = await coordinator.fetch(new Request('http://do/updateAudio', {
             method: 'POST',
             body: JSON.stringify({
               sceneIndex: data.sceneIndex,
@@ -566,129 +543,96 @@ export default {
             }),
           }));
 
-          message.ack();
-        } else if (data.type === 'finalize') {
-          console.log(`[FINALIZE] Checking completion for job ${data.jobId}`);
-
-          // Check progress via Durable Object
-          const progressRes = await coordinator.fetch(new Request('http://do/getProgress'));
-          const progress = await progressRes.json() as any;
-
-          const totalScenes = data.storyData.scenes.length;
-          console.log(`[FINALIZE] Progress:`, progress);
-
-          if (!progress.isComplete) {
-            const missing = Math.max(
-              totalScenes - (progress.imagesCompleted || 0),
-              totalScenes - (progress.audioCompleted || 0)
-            );
-
-            // Update job progress at milestones (50%, 75%)
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-
-            const completedItems = (progress.imagesCompleted || 0) + (progress.audioCompleted || 0);
-            const rawProgress = 25 + Math.round((completedItems / (totalScenes * 2)) * 50);
-
-            const { data: jobData } = await supabase
-              .from('story_jobs')
-              .select('progress')
-              .eq('job_id', data.jobId)
-              .single();
-
-            const lastProgress = jobData?.progress || 25;
-            let newProgress = lastProgress;
-
-            if (rawProgress >= 75 && lastProgress < 75) newProgress = 75;
-            else if (rawProgress >= 50 && lastProgress < 50) newProgress = 50;
-
-            if (newProgress !== lastProgress) {
-              await supabase
-                .from('story_jobs')
-                .update({ progress: newProgress, updated_at: new Date().toISOString() })
-                .eq('job_id', data.jobId);
-              console.log(`[FINALIZE] Progress update: ${newProgress}%`);
-            }
-
-            // Re-queue finalization
-            const delaySeconds = Math.min(missing * 2, 30);
-            await env.STORY_QUEUE.send(data, { delaySeconds });
-            console.log(`[FINALIZE] Re-queued with ${delaySeconds}s delay (missing: ${missing})`);
-            message.ack();
-            return;
+          const status = await updateRes.json() as any;
+          if (status.isComplete) {
+            await syncStoryToSupabase(data, coordinator, env);
           }
 
-          // All complete - finalize and sync to Supabase
-          console.log(`[FINALIZE] All scenes complete, syncing to database`);
-
-          const finalRes = await coordinator.fetch(new Request('http://do/finalize', { method: 'POST' }));
-          const finalData = await finalRes.json() as any;
-
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-
-          // Get current story and merge with Durable Object state
-          const { data: currentStory } = await supabase
-            .from('stories')
-            .select('story')
-            .eq('id', data.storyId)
-            .single();
-
-          if (currentStory?.story && finalData.scenes) {
-            const updatedStory = { ...currentStory.story };
-            // Merge each scene's generated content
-            finalData.scenes.forEach((scene: any, idx: number) => {
-              if (updatedStory.scenes[idx]) {
-                updatedStory.scenes[idx] = {
-                  ...updatedStory.scenes[idx],
-                  ...scene,
-                };
-              }
-            });
-
-            // Single DB write with all updates
-            await supabase
-              .from('stories')
-              .update({ story: updatedStory, status: 'draft', updated_at: new Date().toISOString() })
-              .eq('id', data.storyId);
-          }
-
-          // Mark job complete (Progress 4/4: 100%)
-          await supabase
-            .from('story_jobs')
-            .update({
-              status: 'completed',
-              progress: 100,
-              images_generated: finalData.imagesCompleted,
-              audio_generated: finalData.audioCompleted,
-              updated_at: new Date().toISOString(),
-            })
-            .eq('job_id', data.jobId);
-
-          console.log(`[FINALIZE] Complete! Story synced to database.`);
           message.ack();
         }
       } catch (error) {
         console.error('[Queue] Error:', error);
 
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-        const data: QueueMessage = message.body;
-        await supabase
-          .from('story_jobs')
-          .update({
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('job_id', data.jobId);
+          const data: QueueMessage = message.body;
+          await supabase
+            .from('story_jobs')
+            .update({
+              status: 'failed',
+              error: error instanceof Error ? error.message : 'Unknown error',
+              updated_at: new Date().toISOString(),
+            })
+            .eq('job_id', data.jobId);
+        } catch (dbError) {
+          console.error('[Queue] Failed to update error status in DB:', dbError);
+        }
 
         message.retry();
       }
     }
   },
 };
+
+/**
+ * Finalize story and sync all generated content from Durable Object to Supabase
+ */
+async function syncStoryToSupabase(data: QueueMessage, coordinator: any, env: Env): Promise<void> {
+  console.log(`[FINALIZE] All scenes complete, syncing to database for job ${data.jobId}`);
+
+  try {
+    const finalRes = await coordinator.fetch(new Request('http://do/finalize', { method: 'POST' }));
+    const finalData = await finalRes.json() as any;
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // Get current story and merge with Durable Object state
+    const { data: currentStory } = await supabase
+      .from('stories')
+      .select('story')
+      .eq('id', data.storyId)
+      .single();
+
+    if (currentStory?.story && finalData.scenes) {
+      const updatedStory = { ...currentStory.story };
+      // Merge each scene's generated content
+      finalData.scenes.forEach((scene: any, idx: number) => {
+        if (updatedStory.scenes[idx]) {
+          updatedStory.scenes[idx] = {
+            ...updatedStory.scenes[idx],
+            ...scene,
+          };
+        }
+      });
+
+      // Single DB write with all updates
+      await supabase
+        .from('stories')
+        .update({ story: updatedStory, status: 'draft', updated_at: new Date().toISOString() })
+        .eq('id', data.storyId);
+    }
+
+    // Mark job complete (Progress 4/4: 100%)
+    await supabase
+      .from('story_jobs')
+      .update({
+        status: 'completed',
+        progress: 100,
+        images_generated: finalData.imagesCompleted,
+        audio_generated: finalData.audioCompleted,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('job_id', data.jobId);
+
+    console.log(`[FINALIZE] Complete! Story synced to database.`);
+  } catch (error) {
+    console.error('[FINALIZE] Error syncing to Supabase:', error);
+    throw error; // Re-throw to be caught by the main queue catch block
+  }
+}
 
 function jsonResponse(data: any, status: number = 200): Response {
   return new Response(JSON.stringify(data), {

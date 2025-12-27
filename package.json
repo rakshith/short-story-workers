@@ -10,14 +10,16 @@
     "deploy": "wrangler deploy --env=\"\"",
     "log": "wrangler tail --format pretty",
     "deploy:stg": "wrangler deploy --env staging",
-    "deploy:prod": "wrangler deploy --env production"
+    "deploy:prod": "wrangler deploy --env production",
+    "monitor:stg": "npx wrangler tail --env staging --format pretty",
+    "monitor:prod": "npx wrangler tail --env production --format pretty"
   },
   "keywords": [
     "cloudflare-workers",
     "ai",
     "story-generation"
   ],
-  "author": "",
+  "author": "Rakshith Raj S",
   "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",

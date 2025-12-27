@@ -44,8 +44,9 @@ binding = "STORY_QUEUE"
 
 [[env.staging.queues.consumers]]
 queue = "story-processing-staging"
-max_batch_size = 1
-max_batch_timeout = 30
+max_batch_size = 10
+max_batch_timeout = 20
+max_concurrency = 5
 
 [env.production]
 name = "create-story-worker-production"
@@ -76,8 +77,9 @@ binding = "STORY_QUEUE"
 
 [[env.production.queues.consumers]]
 queue = "story-processing-production"
-max_batch_size = 1
-max_batch_timeout = 30
+max_batch_size = 10
+max_batch_timeout = 20
+max_concurrency = 5
 
 # Environment variables (set via wrangler secret put or dashboard)
 # SUPABASE_URL
