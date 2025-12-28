@@ -25,36 +25,52 @@ export async function generateScript(
 ): Promise<ScriptGenerationResult> {
   const { prompt, duration, language = 'en', model } = params;
 
-  // Calculate scene guidance dynamically based on duration
-  let sceneGuidance = '';
-  let recommendedScenes = 0;
-  let sceneDuration = '';
-  let targetAvgSceneDuration = 0;
+  // Calculate scene breakdown - each scene MUST be exactly 5s or 10s only
+  // This ensures compatibility with video inference models
+
+  let num5sScenes = 0;
+  let num10sScenes = 0;
 
   if (duration <= 30) {
-    // Short videos: 5 seconds per scene on average
-    targetAvgSceneDuration = 5;
-    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
-    sceneDuration = '4-6 seconds';
-    sceneGuidance = 'Keep the story concise and impactful. Focus on a single key message or moment. Each scene should be punchy with minimal narration.';
+    // For 15s and 30s: use all 5s scenes
+    num5sScenes = duration / 5;
+    num10sScenes = 0;
   } else if (duration <= 60) {
-    // Medium videos: 6 seconds per scene on average
-    targetAvgSceneDuration = 6;
-    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
-    sceneDuration = '5-7 seconds';
-    sceneGuidance = 'Tell a complete short story with a clear beginning, middle, and end. Keep narration concise.';
+    // For 60s: use all 5s scenes (12 scenes)
+    num5sScenes = duration / 5;
+    num10sScenes = 0;
   } else if (duration <= 120) {
-    // Longer videos: 9 seconds per scene on average
-    targetAvgSceneDuration = 9;
-    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
-    sceneDuration = '8-10 seconds';
-    sceneGuidance = 'Develop a richer narrative with character development. Narration can be more substantial.';
+    // For 120s (2M): mix of 5s and 10s - 12x 5s + 6x 10s = 120s
+    num5sScenes = 12;
+    num10sScenes = 6;
   } else {
-    // Long-form videos (3+ minutes): 12 seconds per scene on average
-    targetAvgSceneDuration = 12;
-    recommendedScenes = Math.round(duration / targetAvgSceneDuration);
-    sceneDuration = '10-14 seconds';
-    sceneGuidance = `Create a fully developed story with multiple acts. Make it cinematic and memorable. IMPORTANT: You have exactly ${duration} seconds - average ${targetAvgSceneDuration} seconds per scene across ${recommendedScenes} scenes to fill the entire duration.`;
+    // For 180s (3M): mix of 5s and 10s - 18x 5s + 9x 10s = 180s
+    num5sScenes = 18;
+    num10sScenes = 9;
+  }
+
+  const recommendedScenes = num5sScenes + num10sScenes;
+
+  // Build scene duration guidance
+  let sceneDuration = '';
+  let sceneGuidance = '';
+
+  if (num5sScenes > 0 && num10sScenes > 0) {
+    sceneDuration = `exactly 5 seconds OR exactly 10 seconds (use ${num5sScenes}x 5s scenes and ${num10sScenes}x 10s scenes)`;
+  } else if (num5sScenes > 0) {
+    sceneDuration = 'exactly 5 seconds';
+  } else {
+    sceneDuration = 'exactly 10 seconds';
+  }
+
+  if (duration <= 30) {
+    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes, each exactly 5 seconds. Total = ${recommendedScenes} × 5s = ${duration}s. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
+  } else if (duration <= 60) {
+    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes totaling EXACTLY ${duration} seconds. Use a mix of 5s and 10s scenes. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
+  } else if (duration <= 120) {
+    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
+  } else {
+    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
   }
 
   const detailsGuidance = duration <= 60
