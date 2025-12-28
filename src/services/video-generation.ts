@@ -3,7 +3,7 @@
 import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
-import { VideoConfigData } from './supabase';
+import { VideoConfig } from '../types';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -12,7 +12,7 @@ export interface VideoGenerationParams {
     height: number;
     aspect_ratio?: string;
     seed?: number;
-    videoConfig: VideoConfigData;
+    videoConfig: VideoConfig;
 }
 
 export interface VideoGenerationResult {

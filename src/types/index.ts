@@ -22,6 +22,78 @@ export interface Caption {
   tokens?: CaptionToken[];
 }
 
+export type TransitionPreset = 'crossfade' | 'zoom-pan' | 'zoom-out-pan' | 'bounce-pan' | 'blur-motion' | 'bounce-flash' | 'floating';
+
+// Watermark Configuration Type
+export interface WatermarkConfig {
+  text?: string;
+  variant?: 'gradient' | 'glass' | 'neon' | 'minimal';
+  position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  opacity?: number;
+  fontSize?: string;
+  show?: boolean;
+}
+
+export type CaptionStylePreset =
+  | 'beast'
+  | 'tiktok'
+  | 'bold-modern'
+  | 'minimal'
+  | 'serif-elegant'
+  | 'retro-pop'
+  | 'handwritten'
+  | 'newspaper'
+  | 'techno'
+  | 'comic-book'
+  | 'mono-terminal'
+  | 'luxury'
+  | 'stroke-outline'
+  | 'stroke-gold'
+  | 'stroke-pink'
+  | 'stroke-green'
+  | 'stroke-purple'
+  | 'white-stroke';
+
+export interface StoryCompositionProps {
+  scenes: Scene[];
+  backgroundMusic?: string;
+  backgroundMusicVolume?: number;
+  userTier?: 'free' | 'premium' | 'pro';
+  showWatermark?: boolean;
+  transitionPreset?: TransitionPreset; // Plug-and-play transition preset
+  captionStylePreset?: CaptionStylePreset; // Caption style preset
+  watermark?: WatermarkConfig; // Watermark configuration object
+}
+
+export type MediaType = 'image' | 'video';
+
+export interface VideoConfig {
+  id?: string;
+  mediaType?: MediaType;
+  aspectRatio: string;
+  model: string;
+  preset: AIPresetItem;
+  music: string;
+  musicVolume?: number; // Added missing field
+  script: string;
+  voice: string;
+  userId?: string;
+  seriesId?: string;
+  teamId?: string | null; // Team context for collaboration
+  enableCaptions?: boolean; // Added missing field
+  watermark?: WatermarkConfig; // Watermark configuration
+  videoType: string;
+  outputFormat: string;
+  captionStylePreset?: CaptionStylePreset;
+  transitionPreset?: TransitionPreset;
+  language?: string;
+  title?: string;
+  prompt?: string;
+  duration?: number;
+  estimatedCredits?: number;
+  durationInFrames?: number;
+}
+
 export interface Scene {
   model?: string;
   sceneNumber: number;
@@ -64,23 +136,7 @@ export interface AIPresetItem {
 
 export interface CreateStoryRequest {
   script: string | StoryTimeline;
-  videoConfig: {
-    videoType?: string;
-    mediaType?: 'image' | 'video';
-    preset: AIPresetItem;
-    model: string;
-    music: string;
-    musicVolume?: number;
-    voice: string;
-    aspectRatio: string;
-    outputFormat?: string;
-    enableCaptions?: boolean;
-    watermark?: any;
-    captionStylePreset?: any;
-    transitionPreset?: string;
-    language?: string;
-    estimatedCredits?: number;
-  };
+  videoConfig: VideoConfig;
   userId: string;
   seriesId: string;
   teamId: string;

@@ -1,8 +1,7 @@
 // Environment types for Cloudflare Workers
 
 import { R2Bucket, Queue, DurableObjectNamespace } from '@cloudflare/workers-types';
-import { StoryTimeline } from '.';
-import { VideoConfigData } from '../services/supabase';
+import { StoryTimeline, VideoConfig } from '.';
 
 // Forward declare QueueMessage to avoid circular dependency
 // Using any for storyData to avoid circular imports - it will be properly typed at usage sites
@@ -13,7 +12,7 @@ export interface QueueMessage {
   storyId: string;
   title: string;
   storyData: StoryTimeline; // StoryTimeline - typed at usage sites
-  videoConfig: VideoConfigData;
+  videoConfig: VideoConfig;
   sceneIndex: number;
   type: 'image' | 'video' | 'audio' | 'finalize';
   baseUrl?: string;

@@ -1,7 +1,7 @@
 // Generate and create story endpoint handler - AI script generation + story creation
 
 import { Env, QueueMessage } from '../types/env';
-import { StoryTimeline } from '../types';
+import { StoryTimeline, VideoConfig } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
@@ -9,7 +9,7 @@ import { jsonResponse } from '../utils/response';
 interface GenerateStoryRequest {
     prompt: string;
     duration: number;
-    videoConfig: any;
+    videoConfig: VideoConfig;
     userId: string;
     seriesId: string;
     teamId?: string;

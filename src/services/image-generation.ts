@@ -6,7 +6,7 @@ import { generateShortStoryPath, generateUUID } from '../utils/storage';
 import { uploadToDefaultBucket } from '../utils/image-upload';
 import { FOLDER_NAMES, video_output_format } from '../config/table-config';
 import { v4 as uuidv4 } from 'uuid';
-import { VideoConfigData } from './supabase';
+import { VideoConfig } from '../types';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -18,7 +18,7 @@ export interface ImageGenerationParams {
   output_quality?: number;
   aspect_ratio?: string;
   seed?: number;
-  videoConfig: VideoConfigData;
+  videoConfig: VideoConfig;
 }
 
 export interface ImageGenerationResult {

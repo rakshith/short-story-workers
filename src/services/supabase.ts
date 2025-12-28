@@ -1,23 +1,7 @@
 // Supabase service for Cloudflare Workers
 
 import { createClient } from '@supabase/supabase-js';
-import { StoryTimeline, ProjectStatusType } from '../types';
-
-export interface VideoConfigData {
-  aspectRatio: string;
-  model: string;
-  music: string;
-  musicVolume?: number;
-  preset: any;
-  voice: string;
-  outputFormat?: string;
-  captionStylePreset?: any;
-  watermark?: any;
-  transitionPreset?: string;
-  durationInFrames?: number;
-  videoType?: string;
-  estimatedCredits?: number;
-}
+import { StoryTimeline, ProjectStatusType, VideoConfig } from '../types';
 
 export interface Story {
   id: string;
@@ -25,7 +9,7 @@ export interface Story {
   title: string;
   video_type: string;
   story: StoryTimeline;
-  video_config?: VideoConfigData;
+  video_config?: VideoConfig;
   story_cost?: number;
   created_at: string;
   updated_at: string;
@@ -40,7 +24,7 @@ export interface CreateStoryParams {
   videoType: string;
   story: StoryTimeline;
   status: ProjectStatusType;
-  videoConfig?: VideoConfigData;
+  videoConfig?: VideoConfig;
   storyCost?: number;
   teamId?: string;
 }
