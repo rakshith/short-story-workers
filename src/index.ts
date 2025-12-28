@@ -184,7 +184,7 @@ export default {
           await updateJobStatus(jobId, {
             jobId,
             userId: body.userId,
-            status: 'processing',
+            status: ProjectStatus.PROCESSING,
             progress: 25,
             totalScenes: storyData.scenes.length,
             imagesGenerated: 0,
