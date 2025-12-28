@@ -4,7 +4,7 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
 import { generateShortStoryPath, generateUUID } from '../utils/storage';
 import { uploadToDefaultBucket } from '../utils/image-upload';
-import { FOLDER_NAMES } from '../config/table-config';
+import { FOLDER_NAMES, video_output_format } from '../config/table-config';
 import { v4 as uuidv4 } from 'uuid';
 import { VideoConfigData } from './supabase';
 
@@ -35,7 +35,6 @@ export async function triggerReplicateGeneration(
     sceneIndex: number;
     replicateApiToken: string;
     webhookUrl: string;
-    type: 'image' | 'video';
   }
 ): Promise<ImageGenerationResult> {
   const { replicateApiToken, webhookUrl } = options;
@@ -65,7 +64,7 @@ export async function triggerReplicateGeneration(
   }
 
   // Create prediction with webhook - This returns immediately without waiting
-  console.log(`[REPLICATE-ASYNC] Creating prediction for ${options.type} - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
+  console.log(`[IMAGE-GENERATION] Creating prediction for image - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 
   // Handle both versioned models (owner/name:version) and model names (owner/name)
   const hasVersion = params.model.includes(':');
@@ -142,7 +141,7 @@ export async function processFinishedPrediction(
 
     await imagesBucket.put(key, imageBlob, {
       httpMetadata: {
-        contentType: options.outputFormat === 'mp4' ? 'video/mp4' : `image/${options.outputFormat || 'jpg'}`,
+        contentType: options.outputFormat === video_output_format ? 'video/mp4' : `image/${options.outputFormat || 'jpg'}`,
       },
     });
 
@@ -178,7 +177,7 @@ function toUrlString(value: any): string {
   return String(value);
 }
 
-export async function extractImageUrls(images: any, logPrefix: string): Promise<string[]> {
+async function extractImageUrls(images: any, logPrefix: string): Promise<string[]> {
   console.log(`${logPrefix} Raw images response:`, {
     type: typeof images,
     isArray: Array.isArray(images),

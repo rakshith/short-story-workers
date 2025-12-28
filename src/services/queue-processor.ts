@@ -2,13 +2,10 @@
 
 import { Env, QueueMessage } from '../types/env';
 import { Scene, StoryTimeline } from '../types';
-import { triggerReplicateGeneration } from './image-generation';
 import { generateSceneAudio } from './audio-generation';
 import { StoryService } from './supabase';
 import { getModelForTier } from '../utils/model-utils';
-import { generateShortStoryPath } from '../utils/storage';
-import { getVideoRenderConfig, VIDEO_FPS } from '../utils/video-calculations';
-import { AspectRatio, ProjectStatus } from '../types';
+import { ProjectStatus } from '../types';
 import { processorLogger } from '../utils/logger';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
@@ -91,7 +88,6 @@ export async function processSceneImage(
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
         webhookUrl,
-        type: 'image',
       }
     );
 
@@ -115,6 +111,88 @@ export async function processSceneImage(
     return {
       sceneIndex,
       imageUrl: null,
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Process a single scene video generation
+ */
+export async function processSceneVideo(
+  message: QueueMessage,
+  env: Env
+): Promise<{ sceneIndex: number; videoUrl: string | null; success: boolean; error?: string }> {
+  const { storyData, videoConfig, userId, seriesId, storyId, sceneIndex } = message;
+  const scene = storyData.scenes[sceneIndex];
+
+  if (!scene) {
+    return { sceneIndex, videoUrl: null, success: false, error: 'Scene not found' };
+  }
+
+  try {
+    const modelToUse = scene.model || videoConfig.model;
+    const selectedModel = getModelForTier(modelToUse);
+
+    processorLogger.debug(`Video generation starting`, {
+      sceneIndex,
+      model: selectedModel,
+      userId,
+    });
+
+    const prompt = scene.imagePrompt;
+
+    // Construct webhook URL with metadata
+    const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
+    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}&seriesId=${seriesId}&jobId=${message.jobId}`;
+
+    processorLogger.debug(`Triggering async video generation`, {
+      sceneIndex,
+      model: selectedModel,
+      webhookUrl,
+    });
+
+    // Use dedicated video generation service
+    const { triggerVideoGeneration } = await import('./video-generation');
+    const result = await triggerVideoGeneration(
+      {
+        prompt,
+        model: selectedModel,
+        width: 512,
+        height: 512,
+        aspect_ratio: videoConfig.aspectRatio,
+        seed: videoConfig.preset.seed,
+        videoConfig: videoConfig,
+      },
+      {
+        userId,
+        seriesId,
+        storyId,
+        sceneIndex,
+        replicateApiToken: env.REPLICATE_API_TOKEN,
+        webhookUrl,
+      }
+    );
+
+    processorLogger.info(`Video generation triggered`, {
+      sceneIndex,
+      predictionId: result.predictionId,
+    });
+
+    return {
+      sceneIndex,
+      videoUrl: null,
+      success: true,
+    };
+  } catch (error) {
+    processorLogger.error(`Error triggering video for scene ${sceneIndex}`, error, {
+      sceneIndex,
+      userId,
+    });
+    return {
+      sceneIndex,
+      videoUrl: null,
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
@@ -215,73 +293,6 @@ export async function processSceneAudio(
   }
 }
 
-/**
- * Finalize story and save to database
- */
-export async function finalizeStory(
-  message: QueueMessage,
-  imageResults: Array<{ sceneIndex: number; imageUrl: string | null; success: boolean; error?: string }>,
-  audioResults: Array<{ sceneIndex: number; audioUrl: string | null; audioDuration: number; captions: any[]; success: boolean; error?: string }>,
-  env: Env
-): Promise<void> {
-  const { storyData, videoConfig, userId, seriesId, title, storyId } = message;
-
-  // Update scenes with generated images and audio
-  const scenesWithMedia = storyData.scenes.map((scene: Scene, index: number) => {
-    const imageResult = imageResults.find((r) => r.sceneIndex === index);
-    const audioResult = audioResults.find((r) => r.sceneIndex === index);
-
-    return {
-      ...scene,
-      generatedImageUrl: imageResult?.imageUrl || undefined,
-      generationError: imageResult?.success === false ? imageResult.error : undefined,
-      audioUrl: audioResult?.audioUrl || undefined,
-      audioDuration: audioResult?.audioDuration || undefined,
-      captions: audioResult?.captions || undefined,
-      audioGenerationError: audioResult?.success === false ? audioResult.error : undefined,
-    };
-  });
-
-  const finalStory: StoryTimeline = {
-    ...storyData,
-    scenes: scenesWithMedia,
-  };
-
-  // Calculate video config
-  const aspectRatio = (videoConfig.aspectRatio as AspectRatio) || '9:16';
-  const { durationInFrames } = getVideoRenderConfig(finalStory.scenes, aspectRatio, VIDEO_FPS);
-
-  const videoConfigData = {
-    aspectRatio: videoConfig.aspectRatio,
-    model: videoConfig.model,
-    music: videoConfig.music,
-    musicVolume: videoConfig.musicVolume ? videoConfig.musicVolume / 100 : 0.5,
-    preset: videoConfig.preset,
-    voice: videoConfig.voice,
-    outputFormat: videoConfig.outputFormat || 'jpg',
-    captionStylePreset: videoConfig.captionStylePreset,
-    watermark: videoConfig.watermark || {
-      text: 'ArtFlicks',
-      variant: 'gradient',
-      show: true,
-    },
-    transitionPreset: videoConfig.transitionPreset || 'crossfade',
-    durationInFrames,
-  };
-
-  // Save to database
-  const storyService = new StoryService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  await storyService.createStory({
-    userId,
-    seriesId,
-    title,
-    videoType: videoConfig?.videoType || 'faceless-video',
-    story: finalStory,
-    status: ProjectStatus.DRAFT,
-    videoConfig: videoConfigData,
-    storyCost: videoConfig.estimatedCredits,
-  });
-}
 
 /**
  * Update job status in database

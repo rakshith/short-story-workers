@@ -4,6 +4,7 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import { Caption } from '../types';
 import { generateUUID } from '../utils/storage';
 import { DEFAULT_NARRATION_STYLE, NARRATION_STYLES, NarrationStyle } from '../config/narration-styles';
+import { audio_output_format, FOLDER_NAMES } from '../config/table-config';
 
 export interface AudioGenerationResult {
   audioUrl: string;
@@ -265,8 +266,8 @@ export async function generateSceneAudio(
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, '');
 
-  const fileName = `${cleanNarration}-${sceneNumber}-${generateUUID()}.mp3`;
-  const key = `voice-overs/${userId}/${fileName}`;
+  const fileName = `${cleanNarration}-${sceneNumber}-${generateUUID()}.${audio_output_format}`;
+  const key = `${FOLDER_NAMES.VOICE_OVERS}/${userId}/${fileName}`;
 
   await audioBucket.put(key, audioBuffer, {
     httpMetadata: {

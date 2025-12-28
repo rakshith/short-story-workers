@@ -37,6 +37,11 @@ binding = "AUDIO_BUCKET"
 bucket_name = "audio"
 preview_bucket_name = "audio"
 
+[[env.staging.r2_buckets]]
+binding = "VIDEO_BUCKET"
+bucket_name = "videos"
+preview_bucket_name = "videos"
+
 # Queue for async processing in staging
 [[env.staging.queues.producers]]
 queue = "story-processing-staging"
@@ -69,6 +74,11 @@ preview_bucket_name = "images"
 binding = "AUDIO_BUCKET"
 bucket_name = "audio"
 preview_bucket_name = "audio"
+
+[[env.production.r2_buckets]]
+binding = "VIDEO_BUCKET"
+bucket_name = "videos"
+preview_bucket_name = "videos"
 
 # Queue for async processing in production
 [[env.production.queues.producers]]

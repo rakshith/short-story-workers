@@ -7,6 +7,8 @@ interface SceneUpdate {
   sceneIndex: number;
   imageUrl?: string;
   imageError?: string;
+  videoUrl?: string;
+  videoError?: string;
   audioUrl?: string;
   audioDuration?: number;
   captions?: any[];
@@ -42,6 +44,8 @@ export class StoryCoordinator {
           return this.handleInit(request);
         case 'updateImage':
           return this.handleImageUpdate(request);
+        case 'updateVideo':
+          return this.handleVideoUpdate(request);
         case 'updateAudio':
           return this.handleAudioUpdate(request);
         case 'getProgress':
@@ -89,7 +93,7 @@ export class StoryCoordinator {
       }
     }
 
-    // Update scene (single-threaded, no race condition)
+    // Update scene with image (single-threaded, no race condition)
     if (this.storyState.scenes[update.sceneIndex]) {
       this.storyState.scenes[update.sceneIndex] = {
         ...this.storyState.scenes[update.sceneIndex],
@@ -107,6 +111,48 @@ export class StoryCoordinator {
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
+
+    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
+      this.storyState.audioCompleted >= this.storyState.totalScenes;
+
+    return new Response(JSON.stringify({
+      success: true,
+      imagesCompleted: this.storyState.imagesCompleted,
+      audioCompleted: this.storyState.audioCompleted,
+      totalScenes: this.storyState.totalScenes,
+      isComplete,
+    }));
+  }
+
+  private async handleVideoUpdate(request: Request): Promise<Response> {
+    const update: SceneUpdate = await request.json() as any;
+
+    // Load state if not in memory
+    if (!this.storyState) {
+      this.storyState = await this.state.storage.get('storyState') as StoryState;
+      if (!this.storyState) {
+        return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
+      }
+    }
+
+    // Update scene with video (single-threaded, no race condition)
+    if (this.storyState.scenes[update.sceneIndex]) {
+      this.storyState.scenes[update.sceneIndex] = {
+        ...this.storyState.scenes[update.sceneIndex],
+        generatedVideoUrl: update.videoUrl,
+        ...(update.videoError ? { videoGenerationError: update.videoError } : {}),
+      };
+    }
+
+    // Increment counter (reuse imagesCompleted as "visuals completed")
+    if (update.videoUrl || update.videoError) {
+      this.storyState.imagesCompleted++;
+    }
+
+    // Persist
+    await this.state.storage.put('storyState', this.storyState);
+
+    console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
 
     const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
       this.storyState.audioCompleted >= this.storyState.totalScenes;

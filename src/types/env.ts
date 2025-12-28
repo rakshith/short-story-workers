@@ -15,14 +15,16 @@ export interface QueueMessage {
   storyData: StoryTimeline; // StoryTimeline - typed at usage sites
   videoConfig: VideoConfigData;
   sceneIndex: number;
-  type: 'image' | 'audio' | 'finalize';
+  type: 'image' | 'video' | 'audio' | 'finalize';
   baseUrl?: string;
+  teamId: string;
 }
 
 export interface Env {
   // R2 Buckets
   IMAGES_BUCKET: R2Bucket;
   AUDIO_BUCKET: R2Bucket;
+  VIDEO_BUCKET: R2Bucket;
 
   // Queue
   STORY_QUEUE: Queue<QueueMessage>;

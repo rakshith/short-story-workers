@@ -26,21 +26,26 @@ export interface Scene {
   model?: string;
   sceneNumber: number;
   duration: number;
+  details: string;
   narration: string;
   imagePrompt: string;
   cameraAngle: string;
   mood: string;
-  details?: string;
+  // Image generation tracking
   generatedImageUrl?: string;
-
   isGenerating?: boolean;
   generationError?: string;
-  audioUrl?: string;
-  audioDuration?: number;
-  captions?: Caption[];
+  // Video generation tracking (image-to-video)
+  generatedVideoUrl?: string;
+  isGeneratingVideo?: boolean;
+  videoGenerationError?: string;
+  // Voice-over and captions
+  audioUrl?: string; // Generated voice-over audio URL
+  audioDuration?: number; // Actual duration of generated audio
+  captions?: Caption[]; // Timed captions for this scene
   isGeneratingAudio?: boolean;
   audioGenerationError?: string;
-  playbackRate?: number;
+  playbackRate?: number; // Audio playback rate for time scaling
 }
 
 export interface StoryTimeline {
@@ -61,6 +66,7 @@ export interface CreateStoryRequest {
   script: string | StoryTimeline;
   videoConfig: {
     videoType?: string;
+    mediaType?: 'image' | 'video';
     preset: AIPresetItem;
     model: string;
     music: string;

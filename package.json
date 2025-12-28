@@ -12,7 +12,9 @@
     "deploy:stg": "wrangler deploy --env staging",
     "deploy:prod": "wrangler deploy --env production",
     "monitor:stg": "npx wrangler tail --env staging --format pretty",
-    "monitor:prod": "npx wrangler tail --env production --format pretty"
+    "monitor:prod": "npx wrangler tail --env production --format pretty",
+    "type-check": "npx tsc --noEmit",
+    "unused": "knip"
   },
   "keywords": [
     "cloudflare-workers",
@@ -23,15 +25,14 @@
   "license": "MIT",
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20241106.0",
+    "knip": "^5.78.0",
     "typescript": "^5.3.3",
     "wrangler": "^4.51.0"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.1",
-    "@elevenlabs/elevenlabs-js": "^2.26.0",
     "@supabase/supabase-js": "^2.39.3",
     "ai": "^6.0.3",
-    "openai": "^4.104.0",
     "replicate": "^1.4.0",
     "uuid": "^13.0.0",
     "zod": "^4.2.1"

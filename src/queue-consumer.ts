@@ -1,352 +1,184 @@
 // Queue consumer worker for processing story generation jobs
-// Note: This file is now integrated into index.ts as the queue handler
-// Keeping for reference but the queue handler is in index.ts
 
 import { Env, QueueMessage } from './types/env';
-import { processSceneImage, processSceneAudio, finalizeStory, updateJobStatus, JobStatus } from './services/queue-processor';
+import { processSceneImage, processSceneAudio, processSceneVideo } from './services/queue-processor';
 import { queueLogger } from './utils/logger';
 
-export default {
-  async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
-    queueLogger.info(`Queue batch received`, { 
-      batchSize: batch.messages.length,
-      queue: batch.queue 
-    });
+/**
+ * Queue consumer handler - Uses Durable Objects for race-condition-free updates
+ */
+export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
+  // Helper to get Durable Object stub for a story
+  const getCoordinator = (storyId: string) => {
+    const id = env.STORY_COORDINATOR.idFromName(storyId);
+    return env.STORY_COORDINATOR.get(id);
+  };
 
-    for (const message of batch.messages) {
-      const startTime = Date.now();
-      const messageId = message.id;
-      
-      try {
-        const data: QueueMessage = message.body;
-        
-        queueLogger.info(`Processing message`, {
-          messageId,
-          type: data.type,
-          jobId: data.jobId,
-          sceneIndex: data.sceneIndex,
-          userId: data.userId,
-          title: data.title,
-        });
+  for (const message of batch.messages) {
+    try {
+      const data: QueueMessage = message.body;
+      queueLogger.info(`Processing ${data.type} for job ${data.jobId}`, { jobId: data.jobId, type: data.type, sceneIndex: data.sceneIndex });
+      const coordinator = getCoordinator(data.storyId);
 
-        // Update job status to processing
-        await updateJobStatus(data.jobId, {
-          jobId: data.jobId,
-          status: 'processing',
-          progress: 0,
-          totalScenes: data.storyData.scenes.length,
-          imagesGenerated: 0,
-          audioGenerated: 0,
-        }, env);
+      if (data.type === 'image') {
+        // Generate the image
+        const result = await processSceneImage(data, env);
+        queueLogger.info(`Image result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, imageUrl: result.imageUrl });
 
-        if (data.type === 'image') {
-          console.log(`[QUEUE] Starting image generation for scene ${data.sceneIndex}, storyId: ${data.storyId}`);
-          
-          queueLogger.debug(`Starting image generation`, {
-            messageId,
-            jobId: data.jobId,
+        const updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
+          method: 'POST',
+          body: JSON.stringify({
             sceneIndex: data.sceneIndex,
-          });
+            imageUrl: result.imageUrl,
+            imageError: result.success ? undefined : result.error,
+          }),
+        }));
 
-          // Process image generation
-          console.log(`[QUEUE] Calling processSceneImage...`);
-          const result = await queueLogger.logApiCall(
-            'processSceneImage',
-            () => processSceneImage(data, env),
-            { messageId, jobId: data.jobId, sceneIndex: data.sceneIndex }
-          );
-          
-          console.log(`[QUEUE] Image generation result:`, {
-            success: result.success,
-            imageUrl: result.imageUrl,
-            error: result.error,
-          });
-          
-          queueLogger.info(`Image generation completed`, {
-            messageId,
+        const status = await updateRes.json() as any;
+        if (status.isComplete) {
+          await syncStoryToSupabase({
             jobId: data.jobId,
-            sceneIndex: data.sceneIndex,
-            success: result.success,
-            imageUrl: result.imageUrl,
-            error: result.error,
-          });
-          
-          // Update the story scene with generated image URL
-          console.log(`[IMAGE UPDATE] Attempting to update story. StoryID: ${data.storyId}, UserID: ${data.userId}, SceneIndex: ${data.sceneIndex}, ImageURL: ${result.imageUrl}`);
-          
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-          
-          queueLogger.debug(`Fetching story from database`, {
-            messageId,
-            userId: data.userId,
             storyId: data.storyId,
-          });
+            userId: data.userId
+          }, coordinator, env);
+        }
 
-          // Get current story using userId and storyId
-          const { data: story, error: fetchError } = await supabase
-            .from('stories')
-            .select('story')
-            .eq('user_id', data.userId)
-            .eq('id', data.storyId)
-            .single();
-          
-          if (fetchError) {
-            queueLogger.error(`Failed to fetch story`, fetchError, {
-              messageId,
-              userId: data.userId,
-              storyId: data.storyId,
-            });
-          }
-          
-          if (story?.story) {
-            // Update the specific scene - merge with existing scene data
-            const updatedStory = { ...story.story };
-            if (updatedStory.scenes[data.sceneIndex]) {
-              updatedStory.scenes[data.sceneIndex] = {
-                ...updatedStory.scenes[data.sceneIndex],
-                generatedImageUrl: result.imageUrl,
-                ...(result.success ? {} : { generationError: result.error }),
-              };
-            }
-            
-            queueLogger.debug(`Updating story in database`, {
-              messageId,
-              sceneIndex: data.sceneIndex,
-              imageUrl: result.imageUrl,
-            });
-            
-            // Save updated story using userId and storyId
-            const { error: updateError } = await supabase
-              .from('stories')
-              .update({ story: updatedStory })
-              .eq('user_id', data.userId)
-              .eq('id', data.storyId);
+        message.ack();
+      } else if (data.type === 'video') {
+        // Generate the video
+        const result = await processSceneVideo(data, env);
+        queueLogger.info(`Video result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, videoUrl: result.videoUrl });
 
-            if (updateError) {
-              queueLogger.error(`Failed to update story`, updateError, {
-                messageId,
-                userId: data.userId,
-                title: data.title,
-              });
-            } else {
-              queueLogger.info(`Story updated successfully`, {
-                messageId,
-                sceneIndex: data.sceneIndex,
-              });
-            }
-          } else {
-            queueLogger.warn(`Story not found in database`, {
-              messageId,
-              userId: data.userId,
-              title: data.title,
-            });
-          }
-          
-          const duration = Date.now() - startTime;
-          queueLogger.info(`Message processed successfully`, {
-            messageId,
-            type: 'image',
-            duration: `${duration}ms`,
-          });
-          
-          message.ack();
-        } else if (data.type === 'audio') {
-          queueLogger.debug(`Starting audio generation`, {
-            messageId,
-            jobId: data.jobId,
+        const updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
+          method: 'POST',
+          body: JSON.stringify({
             sceneIndex: data.sceneIndex,
-          });
+            videoUrl: result.videoUrl,
+            videoError: result.success ? undefined : result.error,
+          }),
+        }));
 
-          // Process audio generation
-          const result = await queueLogger.logApiCall(
-            'processSceneAudio',
-            () => processSceneAudio(data, env),
-            { messageId, jobId: data.jobId, sceneIndex: data.sceneIndex }
-          );
-          
-          queueLogger.info(`Audio generation completed`, {
-            messageId,
+        const status = await updateRes.json() as any;
+        if (status.isComplete) {
+          await syncStoryToSupabase({
             jobId: data.jobId,
+            storyId: data.storyId,
+            userId: data.userId
+          }, coordinator, env);
+        }
+
+        message.ack();
+      } else if (data.type === 'audio') {
+        // Generate the audio
+        const result = await processSceneAudio(data, env);
+        queueLogger.info(`Audio result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, audioUrl: result.audioUrl });
+
+        // Update via Durable Object (no race condition)
+        const updateRes = await coordinator.fetch(new Request('http://do/updateAudio', {
+          method: 'POST',
+          body: JSON.stringify({
             sceneIndex: data.sceneIndex,
-            success: result.success,
             audioUrl: result.audioUrl,
             audioDuration: result.audioDuration,
-            error: result.error,
-          });
-          
-          // Update the story scene with generated audio URL
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-          
-          queueLogger.debug(`Fetching story from database`, {
-            messageId,
-            userId: data.userId,
-            storyId: data.storyId,
-          });
+            captions: result.captions,
+            audioError: result.success ? undefined : result.error,
+          }),
+        }));
 
-          // Get current story using userId and storyId
-          const { data: story, error: fetchError } = await supabase
-            .from('stories')
-            .select('story')
-            .eq('user_id', data.userId)
-            .eq('id', data.storyId)
-            .single();
-          
-          if (fetchError) {
-            queueLogger.error(`Failed to fetch story`, fetchError, {
-              messageId,
-              userId: data.userId,
-              storyId: data.storyId,
-            });
-          }
-          
-          if (story?.story) {
-            // Update the specific scene - merge with existing scene data
-            const updatedStory = { ...story.story };
-            if (updatedStory.scenes[data.sceneIndex]) {
-              updatedStory.scenes[data.sceneIndex] = {
-                ...updatedStory.scenes[data.sceneIndex],
-                audioUrl: result.audioUrl,
-                audioDuration: result.audioDuration,
-                captions: result.captions,
-                ...(result.success ? {} : { audioGenerationError: result.error }),
-              };
-            }
-            
-            queueLogger.debug(`Updating story in database`, {
-              messageId,
-              sceneIndex: data.sceneIndex,
-              audioUrl: result.audioUrl,
-            });
-            
-            // Save updated story using userId and storyId
-            const { error: updateError } = await supabase
-              .from('stories')
-              .update({ story: updatedStory })
-              .eq('user_id', data.userId)
-              .eq('id', data.storyId);
-
-            if (updateError) {
-              queueLogger.error(`Failed to update story`, updateError, {
-                messageId,
-                userId: data.userId,
-                storyId: data.storyId,
-              });
-            } else {
-              queueLogger.info(`Story updated successfully`, {
-                messageId,
-                sceneIndex: data.sceneIndex,
-              });
-            }
-          } else {
-            queueLogger.warn(`Story not found in database`, {
-              messageId,
-              userId: data.userId,
-              storyId: data.storyId,
-            });
-          }
-          
-          const duration = Date.now() - startTime;
-          queueLogger.info(`Message processed successfully`, {
-            messageId,
-            type: 'audio',
-            duration: `${duration}ms`,
-          });
-          
-          message.ack();
-        } else if (data.type === 'finalize') {
-          queueLogger.info(`Starting finalization`, {
-            messageId,
+        const status = await updateRes.json() as any;
+        if (status.isComplete) {
+          await syncStoryToSupabase({
             jobId: data.jobId,
-          });
-
-          // Update story status to DRAFT
-          const { createClient } = await import('@supabase/supabase-js');
-          const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-          
-          queueLogger.debug(`Updating story status to DRAFT`, {
-            messageId,
-            userId: data.userId,
             storyId: data.storyId,
-          });
-
-          const { error: updateError } = await supabase
-            .from('stories')
-            .update({ status: 'draft' })
-            .eq('user_id', data.userId)
-            .eq('id', data.storyId);
-
-          if (updateError) {
-            queueLogger.error(`Failed to update story status`, updateError, {
-              messageId,
-              userId: data.userId,
-              storyId: data.storyId,
-            });
-          } else {
-            queueLogger.info(`Story status updated to DRAFT`, {
-              messageId,
-              userId: data.userId,
-              storyId: data.storyId,
-            });
-          }
-
-          // Mark job as completed
-          await updateJobStatus(data.jobId, {
-            jobId: data.jobId,
-            status: 'completed',
-            progress: 100,
-            totalScenes: data.storyData.scenes.length,
-            imagesGenerated: data.storyData.scenes.length,
-            audioGenerated: data.storyData.scenes.length,
-            storyId: data.storyId,
-          }, env);
-          
-          queueLogger.info(`Finalization completed`, {
-            messageId,
-            jobId: data.jobId,
-          });
-          
-          message.ack();
+            userId: data.userId
+          }, coordinator, env);
         }
-      } catch (error) {
-        const duration = Date.now() - startTime;
-        const data: QueueMessage = message.body;
-        
-        queueLogger.error(`Error processing message`, error, {
-          messageId,
-          type: data.type,
-          jobId: data.jobId,
-          sceneIndex: data.sceneIndex,
-          duration: `${duration}ms`,
-        });
-        
-        // Update job status to failed
-        try {
-          await updateJobStatus(data.jobId, {
-            jobId: data.jobId,
-            status: 'failed',
-            progress: 0,
-            totalScenes: data.storyData.scenes.length,
-            imagesGenerated: 0,
-            audioGenerated: 0,
-            error: error instanceof Error ? error.message : 'Unknown error',
-          }, env);
-        } catch (statusError) {
-          queueLogger.error(`Failed to update job status`, statusError, {
-            messageId,
-            jobId: data.jobId,
-          });
-        }
-        
-        message.retry();
+
+        message.ack();
       }
-    }
-    
-    queueLogger.info(`Batch processing completed`, {
-      batchSize: batch.messages.length,
-      queue: batch.queue,
-    });
-  },
-};
+    } catch (error) {
+      queueLogger.error('Error processing queue message', error);
 
+      try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+        const data: QueueMessage = message.body;
+        await supabase
+          .from('story_jobs')
+          .update({
+            status: 'failed',
+            error: error instanceof Error ? error.message : 'Unknown error',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('job_id', data.jobId);
+      } catch (dbError) {
+        console.error('[Queue] Failed to update error status in DB:', dbError);
+      }
+
+      message.retry();
+    }
+  }
+}
+
+/**
+ * Finalize story and sync all generated content from Durable Object to Supabase
+ */
+export async function syncStoryToSupabase(
+  data: { jobId: string; storyId: string; userId: string },
+  coordinator: any,
+  env: Env
+): Promise<void> {
+  queueLogger.info(`All scenes complete, syncing to database`, { jobId: data.jobId });
+
+  try {
+    const finalRes = await coordinator.fetch(new Request('http://do/finalize', { method: 'POST' }));
+    const finalData = await finalRes.json() as any;
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // Get current story and merge with Durable Object state
+    const { data: currentStory } = await supabase
+      .from('stories')
+      .select('story')
+      .eq('id', data.storyId)
+      .single();
+
+    if (currentStory?.story && finalData.scenes) {
+      const updatedStory = { ...currentStory.story };
+      // Merge each scene's generated content
+      finalData.scenes.forEach((scene: any, idx: number) => {
+        if (updatedStory.scenes[idx]) {
+          updatedStory.scenes[idx] = {
+            ...updatedStory.scenes[idx],
+            ...scene,
+          };
+        }
+      });
+
+      // Single DB write with all updates
+      await supabase
+        .from('stories')
+        .update({ story: updatedStory, status: 'draft', updated_at: new Date().toISOString() })
+        .eq('id', data.storyId);
+    }
+
+    // Mark job complete (Progress 4/4: 100%)
+    await supabase
+      .from('story_jobs')
+      .update({
+        status: 'completed',
+        progress: 100,
+        images_generated: finalData.imagesCompleted,
+        audio_generated: finalData.audioCompleted,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('job_id', data.jobId);
+
+    queueLogger.info(`Story synced to database`, { jobId: data.jobId, storyId: data.storyId });
+  } catch (error) {
+    queueLogger.error('Error syncing to Supabase', error, { jobId: data.jobId });
+    throw error; // Re-throw to be caught by the main queue catch block
+  }
+}
