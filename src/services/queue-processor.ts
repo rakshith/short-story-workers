@@ -2,7 +2,7 @@
 
 import { Env, QueueMessage } from '../types/env';
 import { Scene, StoryTimeline } from '../types';
-import { generateAndUploadImages } from './image-generation';
+import { triggerReplicateGeneration } from './image-generation';
 import { generateSceneAudio } from './audio-generation';
 import { StoryService } from './supabase';
 import { getModelForTier } from '../utils/model-utils';
@@ -59,69 +59,56 @@ export async function processSceneImage(
     const height = Math.round((heightRatio / Math.max(widthRatio, heightRatio)) * baseSize);
 
     const prompt = `${scene.imagePrompt}, ${videoConfig.preset.stylePrompt}`;
-    const pathName = generateShortStoryPath(
-      'FACELess',
-      userId,
-      seriesId,
-      storyId,
-      videoConfig.outputFormat || 'jpg'
-    );
 
-    processorLogger.debug(`Calling Replicate API`, {
+    // Construct webhook URL with metadata
+    const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
+    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}&seriesId=${seriesId}&jobId=${message.jobId}`;
+
+    processorLogger.debug(`Triggering async Replicate generation`, {
       sceneIndex,
       model: selectedModel,
-      width,
-      height,
-      promptLength: prompt.length,
+      webhookUrl,
     });
 
-    const result = await processorLogger.logApiCall(
-      'generateAndUploadImages',
-      () => generateAndUploadImages(
-        {
-          prompt,
-          model: selectedModel,
-          width,
-          height,
-          num_outputs: 1,
-          output_format: videoConfig.outputFormat || 'jpg',
-          output_quality: 90,
-          aspect_ratio: videoConfig.aspectRatio,
-          seed: videoConfig.preset.seed,
-          videoConfig: videoConfig,
-        },
-        {
-          userId,
-          seriesId,
-          storyId: storyId,
-          imagesBucket: env.IMAGES_BUCKET,
-          replicateApiToken: env.REPLICATE_API_TOKEN,
-          pathName,
-        }
-      ),
-      { sceneIndex, model: selectedModel }
+    const { triggerReplicateGeneration } = await import('./image-generation');
+    const result = await triggerReplicateGeneration(
+      {
+        prompt,
+        model: selectedModel,
+        width,
+        height,
+        num_outputs: 1,
+        output_format: videoConfig.outputFormat || 'jpg',
+        output_quality: 90,
+        aspect_ratio: videoConfig.aspectRatio,
+        seed: videoConfig.preset.seed,
+        videoConfig: videoConfig,
+      },
+      {
+        userId,
+        seriesId,
+        storyId,
+        sceneIndex,
+        replicateApiToken: env.REPLICATE_API_TOKEN,
+        webhookUrl,
+        type: 'image',
+      }
     );
 
-    console.log(`[PROCESSOR] Image generation result:`, {
+    processorLogger.info(`Replicate generation triggered`, {
       sceneIndex,
-      storageUrls: result.storageUrls,
-      storageUrlsLength: result.storageUrls?.length,
-      firstUrl: result.storageUrls[0],
+      predictionId: result.predictionId,
     });
 
-    processorLogger.info(`Image generated successfully`, {
-      sceneIndex,
-      imageUrl: result.storageUrls[0],
-      model: selectedModel,
-    });
-
+    // We return success: true but imageUrl: null because it hasn't finished yet
+    // The webhook will handle the completion.
     return {
       sceneIndex,
-      imageUrl: result.storageUrls[0] || null,
+      imageUrl: null,
       success: true,
     };
   } catch (error) {
-    processorLogger.error(`Error generating image for scene ${sceneIndex}`, error, {
+    processorLogger.error(`Error triggering image for scene ${sceneIndex}`, error, {
       sceneIndex,
       userId,
     });

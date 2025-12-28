@@ -16,6 +16,7 @@ export interface QueueMessage {
   videoConfig: VideoConfigData;
   sceneIndex: number;
   type: 'image' | 'audio' | 'finalize';
+  baseUrl?: string;
 }
 
 export interface Env {

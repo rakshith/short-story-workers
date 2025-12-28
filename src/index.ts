@@ -1,9 +1,10 @@
 // Main Cloudflare Worker entry point - Uses Queues + Durable Objects for async processing
 
 import { Env, QueueMessage } from './types/env';
-import { CreateStoryRequest, CreateStoryResponse, StoryTimeline, AspectRatio } from './types';
+import { CreateStoryRequest, StoryTimeline } from './types';
 import { generateUUID } from './utils/storage';
 import { updateJobStatus, JobStatus } from './services/queue-processor';
+import { handleReplicateWebhook } from './services/webhook-handler';
 
 // Export Durable Object class
 export { StoryCoordinator } from './durable-objects/story-coordinator';
@@ -79,6 +80,11 @@ export default {
           500
         );
       }
+    }
+
+    // Replicate Webhook endpoint
+    if (request.method === 'POST' && url.pathname === '/webhooks/replicate') {
+      return handleReplicateWebhook(request, env);
     }
 
     // Generate script and create story endpoint
@@ -244,6 +250,7 @@ export default {
             videoConfig: body.videoConfig,
             sceneIndex: index,
             type: 'image',
+            baseUrl: url.origin,
           };
           return env.STORY_QUEUE.send(message);
         });
@@ -264,6 +271,7 @@ export default {
             videoConfig: body.videoConfig,
             sceneIndex: i,
             type: 'audio',
+            baseUrl: url.origin,
           };
           audioPromises.push(env.STORY_QUEUE.send(message));
         }
@@ -405,6 +413,7 @@ export default {
             videoConfig: body.videoConfig,
             sceneIndex: index,
             type: 'image',
+            baseUrl: url.origin,
           };
           return env.STORY_QUEUE.send(message);
         });
@@ -426,6 +435,7 @@ export default {
             videoConfig: body.videoConfig,
             sceneIndex: i,
             type: 'audio',
+            baseUrl: url.origin,
           };
           audioPromises.push(env.STORY_QUEUE.send(message));
         }
@@ -522,7 +532,11 @@ export default {
 
           const status = await updateRes.json() as any;
           if (status.isComplete) {
-            await syncStoryToSupabase(data, coordinator, env);
+            await syncStoryToSupabase({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
           }
 
           message.ack();
@@ -545,7 +559,11 @@ export default {
 
           const status = await updateRes.json() as any;
           if (status.isComplete) {
-            await syncStoryToSupabase(data, coordinator, env);
+            await syncStoryToSupabase({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
           }
 
           message.ack();
@@ -579,7 +597,7 @@ export default {
 /**
  * Finalize story and sync all generated content from Durable Object to Supabase
  */
-async function syncStoryToSupabase(data: QueueMessage, coordinator: any, env: Env): Promise<void> {
+export async function syncStoryToSupabase(data: { jobId: string; storyId: string; userId: string }, coordinator: any, env: Env): Promise<void> {
   console.log(`[FINALIZE] All scenes complete, syncing to database for job ${data.jobId}`);
 
   try {

@@ -98,8 +98,8 @@ export class StoryCoordinator {
       };
     }
 
-    // Increment counter
-    if (update.imageUrl) {
+    // Increment counter (both on success and failure to allow finalization)
+    if (update.imageUrl || update.imageError) {
       this.storyState.imagesCompleted++;
     }
 

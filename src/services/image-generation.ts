@@ -22,31 +22,23 @@ export interface ImageGenerationParams {
 }
 
 export interface ImageGenerationResult {
-  storageUrls: string[];
-  generationParams: any;
-  prompt: string;
-  model: string;
+  predictionId: string;
+  status: string;
 }
 
-export async function generateAndUploadImages(
+export async function triggerReplicateGeneration(
   params: ImageGenerationParams,
   options: {
     userId: string;
     seriesId: string;
     storyId: string;
-    imagesBucket: R2Bucket;
+    sceneIndex: number;
     replicateApiToken: string;
-    pathName: string;
+    webhookUrl: string;
+    type: 'image' | 'video';
   }
 ): Promise<ImageGenerationResult> {
-  const { imagesBucket, replicateApiToken, pathName } = options;
-
-  // Verify bucket exists
-  if (!imagesBucket) {
-    throw new Error('imagesBucket is not configured. Check R2 bucket binding in wrangler.toml');
-  }
-  
-  console.log(`[IMAGE-GEN] Using R2 bucket:`, typeof imagesBucket, imagesBucket);
+  const { replicateApiToken, webhookUrl } = options;
 
   // Initialize Replicate client
   const replicate = new Replicate({
@@ -72,34 +64,64 @@ export async function generateAndUploadImages(
     input.seed = params.seed;
   }
 
-  // Run the model - Replicate SDK handles polling automatically
-  console.log(`[IMAGE-GEN] Calling Replicate with model: ${params.model}`);
-  const output = await replicate.run(params.model as `${string}/${string}`, { input });
-  console.log(`[IMAGE-GEN] Replicate output:`, output);
+  // Create prediction with webhook - This returns immediately without waiting
+  console.log(`[REPLICATE-ASYNC] Creating prediction for ${options.type} - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
+
+  // Handle both versioned models (owner/name:version) and model names (owner/name)
+  const hasVersion = params.model.includes(':');
+  const predictionParams: any = {
+    input,
+    webhook: webhookUrl,
+    webhook_events_filter: ["completed"],
+  };
+
+  if (hasVersion) {
+    // If model includes version hash, use version parameter
+    predictionParams.version = params.model.split(':')[1];
+  } else {
+    // Otherwise use the model parameter (owner/name format)
+    predictionParams.model = params.model;
+  }
+
+  const prediction = await replicate.predictions.create(predictionParams);
+
+  console.log(`[REPLICATE-ASYNC] Prediction created: ${prediction.id}`);
+
+  return {
+    predictionId: prediction.id,
+    status: prediction.status,
+  };
+}
+
+/**
+ * Legacy support or internal helper to process finished prediction
+ * This will be used by the webhook handler to download and upload to R2
+ */
+export async function processFinishedPrediction(
+  prediction: any,
+  options: {
+    userId: string;
+    seriesId: string;
+    storyId: string;
+    imagesBucket: R2Bucket;
+    pathName: string;
+    outputFormat?: string;
+  }
+): Promise<string[]> {
+  const { imagesBucket, pathName } = options;
 
   // Extract image URLs using the extractImageUrls function
-  const imageUrls = await extractImageUrls(output, '[IMAGE-GEN]');
-  console.log(`[IMAGE-GEN] Extracted image URLs:`, imageUrls);
+  const imageUrls = await extractImageUrls(prediction.output, '[REPLICATE-WEBHOOK]');
+  console.log(`[REPLICATE-WEBHOOK] Extracted URLs:`, imageUrls);
 
-  // Upload images to R2
   const storageUrls: string[] = [];
   for (const imageUrl of imageUrls) {
-    if (!imageUrl) {
-      console.warn(`[IMAGE-GEN] Skipping empty image URL`);
-      continue;
-    }
+    if (!imageUrl) continue;
 
-    // Ensure imageUrl is a string
     const urlString = typeof imageUrl === 'string' ? imageUrl : String(imageUrl);
-    if (!urlString || urlString === 'undefined' || urlString === 'null') {
-      console.warn(`[IMAGE-GEN] Skipping invalid image URL:`, imageUrl);
-      continue;
-    }
 
-    // Handle data URLs and regular URLs
     let imageBlob: ArrayBuffer;
     if (urlString.startsWith('data:')) {
-      // Extract base64 data from data URL
       const base64Data = urlString.split(',')[1];
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
@@ -108,67 +130,27 @@ export async function generateAndUploadImages(
       }
       imageBlob = bytes.buffer;
     } else {
-      // It's a regular URL - fetch it
-      console.log(`[IMAGE-GEN] Processing URL: ${urlString}`);
       const imageResponse = await fetch(urlString);
       if (!imageResponse.ok) {
-        throw new Error(`Failed to fetch generated image: ${imageResponse.statusText}`);
+        throw new Error(`Failed to fetch generated content: ${imageResponse.statusText}`);
       }
       imageBlob = await imageResponse.arrayBuffer();
     }
 
-    const fileName = `${generateUUID()}.${params.output_format || 'jpg'}`;
+    const fileName = `${generateUUID()}.${options.outputFormat || 'jpg'}`;
     const key = `${pathName}/${fileName}`;
 
-    // Validate imageBlob before upload
-    if (!imageBlob || imageBlob.byteLength === 0) {
-      console.error(`[IMAGE-GEN] Invalid image blob for URL: ${urlString}`);
-      throw new Error(`Invalid image blob: empty or undefined`);
-    }
+    await imagesBucket.put(key, imageBlob, {
+      httpMetadata: {
+        contentType: options.outputFormat === 'mp4' ? 'video/mp4' : `image/${options.outputFormat || 'jpg'}`,
+      },
+    });
 
-    console.log(`[IMAGE-GEN] Uploading to R2 - Key: ${key}, Size: ${imageBlob.byteLength} bytes`);
-
-    // Upload to R2
-    try {
-      const uploadResult = await imagesBucket.put(key, imageBlob, {
-        httpMetadata: {
-          contentType: `image/${params.output_format || 'jpg'}`,
-        },
-      });
-
-      console.log(`[IMAGE-GEN] Upload result:`, uploadResult);
-      console.log(`[IMAGE-GEN] Successfully uploaded to R2: ${key}`);
-
-      // Verify the upload by checking if the file exists
-      const headResult = await imagesBucket.head(key);
-      if (!headResult) {
-        throw new Error(`Upload verification failed: File not found after upload at key: ${key}`);
-      }
-      console.log(`[IMAGE-GEN] Verified file exists in R2:`, {
-        key,
-        size: headResult.size,
-        uploaded: headResult.uploaded,
-        etag: headResult.etag
-      });
-    } catch (uploadError) {
-      console.error(`[IMAGE-GEN] Failed to upload to R2:`, uploadError);
-      throw new Error(`Failed to upload image to R2: ${uploadError instanceof Error ? uploadError.message : String(uploadError)}`);
-    }
-
-    // Generate public URL
     const publicUrl = `https://image.artflicks.app/${key}`;
-    console.log(`[IMAGE-GEN] Generated public URL: ${publicUrl}`);
     storageUrls.push(publicUrl);
   }
 
-  console.log(`[IMAGE-GEN] All storage URLs:`, storageUrls);
-
-  return {
-    storageUrls,
-    generationParams: params,
-    prompt: params.prompt,
-    model: params.model,
-  };
+  return storageUrls;
 }
 
 
@@ -198,58 +180,58 @@ function toUrlString(value: any): string {
 
 export async function extractImageUrls(images: any, logPrefix: string): Promise<string[]> {
   console.log(`${logPrefix} Raw images response:`, {
-      type: typeof images,
-      isArray: Array.isArray(images),
-      length: Array.isArray(images) ? images.length : 'N/A',
-      value: images
+    type: typeof images,
+    isArray: Array.isArray(images),
+    length: Array.isArray(images) ? images.length : 'N/A',
+    value: images
   });
 
   let imageArray: string[] = [];
 
   try {
-      // Handle the result format from runReplicateModel
-      if (Array.isArray(images)) {
-          if (images.length > 0) {
-              // Convert all items to string URLs
-              imageArray = images.map((item: any) => {
-                  try {
-                      return toUrlString(item);
-                  } catch (error) {
-                      throw new Error(`Invalid image format in array: ${error}`);
-                  }
-              });
-          }
-      } else if (images && typeof images.url === 'function') {
-          // Handle single object with url() method
-          imageArray = [toUrlString(images.url())];
-      } else if (typeof images === 'string') {
-          // Handle single string URL
-          imageArray = [images];
-      } else if (images && typeof images === 'object' && images.href) {
-          // Handle single URL object
-          imageArray = [toUrlString(images)];
-      } else {
+    // Handle the result format from runReplicateModel
+    if (Array.isArray(images)) {
+      if (images.length > 0) {
+        // Convert all items to string URLs
+        imageArray = images.map((item: any) => {
           try {
-              const stream = images.image;
-              const response = new Response(stream);
-              const blob = await response.blob();
-              // Convert blob to data URL (URL.createObjectURL is not available in Workers)
-              const arrayBuffer = await blob.arrayBuffer();
-              const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
-              const mimeType = blob.type || 'image/jpeg';
-              const url = `data:${mimeType};base64,${base64}`;
-              imageArray = [url];
+            return toUrlString(item);
           } catch (error) {
-              console.log(`${logPrefix} Failed to extract image URLs new Response(stream):`, error);
-              if (!imageArray || imageArray.length === 0) {
-                  throw new Error(`No images were generated: ${error}`);
-              }
+            throw new Error(`Invalid image format in array: ${error}`);
           }
+        });
       }
+    } else if (images && typeof images.url === 'function') {
+      // Handle single object with url() method
+      imageArray = [toUrlString(images.url())];
+    } else if (typeof images === 'string') {
+      // Handle single string URL
+      imageArray = [images];
+    } else if (images && typeof images === 'object' && images.href) {
+      // Handle single URL object
+      imageArray = [toUrlString(images)];
+    } else {
+      try {
+        const stream = images.image;
+        const response = new Response(stream);
+        const blob = await response.blob();
+        // Convert blob to data URL (URL.createObjectURL is not available in Workers)
+        const arrayBuffer = await blob.arrayBuffer();
+        const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+        const mimeType = blob.type || 'image/jpeg';
+        const url = `data:${mimeType};base64,${base64}`;
+        imageArray = [url];
+      } catch (error) {
+        console.log(`${logPrefix} Failed to extract image URLs new Response(stream):`, error);
+        if (!imageArray || imageArray.length === 0) {
+          throw new Error(`No images were generated: ${error}`);
+        }
+      }
+    }
 
   } catch (error) {
-      console.log(`${logPrefix} Failed to extract image URLs:`, error);
-      throw new Error(`No images were generated`);
+    console.log(`${logPrefix} Failed to extract image URLs:`, error);
+    throw new Error(`No images were generated`);
   }
 
   // Ensure all items are strings
