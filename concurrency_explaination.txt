@@ -1,0 +1,24 @@
+The short answer is: Yes, they are still used, but they act as the "Hard Ceiling" while your code handles the "Smart Logic."
+Here is exactly how they interact:
+
+1. max_batch_size = 15 (The Container)
+What it does: This tells Cloudflare: "Never give my worker more than 15 messages at once."
+How it works with Tiers: In your tier-config.ts, you have maxBatchSize (e.g., 3 for Tier 1, 15 for Tier 4).
+The Connection: The wrangler.toml must be set to the highest possible value (which is 15 for Tier 4). If you set this to 5 in wrangler.toml, your Tier 4 users would be throttled to 5 even though your code says they can handle 15.
+Status: Essential. Keep it at 15 to support your Tier 4 users.
+
+2. max_concurrency = 20 (The Global Brake)
+What it does: This is a safety valve. It limits the total number of worker instances running at the same time across your entire Cloudflare account.
+How it works with Tiers: Your code checks concurrency per user (e.g., "Does User A have more than 2 jobs?").
+The Connection: If 100 Tier-1 users all start 2 jobs at once (200 total jobs), your code will allow it, but max_concurrency = 20 will ensure Cloudflare only spins up 20 workers to process them. This prevents your Supabase database or AI APIs from being overwhelmed by a sudden massive spike.
+Status: Essential. It protects your infrastructure from "The Thundering Herd" problem.
+
+3. max_batch_timeout = 20 (The Waiter)
+What it does: This tells Cloudflare: "If the queue isn't full (less than 15 messages), wait up to 20 seconds for more to arrive before starting the worker."
+How it works with Tiers: This helps "clump" messages together for lower-tier users who might be generating scenes slowly.
+Status: Useful. It makes the system more cost-effective by reducing the number of worker invocations.
+
+Summary
+The Code: Manages Business Rules (User tiers, individual priorities, per-user limits).
+The wrangler.toml: Manages Infrastructure Safety (Total account limits, hardware boundaries).
+Conclusion: Keep them exactly as they are. They are the "safety net" that allows your Tier-based logic to run safely within Cloudflare's hardware limits.
