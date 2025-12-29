@@ -99,7 +99,7 @@ async function initializeJob(
             totalScenes: 0,
             imagesGenerated: 0,
             audioGenerated: 0,
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         }, env);
         console.log(`[Generate Story] Job ${jobId} initialized at 0%`);
         return null;
@@ -147,7 +147,7 @@ async function generateAIScript(
             imagesGenerated: 0,
             audioGenerated: 0,
             error: scriptResult.error || 'Failed to generate script',
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         }, env);
         return jsonResponse(
             { error: 'Failed to generate script', details: scriptResult.error },
@@ -196,7 +196,7 @@ async function createStoryRecord(
             imagesGenerated: 0,
             audioGenerated: 0,
             storyId: createdStory.id,
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         }, env);
         console.log(`[Generate Story] Progress updated to 25% - Script & story created`);
 
@@ -212,7 +212,7 @@ async function createStoryRecord(
             imagesGenerated: 0,
             audioGenerated: 0,
             error: error instanceof Error ? error.message : 'Failed to create story',
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         }, env);
         return jsonResponse(
             {
@@ -273,7 +273,7 @@ async function queueGenerationJobs(
             sceneIndex: index,
             type: mediaType,
             baseUrl,
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         };
         return env.STORY_QUEUE.send(message);
     });
@@ -293,7 +293,7 @@ async function queueGenerationJobs(
             sceneIndex: index,
             type: 'audio',
             baseUrl,
-            teamId: body.teamId || '',
+            teamId: body.teamId,
         };
         return env.STORY_QUEUE.send(message);
     });

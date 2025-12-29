@@ -20,7 +20,7 @@ export interface JobStatus {
   audioGenerated: number;
   error?: string;
   storyId?: string;
-  teamId: string;
+  teamId?: string | null;
 }
 
 /**
@@ -318,7 +318,7 @@ export async function updateJobStatus(
       error: status.error,
       story_id: status.storyId,
       updated_at: new Date().toISOString(),
-      team_id: status.teamId,
+      team_id: status.teamId || null,
     }, {
       onConflict: 'job_id',
     });

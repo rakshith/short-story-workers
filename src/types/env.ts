@@ -16,7 +16,7 @@ export interface QueueMessage {
   sceneIndex: number;
   type: 'image' | 'video' | 'audio' | 'finalize';
   baseUrl?: string;
-  teamId: string;
+  teamId?: string;
 }
 
 export interface Env {
