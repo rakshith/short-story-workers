@@ -12,43 +12,38 @@ The system tracks costs across multiple providers:
 
 ## Database Schema
 
-### Table: `story_usage_tracking`
+### Table: `story_costs`
 
-Stores detailed cost records for each operation:
+Consolidates all costs for a story generation job into one single row. This makes it extremely easy to manage and query total costs per story.
 
 ```sql
-CREATE TABLE story_usage_tracking (
-  id UUID PRIMARY KEY,
-  job_id TEXT,
-  user_id UUID,
+CREATE TABLE story_costs (
+  job_id TEXT PRIMARY KEY,
+  user_id UUID NOT NULL,
   story_id UUID,
-  provider VARCHAR(50),       -- 'replicate', 'openai', 'elevenlabs', 'cloudflare'
-  resource_type VARCHAR(50),  -- 'image', 'audio', 'video', 'worker_invocation', etc.
-  operation VARCHAR(100),     -- Specific operation details
-  quantity INTEGER,           -- Number of resources used
-  unit_cost_usd DECIMAL,      -- Cost per unit
-  total_cost_usd DECIMAL,     -- Total cost for this record
-  scene_index INTEGER,        -- Which scene (if applicable)
-  model_used VARCHAR(100),    -- Model/voice used
-  metadata JSONB,             -- Additional context
-  recorded_at TIMESTAMP
+  
+  -- Aggregated Costs
+  total_cost_usd DECIMAL(10, 4),
+  replicate_cost_usd DECIMAL(10, 4),
+  openai_cost_usd DECIMAL(10, 4),
+  elevenlabs_cost_usd DECIMAL(10, 4),
+  cloudflare_cost_usd DECIMAL(10, 4),
+  
+  -- Internal Idempotency
+  charged_operations JSONB, -- Prevents double-charging
+  last_operation TEXT,
+  updated_at TIMESTAMP
 );
 ```
 
-### View: `story_cost_summary`
+### Usage
 
-Aggregated cost summary per job:
+To get the total cost of a story:
 
 ```sql
-SELECT 
-  job_id,
-  total_cost_usd,
-  replicate_cost_usd,
-  openai_cost_usd,
-  elevenlabs_cost_usd,
-  cloudflare_cost_usd
-FROM story_cost_summary
-WHERE job_id = ?;
+SELECT total_cost_usd 
+FROM story_costs 
+WHERE job_id = 'your-job-id';
 ```
 
 ## Cost Tracking Points

@@ -65,43 +65,32 @@ export interface UsageRecord {
 
 /**
  * Track usage and cost for a story generation operation
- * Idempotent: Won't create duplicate records for same job+scene+provider+resource
+ * Aggregates all costs into a single record per job in public.story_costs
+ * Idempotent: Won't charge twice for same job+scene+provider+resource
  */
 export async function trackUsage(record: UsageRecord, env: Env): Promise<void> {
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-    const { error } = await supabase
-      .from('story_usage_tracking')
-      .insert({
-        job_id: record.jobId,
-        user_id: record.userId,
-        story_id: record.storyId,
-        provider: record.provider,
-        resource_type: record.resourceType,
-        operation: record.operation,
-        quantity: record.quantity,
-        unit_cost_usd: record.unitCost,
-        total_cost_usd: record.totalCost,
-        scene_index: record.sceneIndex,
-        model_used: record.modelUsed,
-        metadata: record.metadata,
-      });
+    // Create a unique operation key for idempotency
+    const opKey = `${record.sceneIndex !== undefined ? `scene${record.sceneIndex}` : 'global'}_${record.provider}_${record.resourceType}`;
 
-    // Ignore unique constraint violations (idempotency - already tracked)
-    if (error && error.code !== '23505') { // 23505 = unique_violation
-      console.error('[Usage Tracking] Failed to record usage:', error);
-    } else if (error?.code === '23505') {
-      console.log('[Usage Tracking] Already tracked (idempotency):', {
-        jobId: record.jobId,
-        scene: record.sceneIndex,
-        provider: record.provider,
-        type: record.resourceType,
-      });
+    const { error } = await supabase.rpc('track_story_cost', {
+      p_job_id: record.jobId,
+      p_user_id: record.userId,
+      p_story_id: record.storyId,
+      p_provider: record.provider,
+      p_cost: record.totalCost,
+      p_op_key: opKey,
+      p_last_op: record.operation || record.resourceType
+    });
+
+    if (error) {
+      console.error('[Usage Tracking] Failed to record usage via RPC:', error);
     }
   } catch (error) {
-    console.error('[Usage Tracking] Error:', error);
+    console.error('[Usage Tracking] Error in trackUsage:', error);
   }
 }
 
@@ -326,7 +315,7 @@ export async function getJobCost(jobId: string, env: Env): Promise<{
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
     const { data, error } = await supabase
-      .from('story_cost_summary')
+      .from('story_costs')
       .select('*')
       .eq('job_id', jobId)
       .single();
@@ -364,15 +353,15 @@ export async function getUserSpending(
     const supabase = createClient(env!.SUPABASE_URL, env!.SUPABASE_SERVICE_ROLE_KEY);
 
     let query = supabase
-      .from('story_usage_tracking')
+      .from('story_costs')
       .select('total_cost_usd')
       .eq('user_id', userId);
 
     if (startDate) {
-      query = query.gte('recorded_at', startDate.toISOString());
+      query = query.gte('updated_at', startDate.toISOString());
     }
     if (endDate) {
-      query = query.lte('recorded_at', endDate.toISOString());
+      query = query.lte('updated_at', endDate.toISOString());
     }
 
     const { data, error } = await query;
