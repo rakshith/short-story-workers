@@ -28,64 +28,69 @@ export async function generateScript(
   // Calculate scene breakdown - each scene MUST be exactly 5s or 10s only
   // This ensures compatibility with video inference models
 
-  let num5sScenes = 0;
-  let num10sScenes = 0;
+  // let num5sScenes = 0;
+  // let num10sScenes = 0;
 
-  if (duration <= 30) {
-    // For 15s and 30s: use all 5s scenes
-    num5sScenes = duration / 5;
-    num10sScenes = 0;
-  } else if (duration <= 60) {
-    // For 60s: use all 5s scenes (12 scenes)
-    num5sScenes = duration / 5;
-    num10sScenes = 0;
-  } else if (duration <= 120) {
-    // For 120s (2M): mix of 5s and 10s - 12x 5s + 6x 10s = 120s
-    num5sScenes = 12;
-    num10sScenes = 6;
-  } else {
-    // For 180s (3M): mix of 5s and 10s - 18x 5s + 9x 10s = 180s
-    num5sScenes = 18;
-    num10sScenes = 9;
-  }
+  // if (duration <= 15) {
+  //   // Force 3 x 5s = 15s
+  //   num5sScenes = 3;
+  //   num10sScenes = 0;
 
-  const recommendedScenes = num5sScenes + num10sScenes;
+  // } else if (duration <= 30) {
+  //   // Force 6 x 5s = 30s
+  //   num5sScenes = 6;
+  //   num10sScenes = 0;
 
-  // Build scene duration guidance
-  let sceneDuration = '';
-  let sceneGuidance = '';
+  // } else if (duration <= 60) {
+  //   // Up to 60s → only 5s scenes
+  //   num5sScenes = Math.floor(duration / 5);
+  //   num10sScenes = 0;
 
-  if (num5sScenes > 0 && num10sScenes > 0) {
-    sceneDuration = `exactly 5 seconds OR exactly 10 seconds (use ${num5sScenes}x 5s scenes and ${num10sScenes}x 10s scenes)`;
-  } else if (num5sScenes > 0) {
-    sceneDuration = 'exactly 5 seconds';
-  } else {
-    sceneDuration = 'exactly 10 seconds';
-  }
+  // } else if (duration <= 120) {
+  //   // 120s → 12 x 5s + 6 x 10s = 120s
+  //   num5sScenes = 12;
+  //   num10sScenes = 6;
 
-  if (duration <= 30) {
-    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes, each exactly 5 seconds. Total = ${recommendedScenes} × 5s = ${duration}s. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
-  } else if (duration <= 60) {
-    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes totaling EXACTLY ${duration} seconds. Use a mix of 5s and 10s scenes. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
-  } else if (duration <= 120) {
-    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
-  } else {
-    sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
-  }
+  // } else {
+  //   // 180s → 18 x 5s + 9 x 10s = 180s
+  //   num5sScenes = 18;
+  //   num10sScenes = 9;
+  // }
 
-  const detailsGuidance = duration <= 60
-    ? '2-3 sentences describing the action and context'
-    : '3-4 sentences providing rich narrative context and emotional depth';
+
+  // const recommendedScenes = num5sScenes + num10sScenes;
+
+  // // Build scene duration guidance
+  // let sceneDuration = '';
+  // let sceneGuidance = '';
+
+  // if (num5sScenes > 0 && num10sScenes > 0) {
+  //   sceneDuration = `exactly 5 seconds OR exactly 10 seconds (use ${num5sScenes}x 5s scenes and ${num10sScenes}x 10s scenes)`;
+  // } else if (num5sScenes > 0) {
+  //   sceneDuration = 'exactly 5 seconds';
+  // } else {
+  //   sceneDuration = 'exactly 10 seconds';
+  // }
+
+  // if (duration <= 30) {
+  //   sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes, each exactly 5 seconds. Total = ${recommendedScenes} × 5s = ${duration}s. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
+  // } else if (duration <= 60) {
+  //   sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes totaling EXACTLY ${duration} seconds. Use a mix of 5s and 10s scenes. DO NOT create more or fewer scenes. DO NOT exceed ${duration} seconds total.`;
+  // } else if (duration <= 120) {
+  //   sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
+  // } else {
+  //   sceneGuidance = `STRICT REQUIREMENT: You MUST create EXACTLY ${recommendedScenes} scenes (${num5sScenes}x 5s + ${num10sScenes}x 10s) totaling EXACTLY ${duration} seconds. DO NOT exceed ${duration} seconds total.`;
+  // }
+
+  // const detailsGuidance = duration <= 60
+  //   ? '2-3 sentences describing the action and context'
+  //   : '3-4 sentences providing rich narrative context and emotional depth';
 
   const languageName = getLanguageName(language);
   const systemPrompt = getScriptWriterPrompt({
     languageName,
     languageCode: language,
-    duration,
-    recommendedScenes,
-    sceneDuration,
-    sceneGuidance,
-    detailsGuidance,
+    duration
   });
 
   try {
