@@ -67,6 +67,8 @@ export interface StoryCompositionProps {
 
 export type MediaType = 'image' | 'video';
 
+export type UserTier = 'tier1' | 'tier2' | 'tier3' | 'tier4';
+
 export interface VideoConfig {
   id?: string;
   mediaType?: MediaType;
@@ -92,6 +94,7 @@ export interface VideoConfig {
   duration?: number;
   estimatedCredits?: number;
   durationInFrames?: number;
+  userTier?: UserTier; // User tier for resource restrictions
 }
 
 export interface Scene {
@@ -141,6 +144,7 @@ export interface CreateStoryRequest {
   seriesId: string;
   teamId: string;
   title: string;
+  userTier?: UserTier; // User tier for resource restrictions
 }
 
 export interface CreateStoryResponse {

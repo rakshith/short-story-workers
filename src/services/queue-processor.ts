@@ -7,6 +7,7 @@ import { StoryService } from './supabase';
 import { getModelForTier } from '../utils/model-utils';
 import { ProjectStatus } from '../types';
 import { processorLogger } from '../utils/logger';
+import { trackImageGeneration, trackVideoGeneration, trackAudioGeneration, trackStorageWrite } from './usage-tracking';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -96,6 +97,16 @@ export async function processSceneImage(
       predictionId: result.predictionId,
     });
 
+    // Track cost for image generation (cost incurred when API called)
+    await trackImageGeneration(
+      message.jobId,
+      userId,
+      storyId,
+      sceneIndex,
+      selectedModel,
+      env
+    );
+
     // We return success: true but imageUrl: null because it hasn't finished yet
     // The webhook will handle the completion.
     return {
@@ -179,6 +190,16 @@ export async function processSceneVideo(
       sceneIndex,
       predictionId: result.predictionId,
     });
+
+    // Track cost for video generation
+    await trackVideoGeneration(
+      message.jobId,
+      userId,
+      storyId,
+      sceneIndex,
+      selectedModel,
+      env
+    );
 
     return {
       sceneIndex,
@@ -269,6 +290,30 @@ export async function processSceneAudio(
       captionsCount: result.captions?.length || 0,
       audioDuration: result.audioDuration,
     });
+
+    // Track cost for audio generation
+    // Determine provider based on voice or configuration
+    const provider = env.ELEVENLABS_API_KEY && selectedVoice !== 'alloy' ? 'elevenlabs' : 'openai';
+    await trackAudioGeneration(
+      message.jobId,
+      userId,
+      message.storyId,
+      sceneIndex,
+      provider,
+      selectedVoice,
+      narration.length,
+      env
+    );
+
+    // Track storage write for audio file
+    await trackStorageWrite(
+      message.jobId,
+      userId,
+      message.storyId,
+      sceneIndex,
+      'audio',
+      env
+    );
 
     return {
       sceneIndex,

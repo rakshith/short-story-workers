@@ -17,6 +17,8 @@ export interface QueueMessage {
   type: 'image' | 'video' | 'audio' | 'finalize';
   baseUrl?: string;
   teamId?: string;
+  userTier?: string; // User tier for priority and concurrency control
+  priority?: number; // Calculated priority from tier
 }
 
 export interface Env {

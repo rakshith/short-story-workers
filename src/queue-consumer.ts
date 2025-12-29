@@ -3,9 +3,12 @@
 import { Env, QueueMessage } from './types/env';
 import { processSceneImage, processSceneAudio, processSceneVideo } from './services/queue-processor';
 import { queueLogger } from './utils/logger';
+import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
+import { trackWorkerInvocation } from './services/usage-tracking';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
+ * Implements tier-based concurrency control and priority processing
  */
 export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
   // Helper to get Durable Object stub for a story
@@ -14,10 +17,48 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
     return env.STORY_COORDINATOR.get(id);
   };
 
-  for (const message of batch.messages) {
+  // Sort messages by priority - high-tier users processed first for better experience
+  const sortedMessages = sortMessagesByPriority(batch.messages);
+  queueLogger.info(`Processing batch of ${sortedMessages.length} messages (sorted by priority)`);
+
+  for (const message of sortedMessages) {
     try {
       const data: QueueMessage = message.body;
-      queueLogger.info(`Processing ${data.type} for job ${data.jobId}`, { jobId: data.jobId, type: data.type, sceneIndex: data.sceneIndex });
+      
+      // Check concurrency limits for cost control
+      const concurrencyCheck = await canProcessJob(data.userId, data.userTier, env);
+      
+      if (!concurrencyCheck.allowed) {
+        queueLogger.warn(
+          `Concurrency limit reached for user ${data.userId}`,
+          {
+            userId: data.userId,
+            tier: data.userTier,
+            activeConcurrency: concurrencyCheck.activeConcurrency,
+            maxConcurrency: concurrencyCheck.maxConcurrency,
+          }
+        );
+        // Retry later when concurrency is available
+        message.retry();
+        continue;
+      }
+
+      queueLogger.info(
+        `Processing ${data.type} for job ${data.jobId} (Tier: ${data.userTier}, Priority: ${data.priority})`,
+        {
+          jobId: data.jobId,
+          type: data.type,
+          sceneIndex: data.sceneIndex,
+          tier: data.userTier,
+          priority: data.priority,
+          activeConcurrency: concurrencyCheck.activeConcurrency,
+          maxConcurrency: concurrencyCheck.maxConcurrency,
+        }
+      );
+
+      // Track worker invocation cost
+      await trackWorkerInvocation(data.jobId, data.userId, data.storyId, env);
+      
       const coordinator = getCoordinator(data.storyId);
 
       if (data.type === 'image') {

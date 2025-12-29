@@ -43,15 +43,17 @@ bucket_name = "videos"
 preview_bucket_name = "videos"
 
 # Queue for async processing in staging
+# Note: Tier-based concurrency is managed in code via concurrency-manager.ts
+# These settings are baseline - actual concurrency per user is controlled by tier
 [[env.staging.queues.producers]]
 queue = "story-processing-staging"
 binding = "STORY_QUEUE"
 
 [[env.staging.queues.consumers]]
 queue = "story-processing-staging"
-max_batch_size = 10
-max_batch_timeout = 20
-max_concurrency = 5
+max_batch_size = 15           # Supports up to tier4 batch size
+max_batch_timeout = 20        # Process every 20 seconds or when batch fills
+max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
 
 [env.production]
 name = "create-story-worker-production"
@@ -81,15 +83,17 @@ bucket_name = "videos"
 preview_bucket_name = "videos"
 
 # Queue for async processing in production
+# Note: Tier-based concurrency is managed in code via concurrency-manager.ts
+# These settings are baseline - actual concurrency per user is controlled by tier
 [[env.production.queues.producers]]
 queue = "story-processing-production"
 binding = "STORY_QUEUE"
 
 [[env.production.queues.consumers]]
 queue = "story-processing-production"
-max_batch_size = 10
-max_batch_timeout = 20
-max_concurrency = 5
+max_batch_size = 15           # Supports up to tier4 batch size
+max_batch_timeout = 20        # Process every 20 seconds or when batch fills
+max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
 
 # Environment variables (set via wrangler secret put or dashboard)
 # SUPABASE_URL

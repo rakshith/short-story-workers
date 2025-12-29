@@ -3,6 +3,7 @@ import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
 import { FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
+import { trackStorageWrite } from './usage-tracking';
 
 /**
  * Handles incoming Replicate webhook POST requests
@@ -25,6 +26,29 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
     const prediction = await request.json() as any;
 
     apiLogger.info(`Received ${type} completion`, { storyId, sceneIndex, status: prediction.status });
+
+    // Idempotency check: Prevent duplicate webhook processing
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    
+    const { error: checkError } = await supabase
+        .from('webhook_processed')
+        .insert({
+            prediction_id: prediction.id,
+            story_id: storyId,
+            scene_index: sceneIndex,
+            webhook_type: type,
+        });
+    
+    // If unique constraint violation, webhook already processed
+    if (checkError?.code === '23505') {
+        apiLogger.info(`Webhook already processed (idempotency)`, { 
+            predictionId: prediction.id, 
+            storyId, 
+            sceneIndex 
+        });
+        return new Response('Already processed', { status: 200 });
+    }
 
     if (prediction.status !== 'succeeded') {
         console.error(`[WEBHOOK] Prediction failed: ${prediction.error}`);
@@ -74,6 +98,11 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
         }
 
         const resultUrl = storageUrls[0];
+
+        // Track storage write cost
+        const jobId = url.searchParams.get('jobId') || '';
+        const fileType = type === 'video' ? 'video' : 'image';
+        await trackStorageWrite(jobId, userId, storyId, sceneIndex, fileType, env);
 
         // 2. Update Durable Object (Race-condition free) - use separate endpoints
         const id = env.STORY_COORDINATOR.idFromName(storyId);
