@@ -5,6 +5,8 @@ import { StoryTimeline, VideoConfig } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
+import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
+import { trackQueueMessage } from '../services/usage-tracking';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -16,6 +18,7 @@ interface GenerateStoryRequest {
     language?: string;
     model?: string;
     title?: string;
+    userTier?: string;
 }
 
 /**
@@ -36,9 +39,41 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             );
         }
 
+        // Parse user tier and get priority
+        const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
+        const priority = getPriorityForTier(userTier);
+        const maxConcurrency = getConcurrencyForTier(userTier);
+
+        // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+        
+        const { data: activeJobs, error: checkError } = await supabase
+            .from('story_jobs')
+            .select('job_id')
+            .eq('user_id', body.userId)
+            .eq('status', 'processing');
+
+        if (checkError) {
+            console.error('[Generate Story] Failed to check concurrency:', checkError);
+            // Fail-open: allow if check fails
+        } else {
+            const activeCount = activeJobs?.length || 0;
+            if (activeCount >= maxConcurrency) {
+                console.log(`[Generate Story] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency})`);
+                return jsonResponse({
+                    error: 'Concurrency limit reached',
+                    message: `You have ${activeCount} active story generations. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
+                    activeJobs: activeCount,
+                    maxConcurrency,
+                    tier: userTier,
+                }, 429);
+            }
+        }
+
         // Generate job ID first
         const jobId = generateUUID();
-        console.log(`[Generate Story] Job ID: ${jobId}, User: ${body.userId}`);
+        console.log(`[Generate Story] Job ID: ${jobId}, User: ${body.userId} (Tier: ${userTier}, Priority: ${priority}, Active: ${activeJobs?.length || 0}/${maxConcurrency})`);
 
         // Initialize job at 0%
         const initResult = await initializeJob(jobId, body, env);
@@ -63,8 +98,8 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         // Initialize Durable Object for this story
         await initializeCoordinator(storyId, body.userId, storyData, env);
 
-        // Queue generation jobs
-        await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, env);
+        // Queue generation jobs with tier-based priority
+        await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
 
         return jsonResponse({
             success: true,
@@ -248,7 +283,7 @@ async function initializeCoordinator(
 }
 
 /**
- * Queues visual and audio generation jobs for all scenes
+ * Queues visual and audio generation jobs for all scenes with tier-based priority
  */
 async function queueGenerationJobs(
     jobId: string,
@@ -256,11 +291,13 @@ async function queueGenerationJobs(
     storyId: string,
     storyData: StoryTimeline,
     baseUrl: string,
+    userTier: string,
+    priority: number,
     env: Env
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
 
-    // Queue visual generation jobs
+    // Queue visual generation jobs with tier and priority
     const visualPromises = storyData.scenes.map((scene, index) => {
         const message: QueueMessage = {
             jobId,
@@ -274,13 +311,15 @@ async function queueGenerationJobs(
             type: mediaType,
             baseUrl,
             teamId: body.teamId,
+            userTier,
+            priority,
         };
         return env.STORY_QUEUE.send(message);
     });
     await Promise.all(visualPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs`);
+    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs (Priority: ${priority})`);
 
-    // Queue audio generation jobs
+    // Queue audio generation jobs with tier and priority
     const audioPromises = storyData.scenes.map((scene, index) => {
         const message: QueueMessage = {
             jobId,
@@ -294,9 +333,15 @@ async function queueGenerationJobs(
             type: 'audio',
             baseUrl,
             teamId: body.teamId,
+            userTier,
+            priority,
         };
         return env.STORY_QUEUE.send(message);
     });
     await Promise.all(audioPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs`);
+    console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
+
+    // Track queue message costs (visual + audio = 2 × scenes)
+    const totalMessages = storyData.scenes.length * 2;
+    await trackQueueMessage(jobId, body.userId, storyId, totalMessages, env);
 }
