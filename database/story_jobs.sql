@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS public.story_jobs (
           'pending'::text,
           'processing'::text,
           'completed'::text,
-          'failed'::text
+          'failed'::text,
+          'cancelled'::text
         ]
       )
     )

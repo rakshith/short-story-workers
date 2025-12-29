@@ -40,6 +40,7 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         }
 
         // Parse user tier and get priority
+        console.log(`[Generate Story] Raw tier values - body.userTier: ${body.userTier}, videoConfig.userTier: ${body.videoConfig?.userTier}`);
         const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
         const priority = getPriorityForTier(userTier);
         const maxConcurrency = getConcurrencyForTier(userTier);

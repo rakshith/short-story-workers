@@ -21,9 +21,40 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
   const sortedMessages = sortMessagesByPriority(batch.messages);
   queueLogger.info(`Processing batch of ${sortedMessages.length} messages (sorted by priority)`);
 
+  const { createClient } = await import('@supabase/supabase-js');
+  const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+  
+  // Cache for job cancellation status to avoid redundant DB checks
+  const cancelledJobs = new Set<string>();
+  const activeJobs = new Set<string>();
+
   for (const message of sortedMessages) {
     try {
       const data: QueueMessage = message.body;
+
+      // Quick cancellation check
+      if (cancelledJobs.has(data.jobId)) {
+        queueLogger.info(`Skipping message for cancelled job ${data.jobId}`, { jobId: data.jobId, type: data.type });
+        message.ack();
+        continue;
+      }
+
+      // If we don't know the status, check the DB (but only once per job in this batch)
+      if (!activeJobs.has(data.jobId)) {
+        const { data: job, error: jobError } = await supabase
+          .from('story_jobs')
+          .select('status')
+          .eq('job_id', data.jobId)
+          .single();
+        
+        if (job && job.status !== 'processing' && job.status !== 'pending') {
+          queueLogger.info(`Job ${data.jobId} is in terminal state (${job.status}), skipping and caching status`, { jobId: data.jobId });
+          cancelledJobs.add(data.jobId);
+          message.ack();
+          continue;
+        }
+        activeJobs.add(data.jobId);
+      }
       
       // Check concurrency limits for cost control
       const concurrencyCheck = await canProcessJob(data.userId, data.userTier, env);

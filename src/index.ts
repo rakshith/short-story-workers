@@ -3,6 +3,7 @@
 import { Env, QueueMessage } from './types/env';
 import { handleQueue } from './queue-consumer';
 import { handleStatus } from './routes/status';
+import { handleCancelStory } from './routes/cancel-story';
 import { handleCreateStory } from './routes/create-story';
 import { handleGenerateAndCreateStory } from './routes/generate-story';
 import { handleReplicateWebhook } from './services/webhook-handler';
@@ -30,6 +31,10 @@ export default {
       case method === 'GET' && pathname === '/status':
         return handleStatus(request, env);
 
+      // POST /cancel-generation - Cancel a running generation
+      case method === 'POST' && pathname === '/cancel-generation':
+        return handleCancelStory(request, env);
+
       // POST /webhooks/replicate - Replicate callback webhook
       case method === 'POST' && pathname === '/webhooks/replicate':
         return handleReplicateWebhook(request, env);
@@ -54,6 +59,7 @@ export default {
           availableEndpoints: {
             'POST /create-story': 'Create a new story (queued for async processing)',
             'POST /generate-and-create-story': 'Generate script and create story',
+            'POST /cancel-generation': 'Cancel a currently running generation job',
             'GET /status?jobId=<jobId>': 'Check the status of a story generation job',
           },
           method,

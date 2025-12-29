@@ -22,6 +22,7 @@ interface StoryState {
   imagesCompleted: number;
   audioCompleted: number;
   totalScenes: number;
+  isCancelled?: boolean;
 }
 
 export class StoryCoordinator {
@@ -50,6 +51,8 @@ export class StoryCoordinator {
           return this.handleAudioUpdate(request);
         case 'getProgress':
           return this.handleGetProgress();
+        case 'cancel':
+          return this.handleCancel();
         case 'finalize':
           return this.handleFinalize(request);
         default:
@@ -91,6 +94,18 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+    }
+
+    // Check if cancelled
+    if (this.storyState.isCancelled) {
+      return new Response(JSON.stringify({ 
+        error: 'Job cancelled', 
+        isCancelled: true,
+        imagesCompleted: this.storyState.imagesCompleted,
+        audioCompleted: this.storyState.audioCompleted,
+        totalScenes: this.storyState.totalScenes,
+        isComplete: false
+      }), { status: 499 }); // Using 499 Client Closed Request as a custom "Cancelled" code
     }
 
     // Update scene with image (single-threaded, no race condition)
@@ -135,6 +150,18 @@ export class StoryCoordinator {
       }
     }
 
+    // Check if cancelled
+    if (this.storyState.isCancelled) {
+      return new Response(JSON.stringify({ 
+        error: 'Job cancelled', 
+        isCancelled: true,
+        imagesCompleted: this.storyState.imagesCompleted,
+        audioCompleted: this.storyState.audioCompleted,
+        totalScenes: this.storyState.totalScenes,
+        isComplete: false
+      }), { status: 499 });
+    }
+
     // Update scene with video (single-threaded, no race condition)
     if (this.storyState.scenes[update.sceneIndex]) {
       this.storyState.scenes[update.sceneIndex] = {
@@ -175,6 +202,18 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+    }
+
+    // Check if cancelled
+    if (this.storyState.isCancelled) {
+      return new Response(JSON.stringify({ 
+        error: 'Job cancelled', 
+        isCancelled: true,
+        imagesCompleted: this.storyState.imagesCompleted,
+        audioCompleted: this.storyState.audioCompleted,
+        totalScenes: this.storyState.totalScenes,
+        isComplete: false
+      }), { status: 499 });
     }
 
     // Update scene (single-threaded, no race condition)
@@ -225,6 +264,7 @@ export class StoryCoordinator {
         audioCompleted: 0,
         totalScenes: 0,
         isComplete: false,
+        isCancelled: false,
       }));
     }
 
@@ -236,8 +276,25 @@ export class StoryCoordinator {
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
+      isCancelled: this.storyState.isCancelled || false,
       scenes: this.storyState.scenes,
     }));
+  }
+
+  private async handleCancel(): Promise<Response> {
+    // Load state if not in memory
+    if (!this.storyState) {
+      this.storyState = await this.state.storage.get('storyState') as StoryState;
+      if (!this.storyState) {
+        return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
+      }
+    }
+
+    this.storyState.isCancelled = true;
+    await this.state.storage.put('storyState', this.storyState);
+
+    console.log(`[StoryCoordinator] Job for story ${this.storyState.storyId} has been cancelled`);
+    return new Response(JSON.stringify({ success: true, isCancelled: true }));
   }
 
   private async handleFinalize(request: Request): Promise<Response> {
@@ -247,6 +304,10 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+    }
+
+    if (this.storyState.isCancelled) {
+      return new Response(JSON.stringify({ error: 'Job cancelled', isCancelled: true }), { status: 499 });
     }
 
     const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&

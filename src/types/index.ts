@@ -166,6 +166,7 @@ export const ProjectStatus = {
   PROCESSING: 'processing',
   COMPLETED: 'completed',
   FAILED: 'failed',
+  CANCELLED: 'cancelled',
 } as const;
 
 export type ProjectStatusType = typeof ProjectStatus[keyof typeof ProjectStatus];
