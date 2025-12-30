@@ -9,34 +9,43 @@ export interface TierConfig {
   priority: number;                    // Priority level (higher = processed first)
 }
 
+// Default values - Used if not overridden in wrangler.toml
 export const TIER_CONFIGS: Record<UserTier, TierConfig> = {
   tier1: {
-    maxConcurrentJobs: 2,                // Low concurrency = lower compute costs
-    maxBatchSize: 3,                     // Small batches
-    priority: 1,                         // Lowest priority
+    maxConcurrentJobs: 2,
+    maxBatchSize: 3,
+    priority: 1,
   },
   tier2: {
-    maxConcurrentJobs: 5,                // Moderate concurrency
-    maxBatchSize: 5,                     // Medium batches
-    priority: 2,                         // Medium priority
+    maxConcurrentJobs: 5,
+    maxBatchSize: 5,
+    priority: 2,
   },
   tier3: {
-    maxConcurrentJobs: 10,               // High concurrency
-    maxBatchSize: 10,                    // Large batches
-    priority: 3,                         // High priority
+    maxConcurrentJobs: 10,
+    maxBatchSize: 10,
+    priority: 3,
   },
   tier4: {
-    maxConcurrentJobs: 20,               // Maximum concurrency
-    maxBatchSize: 15,                    // Largest batches for efficiency
-    priority: 4,                         // Highest priority
+    maxConcurrentJobs: 20,
+    maxBatchSize: 15,
+    priority: 4,
   },
 };
 
 /**
- * Get tier configuration for a user tier
+ * Get merged tier configuration (Wrangler Env > Hardcoded Defaults)
  */
-export function getTierConfig(tier: UserTier): TierConfig {
-  return TIER_CONFIGS[tier];
+export function getTierConfig(tier: UserTier, env?: any): TierConfig {
+  const defaults = TIER_CONFIGS[tier];
+  if (!env) return defaults;
+
+  const prefix = tier.toUpperCase();
+  return {
+    maxConcurrentJobs: env[`${prefix}_CONCURRENCY`] ? parseInt(env[`${prefix}_CONCURRENCY`], 10) : defaults.maxConcurrentJobs,
+    maxBatchSize: env[`${prefix}_BATCH_SIZE`] ? parseInt(env[`${prefix}_BATCH_SIZE`], 10) : defaults.maxBatchSize,
+    priority: env[`${prefix}_PRIORITY`] ? parseInt(env[`${prefix}_PRIORITY`], 10) : defaults.priority,
+  };
 }
 
 /**
@@ -51,32 +60,28 @@ export function isValidTier(tier: string): tier is UserTier {
  */
 export function parseTier(tier: string | undefined): UserTier {
   if (!tier || !isValidTier(tier)) {
-    return 'tier1'; // Default to tier1
+    return 'tier1';
   }
   return tier;
 }
 
 /**
- * Get batch size for queue processing based on tier
+ * Helper: Get batch size for tier
  */
-export function getBatchSizeForTier(tier: UserTier): number {
-  const config = getTierConfig(tier);
-  return config.maxBatchSize;
+export function getBatchSizeForTier(tier: UserTier, env?: any): number {
+  return getTierConfig(tier, env).maxBatchSize;
 }
 
 /**
- * Get concurrency limit for tier
+ * Helper: Get concurrency limit for tier
  */
-export function getConcurrencyForTier(tier: UserTier): number {
-  const config = getTierConfig(tier);
-  return config.maxConcurrentJobs;
+export function getConcurrencyForTier(tier: UserTier, env?: any): number {
+  return getTierConfig(tier, env).maxConcurrentJobs;
 }
 
 /**
- * Get priority for tier (used for queue processing order)
+ * Helper: Get priority for tier
  */
-export function getPriorityForTier(tier: UserTier): number {
-  const config = getTierConfig(tier);
-  return config.priority;
+export function getPriorityForTier(tier: UserTier, env?: any): number {
+  return getTierConfig(tier, env).priority;
 }
-

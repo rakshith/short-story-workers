@@ -55,6 +55,20 @@ max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
 
+[env.staging.vars]
+TIER1_CONCURRENCY = 2
+TIER1_BATCH_SIZE = 3
+TIER1_PRIORITY = 1
+TIER2_CONCURRENCY = 5
+TIER2_BATCH_SIZE = 5
+TIER2_PRIORITY = 2
+TIER3_CONCURRENCY = 10
+TIER3_BATCH_SIZE = 10
+TIER3_PRIORITY = 3
+TIER4_CONCURRENCY = 20
+TIER4_BATCH_SIZE = 15
+TIER4_PRIORITY = 4
+
 [env.production]
 name = "create-story-worker-production"
 workers_dev = true
@@ -95,7 +109,36 @@ max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
 
+[env.production.vars]
+TIER1_CONCURRENCY = 2
+TIER1_BATCH_SIZE = 3
+TIER1_PRIORITY = 1
+TIER2_CONCURRENCY = 5
+TIER2_BATCH_SIZE = 5
+TIER2_PRIORITY = 2
+TIER3_CONCURRENCY = 10
+TIER3_BATCH_SIZE = 10
+TIER3_PRIORITY = 3
+TIER4_CONCURRENCY = 20
+TIER4_BATCH_SIZE = 15
+TIER4_PRIORITY = 4
+
 # Environment variables (set via wrangler secret put or dashboard)
+[vars]
+# Default top-level vars for local development (wrangler dev)
+TIER1_CONCURRENCY = 2
+TIER1_BATCH_SIZE = 3
+TIER1_PRIORITY = 1
+TIER2_CONCURRENCY = 5
+TIER2_BATCH_SIZE = 5
+TIER2_PRIORITY = 2
+TIER3_CONCURRENCY = 10
+TIER3_BATCH_SIZE = 10
+TIER3_PRIORITY = 3
+TIER4_CONCURRENCY = 20
+TIER4_BATCH_SIZE = 15
+TIER4_PRIORITY = 4
+
 # SUPABASE_URL
 # SUPABASE_ANON_KEY
 # SUPABASE_SERVICE_ROLE_KEY

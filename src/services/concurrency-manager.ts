@@ -15,7 +15,7 @@ export async function canProcessJob(
 ): Promise<{ allowed: boolean; reason?: string; activeConcurrency?: number; maxConcurrency?: number }> {
   try {
     const tier = parseTier(userTier);
-    const maxConcurrency = getConcurrencyForTier(tier);
+    const maxConcurrency = getConcurrencyForTier(tier, env);
 
     // Get active jobs for this user from database
     const { createClient } = await import('@supabase/supabase-js');

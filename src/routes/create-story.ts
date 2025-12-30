@@ -40,8 +40,8 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
 
         // Parse user tier and get priority
         const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
-        const priority = getPriorityForTier(userTier);
-        const maxConcurrency = getConcurrencyForTier(userTier);
+        const priority = getPriorityForTier(userTier, env);
+        const maxConcurrency = getConcurrencyForTier(userTier, env);
 
         // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
         const { createClient } = await import('@supabase/supabase-js');
