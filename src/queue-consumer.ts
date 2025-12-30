@@ -5,6 +5,7 @@ import { processSceneImage, processSceneAudio, processSceneVideo } from './servi
 import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
 import { trackWorkerInvocation } from './services/usage-tracking';
+import { sendStoryCompletionEmail } from './services/email-service';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
@@ -23,7 +24,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
 
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-  
+
   // Cache for job cancellation status to avoid redundant DB checks
   const cancelledJobs = new Set<string>();
   const activeJobs = new Set<string>();
@@ -46,7 +47,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           .select('status')
           .eq('job_id', data.jobId)
           .single();
-        
+
         if (job && job.status !== 'processing' && job.status !== 'pending') {
           queueLogger.info(`Job ${data.jobId} is in terminal state (${job.status}), skipping and caching status`, { jobId: data.jobId });
           cancelledJobs.add(data.jobId);
@@ -55,10 +56,10 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         }
         activeJobs.add(data.jobId);
       }
-      
+
       // Check concurrency limits for cost control
       const concurrencyCheck = await canProcessJob(data.userId, data.userTier, env);
-      
+
       if (!concurrencyCheck.allowed) {
         queueLogger.warn(
           `Concurrency limit reached for user ${data.userId}`,
@@ -89,7 +90,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
 
       // Track worker invocation cost
       await trackWorkerInvocation(data.jobId, data.userId, data.storyId, env);
-      
+
       const coordinator = getCoordinator(data.storyId);
 
       if (data.type === 'image') {
@@ -217,8 +218,10 @@ export async function syncStoryToSupabase(
       .eq('id', data.storyId)
       .single();
 
+    let updatedStory: any = null;
+
     if (currentStory?.story && finalData.scenes) {
-      const updatedStory = { ...currentStory.story };
+      updatedStory = { ...currentStory.story };
       // Merge each scene's generated content
       finalData.scenes.forEach((scene: any, idx: number) => {
         if (updatedStory.scenes[idx]) {
@@ -249,6 +252,44 @@ export async function syncStoryToSupabase(
       .eq('job_id', data.jobId);
 
     queueLogger.info(`Story synced to database`, { jobId: data.jobId, storyId: data.storyId });
+
+    // Send completion email notification
+    try {
+      // Fetch user profile for email and name
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('email, display_name')
+        .eq('id', data.userId)
+        .single();
+
+      if (profileError) {
+        queueLogger.error('Failed to fetch user profile for email notification', profileError, { userId: data.userId });
+      } else if (profile?.email) {
+        // Thumbnail URL - use the first scene image that exists
+        let thumbnailUrl = 'https://artflicks.app/short-stories'; // Fallback
+
+        if (updatedStory && updatedStory.scenes && updatedStory.scenes.length > 0) {
+          const firstScene = updatedStory.scenes.find((s: any) => s.imageUrl);
+          if (firstScene) {
+            thumbnailUrl = firstScene.imageUrl;
+          }
+        }
+
+        await sendStoryCompletionEmail(profile.email, {
+          DISPLAY_NAME: profile.display_name || 'there',
+          STORY_TITLE: updatedStory?.title || 'Your Story',
+          STORY_URL: `https://artflicks.app/short-stories`,
+          THUMBNAIL_URL: thumbnailUrl
+        });
+
+        queueLogger.info(`Completion email notification sent to ${profile.email}`, { jobId: data.jobId });
+      } else {
+        queueLogger.warn('No email found for user, skipping notification', { userId: data.userId });
+      }
+    } catch (emailError) {
+      // Don't fail the whole sync if email fails
+      queueLogger.error('Failed to send completion email', emailError, { jobId: data.jobId });
+    }
   } catch (error) {
     queueLogger.error('Error syncing to Supabase', error, { jobId: data.jobId });
     throw error; // Re-throw to be caught by the main queue catch block
