@@ -1,3 +1,5 @@
+import { SCENE_WORD_LIMITS, DURATION_TOLERANCE } from '../config/narration-styles';
+
 export type SceneDuration = 5 | 10;
 
 export interface SceneItem {
@@ -18,13 +20,21 @@ export interface ScenePlan {
   sceneGuidance: string;
   narrationGuidance: string;
   sceneTimeline: SceneItem[];
+  // Word count limits (flexible ranges)
+  min5: number;
+  tgt5: number;
+  max5: number;
+  min10: number;
+  tgt10: number;
+  max10: number;
+  // Duration tolerance
+  tolerance: { min: number; max: number };
 }
 
 interface Options {
   intro?: boolean;              // default: false
   outro?: boolean;              // default: false
   randomizeOrder?: boolean;     // default: false
-  wordsPerSecond?: number;      // default: 2.0 (for backward compatibility)
 }
 
 export function getScenePlan(
@@ -32,12 +42,15 @@ export function getScenePlan(
   options: Options = {}
 ): ScenePlan {
 
-  const { 
-    intro = false, 
-    outro = false, 
+  const {
+    intro = false,
+    outro = false,
     randomizeOrder = false,
-    wordsPerSecond = 2.0 
   } = options;
+
+  // Get flexible word limits for each scene type
+  const limits5 = SCENE_WORD_LIMITS.SCENE_5S;
+  const limits10 = SCENE_WORD_LIMITS.SCENE_10S;
 
   // ---------- VALIDATION ----------
   if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
@@ -54,12 +67,27 @@ export function getScenePlan(
   let num5sScenes = 0;
   let num10sScenes = 0;
 
-  // ---------- BUSINESS RULES ----------
-  if (durationSeconds <= 15) num5sScenes = 3;
-  else if (durationSeconds <= 30) num5sScenes = 6;
-  else if (durationSeconds <= 60) { num5sScenes = 6; num10sScenes = 3; }
-  else if (durationSeconds <= 120) { num5sScenes = 12; num10sScenes = 6; }
-  else { num5sScenes = 18; num10sScenes = 9; }
+  // ---------- DYNAMIC SCENE CALCULATION ----------
+  // For short videos (≤30s): use only 5s scenes for snappy pacing
+  // For longer videos: mix 5s and 10s scenes
+  if (durationSeconds <= 30) {
+    // All 5s scenes for short videos
+    num5sScenes = durationSeconds / 5;
+  } else {
+    // For longer videos, use a strategic mix:
+    // - Aim for roughly 1/3 of SCENES being 10s (not 1/3 of time)
+    // - This creates better pacing with punchy 5s and richer 10s scenes
+
+    // Calculate total if all were 5s scenes
+    const allFives = durationSeconds / 5;
+
+    // Convert roughly 1/3 of those to 10s (each 10s replaces two 5s)
+    num10sScenes = Math.floor(allFives / 3);
+
+    // Remaining time goes to 5s scenes
+    const remaining = durationSeconds - (num10sScenes * 10);
+    num5sScenes = remaining / 5;
+  }
 
   let totalScenes = num5sScenes + num10sScenes;
 
@@ -100,11 +128,16 @@ Use EXACTLY ${num5sScenes} scenes of 5 seconds
 and EXACTLY ${num10sScenes} scenes of 10 seconds.
 Do NOT exceed ${durationSeconds} seconds total.`.trim();
 
-  // ---------- WORD COUNT CALCULATIONS ----------
-  const min5 = Math.floor(5 * wordsPerSecond * 0.9);
-  const tgt5 = Math.floor(5 * wordsPerSecond);
-  const min10 = Math.floor(10 * wordsPerSecond * 0.9);
-  const tgt10 = Math.floor(10 * wordsPerSecond);
+  // ---------- WORD COUNT LIMITS (flexible ranges) ----------
+  const min5 = limits5.min;     // 10 words min
+  const tgt5 = limits5.target;  // 13 words target
+  const max5 = limits5.max;     // 15 words max
+  const min10 = limits10.min;   // 20 words min
+  const tgt10 = limits10.target; // 26 words target
+  const max10 = limits10.max;   // 30 words max
+
+  // ---------- DURATION TOLERANCE ----------
+  const tolerance = DURATION_TOLERANCE[durationSeconds] || { min: durationSeconds - 2, max: durationSeconds + 4 };
 
   // ---------- NARRATION RULES ----------
   const narrationGuidance =
@@ -114,10 +147,10 @@ For 5s scenes: MINIMUM ${min5} words, TARGET ${tgt5} words (2-3 sentences).
 For 10s scenes: MINIMUM ${min10} words, TARGET ${tgt10} words (4-5 sentences).
 Narration MUST fill 90-100% of the scene duration.`.trim()
       : num10sScenes > 0
-      ? `
+        ? `
 Use MINIMUM ${min10} words, TARGET ${tgt10} words per scene (4-5 sentences).
 Narration MUST fill 90-100% of the 10-second scene duration.`.trim()
-      : `
+        : `
 Use MINIMUM ${min5} words, TARGET ${tgt5} words per scene (2-3 sentences).
 Narration MUST fill 90-100% of the 5-second scene duration.`.trim();
 
@@ -201,6 +234,14 @@ Narration MUST fill 90-100% of the 5-second scene duration.`.trim();
     sceneDuration,
     sceneGuidance,
     narrationGuidance,
-    sceneTimeline: timeline
+    sceneTimeline: timeline,
+    // Word count limits (flexible ranges)
+    min5,
+    tgt5,
+    max5,
+    min10,
+    tgt10,
+    max10,
+    tolerance,
   };
 }

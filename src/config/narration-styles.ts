@@ -5,11 +5,39 @@
 
 export const DEFAULT_NARRATION_STYLE = 'neutral';
 
-const WORDS_PER_SECOND_RATE = 2.0
+/**
+ * Word count configuration per scene duration
+ * Uses flexible ranges to allow LLM to fill duration naturally
+ * - min: absolute minimum (too short = dead air)
+ * - target: ideal word count for smooth pacing
+ * - max: upper limit (too long = rushed delivery)
+ */
+export const SCENE_WORD_LIMITS = {
+    SCENE_5S: {
+        min: 10,    // ~2.0 wps - min for flow
+        target: 13, // ~2.6 wps - snappy pace
+        max: 15,    // ~3.0 wps - brisk
+    },
+    SCENE_10S: {
+        min: 20,    // ~2.0 wps - min for flow
+        target: 26, // ~2.6 wps - ideal storytelling
+        max: 30,    // ~3.0 wps - detailed
+    },
+} as const;
+
+/**
+ * Duration tolerance ranges for video lengths
+ * Tighter ranges for better TTS accuracy
+ */
+export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
+    15: { min: 14, max: 16 },  // ±1s
+    30: { min: 28, max: 32 },  // ±2s
+    60: { min: 57, max: 63 },  // ±3s
+    120: { min: 117, max: 123 },  // ±3s
+    180: { min: 177, max: 183 },  // ±3s
+};
 
 export interface NarrationStyleConfig {
-    /** Words per second for script generation timing */
-    wordsPerSecond: number;
     /** ElevenLabs voice settings */
     audioSettings: {
         stability: number;        // 0-1: Lower = more expressive, higher = more stable
@@ -23,7 +51,6 @@ export interface NarrationStyleConfig {
 
 export const NARRATION_STYLES = {
     dramatic: {
-        wordsPerSecond: WORDS_PER_SECOND_RATE,
         audioSettings: {
             stability: 0.55,
             similarityBoost: 0.85,
@@ -33,7 +60,6 @@ export const NARRATION_STYLES = {
         description: 'Dramatic/emotional/cinematic delivery with varied pacing',
     },
     emotional: {
-        wordsPerSecond: WORDS_PER_SECOND_RATE,
         audioSettings: {
             stability: 0.45,
             similarityBoost: 0.80,
@@ -43,7 +69,6 @@ export const NARRATION_STYLES = {
         description: 'Highly emotional/cinematic voice with expressive delivery',
     },
     musical: {
-        wordsPerSecond: WORDS_PER_SECOND_RATE,
         audioSettings: {
             stability: 0.60,
             similarityBoost: 0.85,
@@ -53,7 +78,6 @@ export const NARRATION_STYLES = {
         description: 'Music-led pacing with rhythmic, measured delivery',
     },
     horror: {
-        wordsPerSecond: WORDS_PER_SECOND_RATE,
         audioSettings: {
             stability: 0.65,
             similarityBoost: 0.90,
@@ -63,7 +87,6 @@ export const NARRATION_STYLES = {
         description: 'Horror/suspense narration with deliberate, tense pacing',
     },
     neutral: {
-        wordsPerSecond: WORDS_PER_SECOND_RATE,
         audioSettings: {
             stability: 0.70,
             similarityBoost: 0.85,
@@ -81,4 +104,13 @@ export type NarrationStyle = keyof typeof NARRATION_STYLES;
  */
 export function getNarrationStyleConfig(style: NarrationStyle): NarrationStyleConfig {
     return NARRATION_STYLES[style];
+}
+
+/**
+ * Get word count limits based on scene duration
+ * @param sceneDuration - Duration of the scene in seconds (5 or 10)
+ * @returns Word limit configuration { min, target, max }
+ */
+export function getWordLimitsForDuration(sceneDuration: 5 | 10) {
+    return sceneDuration === 5 ? SCENE_WORD_LIMITS.SCENE_5S : SCENE_WORD_LIMITS.SCENE_10S;
 }

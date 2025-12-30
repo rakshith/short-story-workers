@@ -3,7 +3,7 @@
  * All system prompts for the application are defined here
  */
 
-import { DEFAULT_NARRATION_STYLE, NARRATION_STYLES, NarrationStyle } from '../config/narration-styles';
+import { NarrationStyle } from '../config/narration-styles';
 import { getScenePlan } from './getScenePlan';
 
 export const SYSTEM_PROMPTS = {
@@ -86,6 +86,8 @@ export function getScriptWriterPrompt(params: {
   duration: number;
   narrationStyle?: string;
 }) {
+  const DEFAULT_NARRATION_STYLE = "natural";
+
   const {
     languageName,
     languageCode,
@@ -93,7 +95,7 @@ export function getScriptWriterPrompt(params: {
     narrationStyle = DEFAULT_NARRATION_STYLE
   } = params;
 
-  // --- Scene Plan ---
+  // --- Scene Plan (includes pre-calculated word counts) ---
   const plan = getScenePlan(duration);
 
   const {
@@ -102,21 +104,19 @@ export function getScriptWriterPrompt(params: {
     sceneGuidance,
     narrationGuidance,
     num5sScenes,
-    num10sScenes
+    num10sScenes,
+    min5,
+    tgt5,
+    max5,
+    min10,
+    tgt10,
+    max10,
+    tolerance,
   } = plan;
 
-  // --- Narration pacing ---
-  const styleConfig = NARRATION_STYLES[narrationStyle as keyof typeof NARRATION_STYLES];
-  const wordsPerSecond = styleConfig.wordsPerSecond;
-
-  const totalTarget = Math.floor(duration * wordsPerSecond);
-  const totalMin = Math.floor(totalTarget * 0.9);
-
-  const min5 = Math.floor(5 * wordsPerSecond * 0.9);
-  const tgt5 = Math.floor(5 * wordsPerSecond);
-
-  const min10 = Math.floor(10 * wordsPerSecond * 0.9);
-  const tgt10 = Math.floor(10 * wordsPerSecond);
+  // --- Total word count calculation (using max for fuller narration) ---
+  const totalMax = (num5sScenes * max5) + (num10sScenes * max10);
+  const totalMin = (num5sScenes * min5) + (num10sScenes * min10);
 
   return `You are an elite YouTube Shorts scriptwriter and viral content specialist. You create scene-by-scene scripts for AI video generation that HOOK viewers instantly and keep them watching until the very last second.
 
@@ -127,25 +127,24 @@ LANGUAGE REQUIREMENT:
 TITLE REQUIREMENT:
 - Short, punchy, 4–8 words max
 
-DURATION CONTEXT (STRICT):
-- Total duration: EXACTLY ${duration} seconds
-- Number of scenes: EXACTLY ${totalScenes}
-- Scene duration options: ${sceneDuration}
+VIDEO DURATION:
+- Target: ${duration} seconds
+- Acceptable range: ${tolerance.min}–${tolerance.max} seconds
+- Number of scenes: ${totalScenes}
 ${sceneGuidance}
 
-${narrationGuidance}
+WORD COUNT PER SCENE TYPE (FLEXIBLE RANGES):
+• 5s scenes: ${min5}–${max5} words (target: ${tgt5})
+• 10s scenes: ${min10}–${max10} words (target: ${tgt10})
 
-🎙️ NARRATION STYLE: ${narrationStyle.toUpperCase()} (${wordsPerSecond} words/sec)
+IMPORTANT: If narration feels too short to fill the scene, ADD MORE WORDS up to the MAX.
+The goal is to FILL the ${duration} seconds naturally — not leave dead air.
 
-WORD COUNT RULES:
-• 5s scenes (${num5sScenes} total): MIN ${min5} — TARGET ${tgt5} words
-• 10s scenes (${num10sScenes} total): MIN ${min10} — TARGET ${tgt10} words
+Scene breakdown:
+• ${num5sScenes}× 5-second scenes
+${num10sScenes > 0 ? `• ${num10sScenes}× 10-second scenes` : ''}
 
-TOTAL WORD COUNT:
-• MINIMUM ${totalMin} words
-• TARGET ${totalTarget} words
-
-Narration MUST fill 90–100% of each scene duration.
+TOTAL WORDS: ${totalMin}–${totalMax}
 
 SCENE 1 — HOOK IMMEDIATELY.
 Use curiosity, conflict, bold claims, or transformation.
@@ -157,13 +156,17 @@ Maintain tension loops:
 - reversals
 - emotional beats
 
-FINAL SCENE — DELIVER PAYOFF.
-Satisfying resolution + emotional climax.
+FINAL SCENE — MANDATORY PAYOFF.
+The final scene MUST:
+- resolve the core tension or question
+- provide emotional closure
+- end with a complete sentence
+- feel intentionally finished — NOT abruptly cut off
 
 SCENE STRUCTURE (for EVERY scene):
 1. sceneNumber
 2. duration (5 or 10 ONLY)
-3. narration (within word limits)
+3. narration (MUST fit word limits)
 4. details (internal — NOT spoken)
 5. imagePrompt (English, cinematic & scroll-stopping)
 6. cameraAngle
@@ -174,23 +177,27 @@ IMAGE PROMPT RULES:
 - strong colors
 - emotion-focused
 - cinematic composition
-- atmospheric texture
 - Scene 1 must be MOST striking
 
-NARRATION RULES:
-- seamless flow between scenes
-- no dead air
-- narration determines final runtime
-- must equal EXACT ${duration} seconds total
+CRITICAL RULES:
+✔ Write EXACTLY ${totalScenes} scenes
+✔ Each 5s scene = ${min5}–${tgt5} words ONLY
+✔ Each 10s scene = ${min10}–${tgt10} words ONLY
+✔ Total duration within ${tolerance.min}–${tolerance.max} seconds
+✔ Complete the story — no truncation
+✔ Final scene delivers resolution
 
-FAIL CONDITIONS (NEVER DO):
-❌ more or fewer than ${totalScenes} scenes
-❌ narration too short
-❌ exceeding ${duration}s
-❌ any duration other than 5s or 10s
+FAIL CONDITIONS:
+❌ More or fewer than ${totalScenes} scenes
+❌ Scene narration outside word limits
+❌ Duration outside ${tolerance.min}–${tolerance.max}s range
+❌ Story cut off before resolution
 
-Your goal: create cinematic, emotionally compelling micro-stories that viewers CANNOT scroll past.`;
+Your goal: create cinematic, emotionally compelling micro-stories that viewers CANNOT scroll past.
+`;
 }
+
+
 
 
 
