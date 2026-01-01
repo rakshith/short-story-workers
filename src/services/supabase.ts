@@ -37,7 +37,8 @@ export class StoryService {
   }
 
   async createStory(params: CreateStoryParams): Promise<Story> {
-    const upsertData: any = {
+    // Always create a new story - no duplicate checking
+    const insertData: any = {
       user_id: params.userId,
       title: params.title,
       series_id: params.seriesId,
@@ -48,24 +49,21 @@ export class StoryService {
     };
 
     if (params.videoConfig) {
-      upsertData.video_config = params.videoConfig;
+      insertData.video_config = params.videoConfig;
     }
 
     if (params.storyCost !== undefined) {
-      upsertData.story_cost = params.storyCost;
+      insertData.story_cost = params.storyCost;
     }
 
     const { data, error } = await this.supabase
       .from('stories')
-      .upsert(upsertData, {
-        onConflict: 'user_id,title',
-        ignoreDuplicates: false,
-      })
+      .insert(insertData)
       .select()
       .single();
 
     if (error) {
-      throw new Error(`Failed to create/update story: ${error.message}`);
+      throw new Error(`Failed to create story: ${error.message}`);
     }
 
     return data;

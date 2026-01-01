@@ -45,10 +45,15 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         const priority = getPriorityForTier(userTier, env);
         const maxConcurrency = getConcurrencyForTier(userTier, env);
 
+        // Ensure audioModel has a default value
+        if (!body.videoConfig.audioModel) {
+            body.videoConfig.audioModel = 'eleven_multilingual_v2';
+        }
+
         // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-        
+
         const { data: activeJobs, error: checkError } = await supabase
             .from('story_jobs')
             .select('job_id')

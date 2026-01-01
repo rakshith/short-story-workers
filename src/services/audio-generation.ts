@@ -22,8 +22,31 @@ const ELEVENLABS_MODEL = 'eleven_multilingual_v2';
 const MIN_SPEED = 0.7;
 const MAX_SPEED = 1.2;
 
+// Valid stability values for TTD (Text-to-Dialog) models like eleven_turbo_v2_5
+const VALID_TTD_STABILITY_VALUES = [0.0, 0.5, 1.0] as const;
+
 function validateSpeed(speed: number): number {
   return Math.max(MIN_SPEED, Math.min(MAX_SPEED, speed));
+}
+
+/**
+ * Clamp stability to valid TTD model values: 0.0 (Creative), 0.5 (Natural), 1.0 (Robust)
+ * Non-TTD models accept any value 0-1, but TTD models only accept these discrete values
+ */
+function clampToValidTTDStability(stability: number): number {
+  // Find the closest valid TTD stability value
+  let closest: number = VALID_TTD_STABILITY_VALUES[0];
+  let minDiff = Math.abs(stability - closest);
+
+  for (const valid of VALID_TTD_STABILITY_VALUES) {
+    const diff = Math.abs(stability - valid);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = valid;
+    }
+  }
+
+  return closest;
 }
 
 function convertCharacterTimestampsToWords(
@@ -149,7 +172,8 @@ async function generateElevenLabsAudio(
   requestedSpeed: number = 1.0,
   elevenLabsApiKey: string,
   defaultVoiceId?: string,
-  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE
+  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE,
+  elevenLabsModel: string = ELEVENLABS_MODEL
 ): Promise<{ audioBuffer: ArrayBuffer; alignment: ElevenLabsAlignment; audioDuration: number }> {
   const validatedSpeed = validateSpeed(requestedSpeed);
   const finalVoiceId = voiceId === 'alloy' ? (defaultVoiceId || voiceId) : voiceId;
@@ -159,6 +183,9 @@ async function generateElevenLabsAudio(
   const audioSettings = styleConfig.audioSettings;
 
   // Use the text-to-speech endpoint with alignment data
+  // Clamp stability to valid TTD values for models like eleven_turbo_v2_5
+  const validStability = clampToValidTTDStability(audioSettings.stability);
+
   const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}/with-timestamps`, {
     method: 'POST',
     headers: {
@@ -167,9 +194,9 @@ async function generateElevenLabsAudio(
     },
     body: JSON.stringify({
       text: narration,
-      model_id: ELEVENLABS_MODEL,
+      model_id: elevenLabsModel,
       voice_settings: {
-        stability: audioSettings.stability,
+        stability: validStability,
         similarityBoost: audioSettings.similarityBoost,
         style: audioSettings.style,
         useSpeakerBoost: audioSettings.useSpeakerBoost,
@@ -231,7 +258,8 @@ export async function generateSceneAudio(
   elevenLabsApiKey: string,
   openAiApiKey: string,
   defaultVoiceId?: string,
-  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE
+  narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE,
+  elevenLabsModel?: string
 ): Promise<AudioGenerationResult> {
   // Always use ElevenLabs for all voices with character alignment
   const result = await generateElevenLabsAudio(
@@ -241,7 +269,8 @@ export async function generateSceneAudio(
     speed,
     elevenLabsApiKey,
     defaultVoiceId,
-    narrationStyle
+    narrationStyle,
+    elevenLabsModel
   );
 
   const audioBuffer = result.audioBuffer;

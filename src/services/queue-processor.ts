@@ -279,7 +279,9 @@ export async function processSceneAudio(
         env.AUDIO_BUCKET,
         env.ELEVENLABS_API_KEY,
         env.OPENAI_API_KEY,
-        env.ELEVENLABS_DEFAULT_VOICE_ID
+        env.ELEVENLABS_DEFAULT_VOICE_ID,
+        undefined, // narrationStyle - use default
+        videoConfig.audioModel
       ),
       { sceneIndex, voice: selectedVoice }
     );

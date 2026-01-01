@@ -95,6 +95,7 @@ export interface VideoConfig {
   estimatedCredits?: number;
   durationInFrames?: number;
   userTier?: UserTier; // User tier for resource restrictions
+  audioModel: string;
 }
 
 export interface Scene {
