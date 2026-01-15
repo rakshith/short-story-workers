@@ -172,25 +172,91 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
     } catch (error) {
       queueLogger.error('Error processing queue message', error);
 
-      try {
-        const { createClient } = await import('@supabase/supabase-js');
-        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+      const data: QueueMessage = message.body;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-        const data: QueueMessage = message.body;
-        await supabase
-          .from('story_jobs')
-          .update({
-            status: 'failed',
-            error: error instanceof Error ? error.message : 'Unknown error',
-            updated_at: new Date().toISOString(),
-          })
-          .eq('job_id', data.jobId);
-      } catch (dbError) {
-        console.error('[Queue] Failed to update error status in DB:', dbError);
-      }
+      // Mark the scene as failed and continue - user can retry from UI
+      await markSceneAsFailed(data, errorMessage, getCoordinator, env);
 
-      message.retry();
+      message.ack();
     }
+  }
+}
+
+/**
+ * Mark a scene as failed in the Durable Object so the job can complete with partial failures.
+ * Failed scenes are stored in the database and can be retried by the user from the UI.
+ */
+async function markSceneAsFailed(
+  data: QueueMessage,
+  errorMessage: string,
+  getCoordinator: (storyId: string) => any,
+  env: Env
+): Promise<void> {
+  try {
+    const coordinator = getCoordinator(data.storyId);
+    let updateRes: Response;
+
+    switch (data.type) {
+      case 'image':
+        updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
+          method: 'POST',
+          body: JSON.stringify({
+            sceneIndex: data.sceneIndex,
+            imageUrl: null,
+            imageError: errorMessage,
+          }),
+        }));
+        break;
+
+      case 'video':
+        updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
+          method: 'POST',
+          body: JSON.stringify({
+            sceneIndex: data.sceneIndex,
+            videoUrl: null,
+            videoError: errorMessage,
+          }),
+        }));
+        break;
+
+      case 'audio':
+        updateRes = await coordinator.fetch(new Request('http://do/updateAudio', {
+          method: 'POST',
+          body: JSON.stringify({
+            sceneIndex: data.sceneIndex,
+            audioUrl: null,
+            audioDuration: 0,
+            captions: [],
+            audioError: errorMessage,
+          }),
+        }));
+        break;
+
+      default:
+        queueLogger.warn(`Unknown message type: ${data.type}`);
+        return;
+    }
+
+    const status = await updateRes.json() as any;
+
+    // If all scenes are now complete, sync to database
+    if (status.isComplete) {
+      const { syncStoryToSupabase } = await import('./queue-consumer');
+      await syncStoryToSupabase({
+        jobId: data.jobId,
+        storyId: data.storyId,
+        userId: data.userId
+      }, coordinator, env);
+    }
+
+    queueLogger.info(`Scene ${data.sceneIndex} marked as failed, moving on`, {
+      sceneIndex: data.sceneIndex,
+      type: data.type,
+      error: errorMessage
+    });
+  } catch (updateError) {
+    console.error('[Queue] Failed to mark scene as failed:', updateError);
   }
 }
 
