@@ -1,7 +1,7 @@
 // Webhook handler service for Replicate
 import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
-import { FOLDER_NAMES } from '../config/table-config';
+import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
 import { trackStorageWrite } from './usage-tracking';
 
@@ -30,7 +30,7 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
     // Idempotency check: Prevent duplicate webhook processing
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-    
+
     const { error: checkError } = await supabase
         .from('webhook_processed')
         .insert({
@@ -39,13 +39,13 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
             scene_index: sceneIndex,
             webhook_type: type,
         });
-    
+
     // If unique constraint violation, webhook already processed
     if (checkError?.code === '23505') {
-        apiLogger.info(`Webhook already processed (idempotency)`, { 
-            predictionId: prediction.id, 
-            storyId, 
-            sceneIndex 
+        apiLogger.info(`Webhook already processed (idempotency)`, {
+            predictionId: prediction.id,
+            storyId,
+            sceneIndex
         });
         return new Response('Already processed', { status: 200 });
     }
@@ -75,7 +75,8 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
     try {
         // 1. Process and upload to R2 - use dedicated service based on type
         let storageUrls: string[];
-
+        const folderName = SHORT_STORIES_FOLDER_NAMES["FACELess"];
+        const path_name = `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/${userId}/${seriesId}/${storyId}`
         if (type === 'video') {
             const { processFinishedVideoPrediction } = await import('./video-generation');
             storageUrls = await processFinishedVideoPrediction(prediction, {
@@ -83,7 +84,7 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
                 seriesId,
                 storyId,
                 bucket: env.VIDEO_BUCKET,
-                pathName: `${FOLDER_NAMES.SHORT_STORIES}/${userId}/${seriesId}/${storyId}`,
+                pathName: path_name,
             });
         } else {
             const outputFormat = prediction.input?.output_format || 'jpg';
@@ -92,7 +93,7 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
                 seriesId,
                 storyId,
                 imagesBucket: env.IMAGES_BUCKET,
-                pathName: `${FOLDER_NAMES.SHORT_STORIES}/${userId}/${seriesId}/${storyId}`,
+                pathName: path_name,
                 outputFormat
             });
         }
