@@ -244,6 +244,11 @@ async function createStoryRecord(
         return createdStory;
     } catch (error) {
         console.error(`[Generate Story] Failed to create story:`, error);
+
+        // Check if it's a duplicate title error
+        const errorMessage = error instanceof Error ? error.message : '';
+        const isDuplicateTitle = errorMessage.includes('unique_user_story_title');
+
         await updateJobStatus(jobId, {
             jobId,
             userId: body.userId,
@@ -252,15 +257,20 @@ async function createStoryRecord(
             totalScenes: storyData.scenes.length,
             imagesGenerated: 0,
             audioGenerated: 0,
-            error: error instanceof Error ? error.message : 'Failed to create story',
+            error: isDuplicateTitle
+                ? `A story with the title "${storyData.title}" already exists`
+                : errorMessage || 'Failed to create story',
             teamId: body.teamId,
         }, env);
+
         return jsonResponse(
             {
-                error: 'Failed to create story',
-                details: error instanceof Error ? error.message : 'Unknown error'
+                error: isDuplicateTitle ? 'Duplicate story title' : 'Failed to create story',
+                message: isDuplicateTitle
+                    ? `A story with the title "${storyData.title}" already exists. Please use a different prompt or modify your request.`
+                    : errorMessage || 'Unknown error'
             },
-            500
+            isDuplicateTitle ? 409 : 500
         );
     }
 }

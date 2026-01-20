@@ -44,6 +44,7 @@ export interface Env {
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_DEFAULT_VOICE_ID?: string;
   ELEVENLABS_MODEL_ID?: string;
+  AI_METER_INGEST_KEY: string;
 
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
