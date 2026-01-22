@@ -48,5 +48,6 @@ export interface Env {
 
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
+  APP_URL?: string;
 }
 

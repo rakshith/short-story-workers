@@ -2,7 +2,6 @@
 
 import { Env } from '../types/env';
 import { jsonResponse } from '../utils/response';
-import { getJobCost } from '../services/usage-tracking';
 
 /**
  * GET /status?jobId=<jobId>
@@ -45,9 +44,6 @@ export async function handleStatus(request: Request, env: Env): Promise<Response
             return jsonResponse({ error: 'Job not found' }, 404);
         }
 
-        // Get cost information for this job
-        const costInfo = await getJobCost(jobId, env);
-
         return jsonResponse({
             jobId: data.job_id,
             status: data.status,
@@ -57,11 +53,6 @@ export async function handleStatus(request: Request, env: Env): Promise<Response
             audioGenerated: data.audio_generated,
             error: data.error,
             storyId: data.story_id,
-            cost: {
-                total: costInfo.totalCost,
-                breakdown: costInfo.breakdown,
-                currency: 'USD',
-            },
         });
     } catch (error) {
         console.error('[Status] Unexpected error:', error);

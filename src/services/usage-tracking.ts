@@ -1,379 +1,111 @@
-// Usage and Cost Tracking Service
-// Records detailed cost metrics for story generation
+// Usage Tracking Service
 
 import { Env } from '../types/env';
 
-// Provider pricing (in USD)
-export const PRICING = {
-  replicate: {
-    // Image generation models
-    'black-forest-labs/flux-schnell': 0.003, // basic
-    'black-forest-labs/flux-1.1-pro': 0.04, // pro
-    'black-forest-labs/flux-kontext-pro': 0.04, // pro
-    'black-forest-labs/flux-dev': 0.025, // ulta
-    'ideogram-ai/ideogram-v3-turbo': 0.03, // ultra
-    'black-forest-labs/flux-1.1-pro-ultra': 0.06, // max
-    'google/nano-banana': 0.039, // max
-    'openai/gpt-image-1.5': 0.136, // max regardless of multiple properties
-
-    // Video generation models
-    'wan-video/wan-2.5-t2v-fast': 0.102, // basic normal - 0.068
-    'wan-video/wan-2.6-t2v': 0.15, // pro 0.10
-    'fal-ai/veo3.1/fast/first-last-frame-to-video': 0.15, // ultra 0.10
-    'kwaivgi/kling-v2.5-turbo-pro': 0.07, // max
-  },
-  openai: {
-    // TTS pricing per 1000 characters
-    'tts-1': 0.015 / 1000,
-    'tts-1-hd': 0.030 / 1000,
-  },
-  elevenlabs: {
-    // Pricing per 1000 characters
-    'eleven_turbo_v2.5': 0.00018 / 1000,
-    'eleven_turbo_v2': 0.00030 / 1000,
-    'eleven_v3': 0.00045 / 1000,
-    'eleven_multilingual_v2': 0.00060 / 1000,
-  },
-  cloudflare: {
-    // Worker pricing
-    worker_invocation: 0.00000015, // $0.15 per million
-    worker_cpu_ms: 0.00000003, // $0.03 per million CPU-ms
-    
-    // Queue pricing
-    queue_message: 0.0000004, // $0.40 per million
-    
-    // R2 pricing
-    r2_write: 0.0000045, // $4.50 per million
-    r2_read: 0.00000036, // $0.36 per million
-  },
-};
-
-export interface UsageRecord {
-  jobId: string;
-  userId: string;
-  storyId?: string;
-  provider: 'replicate' | 'openai' | 'elevenlabs' | 'cloudflare';
-  resourceType: 'image' | 'audio' | 'video' | 'worker_invocation' | 'queue_message' | 'db_query' | 'storage_write';
-  operation?: string;
-  quantity: number;
-  unitCost: number;
-  totalCost: number;
-  sceneIndex?: number;
-  modelUsed?: string;
-  metadata?: Record<string, any>;
-}
+// Cloudflare pricing
+const CLOUDFLARE_CPU_COST = 0.00000003; // $0.03 per million CPU-ms
 
 /**
- * Track usage and cost for a story generation operation
- * Aggregates all costs into a single record per job in public.story_costs
- * Idempotent: Won't charge twice for same job+scene+provider+resource
+ * Track Cloudflare Worker CPU time to story_costs table
  */
-export async function trackUsage(record: UsageRecord, env: Env): Promise<void> {
+export async function trackWorkerCpuTime(
+  jobId: string,
+  userId: string,
+  storyId: string,
+  cpuTimeMs: number,
+  sceneIndex: number,
+  messageType: 'image' | 'video' | 'audio',
+  env: Env
+): Promise<void> {
+  const totalCost = cpuTimeMs * CLOUDFLARE_CPU_COST;
+  const opKey = `scene${sceneIndex}_cloudflare_cpu_${messageType}`;
+
   try {
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-    // Create a unique operation key for idempotency
-    const opKey = `${record.sceneIndex !== undefined ? `scene${record.sceneIndex}` : 'global'}_${record.provider}_${record.resourceType}`;
-
-    const { error } = await supabase.rpc('track_story_cost', {
-      p_job_id: record.jobId,
-      p_user_id: record.userId,
-      p_story_id: record.storyId,
-      p_provider: record.provider,
-      p_cost: record.totalCost,
+    await supabase.rpc('track_story_cost', {
+      p_job_id: jobId,
+      p_user_id: userId,
+      p_story_id: storyId,
+      p_provider: 'cloudflare',
+      p_cost: totalCost,
       p_op_key: opKey,
-      p_last_op: record.operation || record.resourceType
+      p_last_op: `cpu-${messageType}`
     });
-
-    if (error) {
-      console.error('[Usage Tracking] Failed to record usage via RPC:', error);
-    }
   } catch (error) {
-    console.error('[Usage Tracking] Error in trackUsage:', error);
+    console.error('[Usage Tracking] Failed to track CPU time:', error);
   }
 }
 
 /**
- * Track Replicate image generation cost
+ * Internal usage tracking for AI Metering Service
+ * Sends metrics to /api/internal/ai-usage
  */
-export async function trackImageGeneration(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  sceneIndex: number,
-  model: string,
-  env: Env
-): Promise<void> {
-  // Try to match the model to a pricing key, default to flux-schnell (cheapest)
-  const modelLower = model.toLowerCase();
-  let unitCost = PRICING.replicate['black-forest-labs/flux-schnell']; // Default
-  
-  // Match against actual pricing keys
-  if (modelLower.includes('flux-schnell')) {
-    unitCost = PRICING.replicate['black-forest-labs/flux-schnell'];
-  } else if (modelLower.includes('flux-1.1-pro') || modelLower.includes('flux-kontext-pro')) {
-    unitCost = PRICING.replicate['black-forest-labs/flux-1.1-pro'];
-  } else if (modelLower.includes('flux-dev')) {
-    unitCost = PRICING.replicate['black-forest-labs/flux-dev'];
-  } else if (modelLower.includes('ideogram')) {
-    unitCost = PRICING.replicate['ideogram-ai/ideogram-v3-turbo'];
-  } else if (modelLower.includes('flux-pro') || modelLower.includes('flux-ultra')) {
-    unitCost = PRICING.replicate['black-forest-labs/flux-1.1-pro-ultra'];
-  } else if (modelLower.includes('nano-banana')) {
-    unitCost = PRICING.replicate['google/nano-banana'];
-  } else if (modelLower.includes('gpt-image')) {
-    unitCost = PRICING.replicate['openai/gpt-image-1.5'];
+export async function trackAIUsageInternal(
+  env: Env,
+  params: {
+    userId: string;
+    teamId?: string;
+    provider: string;
+    model: string;
+    feature: string;
+    type: 'text' | 'image' | 'video' | 'audio';
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+    characterCount?: number;
+    durationSeconds?: number;
+    correlationId?: string;
+    source?: string;
+    // Image specific
+    width?: number;
+    height?: number;
+    count?: number;
+    quality?: string;
+    // Video specific
+    hasAudio?: boolean;
+    resolution?: string;
   }
-
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider: 'replicate',
-    resourceType: 'image',
-    operation: 'image-generation',
-    quantity: 1,
-    unitCost,
-    totalCost: unitCost,
-    sceneIndex,
-    modelUsed: model,
-  }, env);
-}
-
-/**
- * Track Replicate video generation cost
- */
-export async function trackVideoGeneration(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  sceneIndex: number,
-  model: string,
-  env: Env
 ): Promise<void> {
-  // Try to match the model to a pricing key, default to wan-video (cheapest video)
-  const modelLower = model.toLowerCase();
-  let unitCost = PRICING.replicate['wan-video/wan-2.5-t2v-fast']; // Default
-  
-  // Match against actual video model pricing keys
-  if (modelLower.includes('wan-2.5') || modelLower.includes('wan-video')) {
-    unitCost = PRICING.replicate['wan-video/wan-2.5-t2v-fast'];
-  } else if (modelLower.includes('wan-2.6')) {
-    unitCost = PRICING.replicate['wan-video/wan-2.6-t2v'];
-  } else if (modelLower.includes('veo') || modelLower.includes('fal-ai')) {
-    unitCost = PRICING.replicate['fal-ai/veo3.1/fast/first-last-frame-to-video'];
-  } else if (modelLower.includes('kling')) {
-    unitCost = PRICING.replicate['kwaivgi/kling-v2.5-turbo-pro'];
-  }
+  if (!env.AI_METER_INGEST_KEY || !env.APP_URL) return;
 
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider: 'replicate',
-    resourceType: 'video',
-    operation: 'video-generation',
-    quantity: 1,
-    unitCost,
-    totalCost: unitCost,
-    sceneIndex,
-    modelUsed: model,
-  }, env);
-}
-
-/**
- * Track audio generation cost (OpenAI or ElevenLabs)
- */
-export async function trackAudioGeneration(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  sceneIndex: number,
-  provider: 'openai' | 'elevenlabs',
-  voice: string,
-  textLength: number,
-  env: Env
-): Promise<void> {
-  let unitCost: number;
-  let operation: string;
-
-  if (provider === 'openai') {
-    unitCost = PRICING.openai['tts-1'];
-    operation = 'tts-1-generation';
-  } else {
-    unitCost = PRICING.elevenlabs['eleven_multilingual_v2'];
-    operation = 'elevenlabs-tts';
-  }
-
-  const totalCost = textLength * unitCost;
-
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider,
-    resourceType: 'audio',
-    operation,
-    quantity: textLength,
-    unitCost,
-    totalCost,
-    sceneIndex,
-    modelUsed: voice,
-    metadata: {
-      text_length: textLength,
-    },
-  }, env);
-}
-
-/**
- * Track Cloudflare Worker invocation
- */
-export async function trackWorkerInvocation(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  env: Env
-): Promise<void> {
-  const unitCost = PRICING.cloudflare.worker_invocation;
-
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider: 'cloudflare',
-    resourceType: 'worker_invocation',
-    operation: 'queue-consumer-invocation',
-    quantity: 1,
-    unitCost,
-    totalCost: unitCost,
-  }, env);
-}
-
-/**
- * Track queue message cost
- */
-export async function trackQueueMessage(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  messageCount: number,
-  env: Env
-): Promise<void> {
-  const unitCost = PRICING.cloudflare.queue_message;
-  const totalCost = messageCount * unitCost;
-
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider: 'cloudflare',
-    resourceType: 'queue_message',
-    operation: 'story-queue-messages',
-    quantity: messageCount,
-    unitCost,
-    totalCost,
-  }, env);
-}
-
-/**
- * Track R2 storage write
- */
-export async function trackStorageWrite(
-  jobId: string,
-  userId: string,
-  storyId: string,
-  sceneIndex: number,
-  fileType: 'image' | 'audio' | 'video',
-  env: Env
-): Promise<void> {
-  const unitCost = PRICING.cloudflare.r2_write;
-
-  await trackUsage({
-    jobId,
-    userId,
-    storyId,
-    provider: 'cloudflare',
-    resourceType: 'storage_write',
-    operation: `r2-${fileType}-upload`,
-    quantity: 1,
-    unitCost,
-    totalCost: unitCost,
-    sceneIndex,
-  }, env);
-}
-
-/**
- * Get total cost for a job
- */
-export async function getJobCost(jobId: string, env: Env): Promise<{
-  totalCost: number;
-  breakdown: Record<string, number>;
-}> {
   try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+    const url = `${env.APP_URL}/api/internal/ai-usage`;
 
-    const { data, error } = await supabase
-      .from('story_costs')
-      .select('*')
-      .eq('job_id', jobId)
-      .single();
-
-    if (error || !data) {
-      return { totalCost: 0, breakdown: {} };
-    }
-
-    return {
-      totalCost: parseFloat(data.total_cost_usd || '0'),
-      breakdown: {
-        replicate: parseFloat(data.replicate_cost_usd || '0'),
-        openai: parseFloat(data.openai_cost_usd || '0'),
-        elevenlabs: parseFloat(data.elevenlabs_cost_usd || '0'),
-        cloudflare: parseFloat(data.cloudflare_cost_usd || '0'),
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${env.AI_METER_INGEST_KEY}`
       },
-    };
+      body: JSON.stringify({
+        type: params.type,
+        userId: params.userId,
+        teamId: params.teamId,
+        data: {
+          provider: params.provider,
+          model: params.model,
+          feature: params.feature,
+          inputTokens: params.inputTokens,
+          outputTokens: params.outputTokens,
+          totalTokens: params.totalTokens,
+          characterCount: params.characterCount,
+          durationSeconds: params.durationSeconds,
+          width: params.width,
+          height: params.height,
+          count: params.count,
+          quality: params.quality,
+          hasAudio: params.hasAudio,
+          resolution: params.resolution,
+          correlationId: params.correlationId,
+          source: params.source || 'api'
+        }
+      })
+    });
+    // Consume response to prevent stalled HTTP warning
+    await response.text();
   } catch (error) {
-    console.error('[Usage Tracking] Error getting job cost:', error);
-    return { totalCost: 0, breakdown: {} };
+    console.error('[Usage Tracking] Failed to track internal usage:', error);
   }
 }
-
-/**
- * Get user's total spending
- */
-export async function getUserSpending(
-  userId: string,
-  startDate?: Date,
-  endDate?: Date,
-  env?: Env
-): Promise<number> {
-  try {
-    const { createClient } = await import('@supabase/supabase-js');
-    const supabase = createClient(env!.SUPABASE_URL, env!.SUPABASE_SERVICE_ROLE_KEY);
-
-    let query = supabase
-      .from('story_costs')
-      .select('total_cost_usd')
-      .eq('user_id', userId);
-
-    if (startDate) {
-      query = query.gte('updated_at', startDate.toISOString());
-    }
-    if (endDate) {
-      query = query.lte('updated_at', endDate.toISOString());
-    }
-
-    const { data, error } = await query;
-
-    if (error || !data) {
-      return 0;
-    }
-
-    return data.reduce((sum, record) => sum + parseFloat(record.total_cost_usd || '0'), 0);
-  } catch (error) {
-    console.error('[Usage Tracking] Error getting user spending:', error);
-    return 0;
-  }
-}
-

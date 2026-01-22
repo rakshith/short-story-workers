@@ -6,7 +6,6 @@ import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
-import { trackQueueMessage } from '../services/usage-tracking';
 
 /**
  * POST /create-story
@@ -259,7 +258,4 @@ async function queueGenerationJobs(
     await Promise.all(audioPromises);
     console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
 
-    // Track queue message costs (visual + audio = 2 × scenes)
-    const totalMessages = storyData.scenes.length * 2;
-    await trackQueueMessage(jobId, body.userId, storyId, totalMessages, env);
 }

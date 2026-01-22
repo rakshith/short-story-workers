@@ -262,6 +262,7 @@ export async function generateSceneAudio(
   elevenLabsModel?: string
 ): Promise<AudioGenerationResult> {
   // Always use ElevenLabs for all voices with character alignment
+  const startTime = Date.now();
   const result = await generateElevenLabsAudio(
     narration,
     voice,
@@ -272,6 +273,54 @@ export async function generateSceneAudio(
     narrationStyle,
     elevenLabsModel
   );
+  const latencySeconds = (Date.now() - startTime) / 1000;
+
+  // Track AI Usage
+  const { trackAIUsageInternal } = await import('./usage-tracking');
+  // We need env here. It's not passed directly to generateSceneAudio but we can't easily get it without refactoring.
+  // Wait, generateSceneAudio takes args individually, it doesn't take 'env'.
+  // But wait, the caller 'processSceneAudio' in queue-processor.ts HAS env.
+
+  // Checking generateSceneAudio signature:
+  // export async function generateSceneAudio(..., audioBucket: R2Bucket, ...)
+  // It does NOT take 'env'. It takes specific keys.
+
+  // Check queue-processor.ts to see how it calls generateSceneAudio.
+  // I need to either pass 'env' to generateSceneAudio or track it in queue-processor.ts.
+  // Tracking in queue-processor.ts seems better to avoid changing signature of generateSceneAudio too much, 
+  // BUT generateSceneAudio is where the API call happens.
+
+  // Let's modify generateSceneAudio to take optional Env or just track it in the caller?
+  // Caller 'processSceneAudio' in 'src/services/queue-processor.ts' calls this.
+  // Let's modify 'src/services/queue-processor.ts' instead? 
+  // Implementation plan said "MODIFY audio-generation.ts".
+  // If I modify audio-generation.ts I need to pass Env.
+  // Let's look at audio-generation.ts signature again.
+  // It takes elevenLabsApiKey, openAiApiKey.
+
+  // It's cleaner to return usage metrics or track it in the caller.
+  // However, for consistency, let's track it here if we can pass valid credentials.
+  // But trackAIUsageInternal needs 'Env' object mainly for AI_METER_INGEST_KEY.
+  // I don't see AI_METER_INGEST_KEY passed to generateSceneAudio.
+
+  // Correct approach: Update 'processSceneAudio' in 'src/services/queue-processor.ts' to track usage.
+  // OR update generateSceneAudio to take 'env' instead of just keys.
+  // Updating generateSceneAudio signature is cleaner for future.
+
+  // BUT, I can't easily change the signature without updating all callers.
+  // Let's check callers. Only 'processSceneAudio' is likely calling it.
+
+  // I'll stick to the plan but realize I need to modify queue-processor.ts to track audio usage 
+  // OR modify generateSceneAudio to accept env.
+  // Let's modify generateSceneAudio to take 'env' as a last optional parameter or part of options if possible.
+  // Actually, let's look at `processSceneAudio` in `queue-processor.ts`. I haven't read that file yet.
+  // I read `queue-consumer.ts`, which imports `processSceneAudio`.
+
+  // Let's read `src/services/queue-processor.ts` first to see where `generateSceneAudio` is called.
+  // Then I will decide.
+
+  // For now, I will pause this Edit to AudioGeneration and read queue-processor.ts.
+
 
   const audioBuffer = result.audioBuffer;
   const audioDuration = result.audioDuration;

@@ -4,8 +4,8 @@ import { Env, QueueMessage } from './types/env';
 import { processSceneImage, processSceneAudio, processSceneVideo } from './services/queue-processor';
 import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
-import { trackWorkerInvocation } from './services/usage-tracking';
 import { sendStoryCompletionEmail } from './services/email-service';
+import { trackWorkerCpuTime } from './services/usage-tracking';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
@@ -88,10 +88,8 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         }
       );
 
-      // Track worker invocation cost
-      await trackWorkerInvocation(data.jobId, data.userId, data.storyId, env);
-
       const coordinator = getCoordinator(data.storyId);
+      const startTime = Date.now();
 
       if (data.type === 'image') {
         // Generate the image
@@ -116,6 +114,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           }, coordinator, env);
         }
 
+        await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'image', env);
         message.ack();
       } else if (data.type === 'video') {
         // Generate the video
@@ -140,6 +139,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           }, coordinator, env);
         }
 
+        await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'video', env);
         message.ack();
       } else if (data.type === 'audio') {
         // Generate the audio
@@ -167,6 +167,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           }, coordinator, env);
         }
 
+        await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'audio', env);
         message.ack();
       }
     } catch (error) {

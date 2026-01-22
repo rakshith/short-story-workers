@@ -96,6 +96,7 @@ export interface VideoConfig {
   durationInFrames?: number;
   userTier?: UserTier; // User tier for resource restrictions
   audioModel: string;
+  resolution: string;
 }
 
 export interface Scene {

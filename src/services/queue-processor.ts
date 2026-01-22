@@ -1,13 +1,10 @@
 // Queue processor for async story generation
 
 import { Env, QueueMessage } from '../types/env';
-import { Scene, StoryTimeline } from '../types';
 import { generateSceneAudio } from './audio-generation';
-import { StoryService } from './supabase';
 import { getModelForTier } from '../utils/model-utils';
-import { ProjectStatus } from '../types';
 import { processorLogger } from '../utils/logger';
-import { trackImageGeneration, trackVideoGeneration, trackAudioGeneration, trackStorageWrite } from './usage-tracking';
+import { trackAIUsageInternal } from './usage-tracking';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -97,15 +94,21 @@ export async function processSceneImage(
       predictionId: result.predictionId,
     });
 
-    // Track cost for image generation (cost incurred when API called)
-    await trackImageGeneration(
-      message.jobId,
+    // Track AI Usage for image generation
+    await trackAIUsageInternal(env, {
       userId,
-      storyId,
-      sceneIndex,
-      selectedModel,
-      env
-    );
+      teamId: message.teamId,
+      provider: 'replicate',
+      model: selectedModel,
+      feature: 'image-generation',
+      type: 'image',
+      width,
+      height,
+      count: 1,
+      quality: videoConfig.outputFormat || 'jpg',
+      correlationId: storyId,
+      source: 'api'
+    });
 
     // We return success: true but imageUrl: null because it hasn't finished yet
     // The webhook will handle the completion.
@@ -172,6 +175,7 @@ export async function processSceneVideo(
         model: selectedModel,
         width: 512,
         height: 512,
+        resolution: videoConfig.resolution,
         aspect_ratio: videoConfig.aspectRatio,
         seed: videoConfig.preset.seed,
         videoConfig: videoConfig,
@@ -191,15 +195,20 @@ export async function processSceneVideo(
       predictionId: result.predictionId,
     });
 
-    // Track cost for video generation
-    await trackVideoGeneration(
-      message.jobId,
+    // Track AI Usage for video generation
+    await trackAIUsageInternal(env, {
       userId,
-      storyId,
-      sceneIndex,
-      selectedModel,
-      env
-    );
+      teamId: message.teamId,
+      provider: 'replicate',
+      model: selectedModel,
+      feature: 'video-generation',
+      type: 'video',
+      durationSeconds: 5,
+      resolution: videoConfig.resolution,
+      hasAudio: false,
+      correlationId: storyId,
+      source: 'api'
+    });
 
     return {
       sceneIndex,
@@ -267,6 +276,7 @@ export async function processSceneAudio(
       narrationLength: narration.length,
     });
 
+    const startTime = Date.now();
     const result = await processorLogger.logApiCall(
       'generateSceneAudio',
       () => generateSceneAudio(
@@ -285,6 +295,7 @@ export async function processSceneAudio(
       ),
       { sceneIndex, voice: selectedVoice }
     );
+    const latencySeconds = (Date.now() - startTime) / 1000;
 
     processorLogger.info(`Audio generated successfully`, {
       sceneIndex,
@@ -293,29 +304,22 @@ export async function processSceneAudio(
       audioDuration: result.audioDuration,
     });
 
-    // Track cost for audio generation
-    // Determine provider based on voice or configuration
+    // Track AI Usage for audio generation
     const provider = env.ELEVENLABS_API_KEY && selectedVoice !== 'alloy' ? 'elevenlabs' : 'openai';
-    await trackAudioGeneration(
-      message.jobId,
-      userId,
-      message.storyId,
-      sceneIndex,
-      provider,
-      selectedVoice,
-      narration.length,
-      env
-    );
+    const audioModel = provider === 'elevenlabs' ? (videoConfig.audioModel || 'eleven_multilingual_v2') : 'tts-1';
 
-    // Track storage write for audio file
-    await trackStorageWrite(
-      message.jobId,
+    await trackAIUsageInternal(env, {
       userId,
-      message.storyId,
-      sceneIndex,
-      'audio',
-      env
-    );
+      teamId: message.teamId,
+      provider,
+      model: audioModel,
+      feature: 'audio-generation',
+      type: 'audio',
+      characterCount: narration.length,
+      durationSeconds: latencySeconds,
+      correlationId: message.storyId,
+      source: 'api'
+    });
 
     return {
       sceneIndex,

@@ -6,7 +6,7 @@ import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
-import { trackQueueMessage } from '../services/usage-tracking';
+import { trackAIUsageInternal } from '../services/usage-tracking';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -86,20 +86,60 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         if (initResult) return initResult;
 
         // Generate script using AI
+        const startTime = Date.now();
         const scriptResult = await generateAIScript(jobId, body, env);
+        const durationSeconds = (Date.now() - startTime) / 1000;
+
         if (scriptResult instanceof Response) {
             return scriptResult;
         }
 
+        const usageData = scriptResult.usage;
         const storyData = scriptResult.story;
 
         // Create initial story in database
         const createResult = await createStoryRecord(jobId, body, storyData, env);
+
         if (createResult instanceof Response) {
+            // Track with jobId if story creation failed (still incurred cost)
+            if (usageData) {
+                await trackAIUsageInternal(env, {
+                    userId: body.userId,
+                    teamId: body.teamId,
+                    provider: 'openai',
+                    model: body.model || body.videoConfig?.model || 'gpt-5.2',
+                    feature: 'script-generation',
+                    type: 'text',
+                    inputTokens: usageData.promptTokens,
+                    outputTokens: usageData.outputTokens,
+                    totalTokens: usageData.totalTokens,
+                    durationSeconds,
+                    correlationId: jobId,
+                    source: 'api'
+                });
+            }
             return createResult;
         }
 
         const storyId = createResult.id;
+
+        // Track script generation with storyId so all costs for this story can be queried together
+        if (usageData) {
+            await trackAIUsageInternal(env, {
+                userId: body.userId,
+                teamId: body.teamId,
+                provider: 'openai',
+                model: body.model || body.videoConfig?.model || 'gpt-5.2',
+                feature: 'script-generation',
+                type: 'text',
+                inputTokens: usageData.promptTokens,
+                outputTokens: usageData.outputTokens,
+                totalTokens: usageData.totalTokens,
+                durationSeconds,
+                correlationId: storyId,
+                source: 'api'
+            });
+        }
 
         // Initialize Durable Object for this story
         await initializeCoordinator(storyId, body.userId, storyData, env);
@@ -163,10 +203,12 @@ async function generateAIScript(
     jobId: string,
     body: GenerateStoryRequest,
     env: Env
-): Promise<{ story: StoryTimeline } | Response> {
+): Promise<{ story: StoryTimeline; usage?: any } | Response> {
     console.log(`[Generate Story] Generating script from prompt: "${body.prompt.substring(0, 50)}..."`);
 
+    // Restore import
     const { generateScript } = await import('../services/script-generation');
+
     const scriptResult = await generateScript(
         {
             prompt: body.prompt,
@@ -197,8 +239,13 @@ async function generateAIScript(
     }
 
     console.log(`[Generate Story] Script generated successfully with ${scriptResult.story.scenes.length} scenes`);
-    return { story: scriptResult.story };
+    return {
+        story: scriptResult.story,
+        usage: scriptResult.usage
+    };
 }
+
+
 
 /**
  * Creates the story record in the database
@@ -357,7 +404,4 @@ async function queueGenerationJobs(
     await Promise.all(audioPromises);
     console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
 
-    // Track queue message costs (visual + audio = 2 × scenes)
-    const totalMessages = storyData.scenes.length * 2;
-    await trackQueueMessage(jobId, body.userId, storyId, totalMessages, env);
 }

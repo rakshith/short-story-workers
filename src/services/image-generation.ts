@@ -68,9 +68,13 @@ export async function triggerReplicateGeneration(
 
   // Handle both versioned models (owner/name:version) and model names (owner/name)
   const hasVersion = params.model.includes(':');
+
+  // Append model to webhook for tracking
+  const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
+
   const predictionParams: any = {
     input,
-    webhook: webhookUrl,
+    webhook: webhookWithModel,
     webhook_events_filter: ["completed"],
   };
 

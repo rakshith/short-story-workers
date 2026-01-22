@@ -69,6 +69,7 @@ TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
+APP_URL = "https://artflicks.app"
 
 [env.production]
 name = "create-story-worker-production"
@@ -124,6 +125,7 @@ TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
+APP_URL = "https://artflicks.app"
 
 # Environment variables (set via wrangler secret put or dashboard)
 [vars]
@@ -141,6 +143,7 @@ TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
+APP_URL = "https://artflicks.app"
 
 # SUPABASE_URL
 # SUPABASE_ANON_KEY

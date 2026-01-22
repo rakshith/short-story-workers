@@ -3,7 +3,7 @@ import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
 import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
-import { trackStorageWrite } from './usage-tracking';
+import { trackAIUsageInternal } from './usage-tracking';
 
 /**
  * Handles incoming Replicate webhook POST requests
@@ -100,10 +100,21 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
 
         const resultUrl = storageUrls[0];
 
-        // Track storage write cost
-        const jobId = url.searchParams.get('jobId') || '';
-        const fileType = type === 'video' ? 'video' : 'image';
-        await trackStorageWrite(jobId, userId, storyId, sceneIndex, fileType, env);
+        // Track AI Usage
+        const model = url.searchParams.get('model') || (type === 'video' ? 'wan-video/wan-2.5-t2v-fast' : 'black-forest-labs/flux-schnell');
+        const predictTime = prediction.metrics?.predict_time || 0;
+
+        await trackAIUsageInternal(env, {
+            userId,
+            teamId: undefined,
+            provider: 'replicate',
+            model,
+            feature: type === 'video' ? 'video-generation' : 'image-generation',
+            type: type as 'image' | 'video',
+            durationSeconds: predictTime,
+            correlationId: storyId,
+            source: 'webhook'
+        });
 
         // 2. Update Durable Object (Race-condition free) - use separate endpoints
         const id = env.STORY_COORDINATOR.idFromName(storyId);

@@ -1,5 +1,5 @@
 // Script generation service using Vercel AI SDK
-import { generateText, Output } from 'ai';
+import { generateText, LanguageModelUsage, Output } from 'ai';
 import { createOpenAI } from '@ai-sdk/openai';
 import { StoryTimeline } from '../types';
 import { getLanguageName } from '../utils/language-config';
@@ -17,6 +17,11 @@ export interface ScriptGenerationResult {
   success: boolean;
   story?: StoryTimeline;
   error?: string;
+  usage?: {
+    promptTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+  };
 }
 
 export async function generateScript(
@@ -98,7 +103,7 @@ export async function generateScript(
       apiKey: openaiApiKey,
     });
 
-    const { output } = await generateText({
+    const { output, usage } = await generateText({
       model: openai(model || 'gpt-5.2'),
       output: Output.object({
         schema: SCRIPT_WRITER_SCENE_SCHEMA,
@@ -127,6 +132,11 @@ export async function generateScript(
     return {
       success: true,
       story,
+      usage: usage ? {
+        promptTokens: (usage as LanguageModelUsage).inputTokens || 0,
+        outputTokens: (usage as LanguageModelUsage).outputTokens || 0,
+        totalTokens: (usage as LanguageModelUsage).totalTokens || 0,
+      } : undefined,
     };
   } catch (error) {
     console.error('[Script Generation] Error:', error);
