@@ -1,7 +1,7 @@
 // Create story endpoint handler - Queue jobs for async processing
 
 import { Env, QueueMessage } from '../types/env';
-import { CreateStoryRequest, StoryTimeline } from '../types';
+import { CreateStoryRequest, StoryTimeline, VideoConfig } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
@@ -84,7 +84,7 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
         const storyId = createResult.id;
 
         // Initialize Durable Object for this story
-        await initializeCoordinator(storyId, body.userId, storyData, env);
+        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
 
         // Queue generation jobs with tier-based priority
         await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
@@ -183,6 +183,7 @@ async function initializeCoordinator(
     storyId: string,
     userId: string,
     storyData: StoryTimeline,
+    videoConfig: VideoConfig,
     env: Env
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
@@ -194,6 +195,7 @@ async function initializeCoordinator(
             userId,
             scenes: storyData.scenes,
             totalScenes: storyData.scenes.length,
+            videoConfig,
         }),
     }));
     console.log(`[Create Story] Durable Object initialized for story ${storyId}`);

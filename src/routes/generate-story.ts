@@ -142,7 +142,7 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         }
 
         // Initialize Durable Object for this story
-        await initializeCoordinator(storyId, body.userId, storyData, env);
+        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
 
         // Queue generation jobs with tier-based priority
         await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
@@ -329,6 +329,7 @@ async function initializeCoordinator(
     storyId: string,
     userId: string,
     storyData: StoryTimeline,
+    videoConfig: VideoConfig,
     env: Env
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
@@ -340,6 +341,7 @@ async function initializeCoordinator(
             userId,
             scenes: storyData.scenes,
             totalScenes: storyData.scenes.length,
+            videoConfig,
         }),
     }));
     console.log(`[Generate Story] Durable Object initialized for story ${storyId}`);

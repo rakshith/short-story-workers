@@ -299,10 +299,15 @@ export async function syncStoryToSupabase(
         }
       });
 
-      // Single DB write with all updates
+      // Single DB write with all updates (story + timeline)
       await supabase
         .from('stories')
-        .update({ story: updatedStory, status: 'draft', updated_at: new Date().toISOString() })
+        .update({
+          story: updatedStory,
+          timeline: finalData.timeline || null,
+          status: 'draft',
+          updated_at: new Date().toISOString(),
+        })
         .eq('id', data.storyId);
     }
 

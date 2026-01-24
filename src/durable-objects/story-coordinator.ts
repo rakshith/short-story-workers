@@ -2,6 +2,7 @@
 // Each story gets its own instance, all updates are serialized
 
 import { Env } from '../types/env';
+import { compile } from '../../lib/@artflicks/video-compiler';
 
 interface SceneUpdate {
   sceneIndex: number;
@@ -23,6 +24,7 @@ interface StoryState {
   audioCompleted: number;
   totalScenes: number;
   isCancelled?: boolean;
+  videoConfig?: any;
 }
 
 export class StoryCoordinator {
@@ -67,7 +69,7 @@ export class StoryCoordinator {
   }
 
   private async handleInit(request: Request): Promise<Response> {
-    const { storyId, userId, scenes, totalScenes } = await request.json() as any;
+    const { storyId, userId, scenes, totalScenes, videoConfig } = await request.json() as any;
 
     this.storyState = {
       storyId,
@@ -76,6 +78,7 @@ export class StoryCoordinator {
       imagesCompleted: 0,
       audioCompleted: 0,
       totalScenes,
+      videoConfig,
     };
 
     // Persist to durable storage
@@ -323,7 +326,22 @@ export class StoryCoordinator {
       }));
     }
 
-    // Return final state with all scenes
+    // Calculate total duration from scenes
+    const totalDuration = this.storyState.scenes.reduce((sum, scene) => {
+      return sum + (scene.audioDuration || scene.duration || 0);
+    }, 0);
+
+    // Compile timeline using video-compiler
+    const timeline = compile({
+      story: {
+        id: this.storyState.storyId,
+        scenes: this.storyState.scenes,
+        totalDuration,
+      },
+      videoConfig: this.storyState.videoConfig || {},
+    });
+
+    // Return final state with all scenes and compiled timeline
     const result = {
       success: true,
       isComplete: true,
@@ -332,13 +350,14 @@ export class StoryCoordinator {
       scenes: this.storyState.scenes,
       imagesCompleted: this.storyState.imagesCompleted,
       audioCompleted: this.storyState.audioCompleted,
+      timeline,
     };
 
     // Clean up durable storage after finalization
     await this.state.storage.deleteAll();
     this.storyState = null;
 
-    console.log(`[StoryCoordinator] Finalized and cleaned up`);
+    console.log(`[StoryCoordinator] Finalized and cleaned up with compiled timeline`);
 
     return new Response(JSON.stringify(result));
   }
