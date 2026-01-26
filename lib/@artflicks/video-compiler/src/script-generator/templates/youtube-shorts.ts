@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { BaseScriptTemplate } from './base';
 import { ScriptGenerationContext, TemplateManifest } from '../types';
 import { getScenePlan } from '../utils/scene-math';
-import { SCRIPT_WRITER_SCENE_SCHEMA } from '../schema';
+import { YOUTUBE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
 
 export class YouTubeShortsTemplate extends BaseScriptTemplate {
@@ -15,7 +15,7 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
     };
 
     getSchema(): z.ZodType<any> {
-        return SCRIPT_WRITER_SCENE_SCHEMA;
+        return YOUTUBE_SHORTS_SCHEMA;
     }
 
     getSystemPrompt(context: ScriptGenerationContext): string {

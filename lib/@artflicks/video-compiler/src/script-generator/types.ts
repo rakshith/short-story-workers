@@ -6,8 +6,8 @@ export interface ScriptGenerationContext {
     language?: string; // e.g. 'en', 'es', 'fr'
     model?: string; // Model name for logging/tracking
     topic?: string;
-    // New fields for character consistency
-    characterReference?: string; // Description or URL context (though prompts usually need text description)
+    // Character consistency via reference images
+    characterReferenceImages?: string[]; // Array of image URLs for character reference
     visualPreset?: string; // e.g. "cinematic", "anime", "analog-film"
 }
 

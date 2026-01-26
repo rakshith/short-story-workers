@@ -4,8 +4,10 @@ import { SCENE_WORD_LIMITS } from "./constants";
 // Build narration description dynamically from config
 const wpsDescription = `5s: ${SCENE_WORD_LIMITS.SCENE_5S.min}-${SCENE_WORD_LIMITS.SCENE_5S.max} words, 10s: ${SCENE_WORD_LIMITS.SCENE_10S.min}-${SCENE_WORD_LIMITS.SCENE_10S.max} words`;
 
-// Define scene schema
-export const SCRIPT_WRITER_SCENE_SCHEMA = z.object({
+// ═══════════════════════════════════════════════════════════════
+// YOUTUBE SHORTS TEMPLATE SCHEMA
+// ═══════════════════════════════════════════════════════════════
+export const YOUTUBE_SHORTS_SCHEMA = z.object({
     title: z.string().describe('Short, punchy title for YouTube Shorts (3-6 words MAX). Make it catchy, intriguing, or hook-driven. Examples: "The $1M Mistake", "She Had No Idea", "This Changes Everything"'),
     totalDuration: z.number().describe('Total duration in seconds'),
     scenes: z.array(
@@ -20,3 +22,26 @@ export const SCRIPT_WRITER_SCENE_SCHEMA = z.object({
         })
     ).describe('Array of scenes breaking down the script')
 });
+
+// Legacy alias for backward compatibility
+export const SCRIPT_WRITER_SCENE_SCHEMA = YOUTUBE_SHORTS_SCHEMA;
+
+// ═══════════════════════════════════════════════════════════════
+// CHARACTER STORY TEMPLATE SCHEMA
+// ═══════════════════════════════════════════════════════════════
+export const CHARACTER_STORY_SCHEMA = z.object({
+    title: z.string().describe('Compelling story title (4-8 words). Should hint at the character journey.'),
+    totalDuration: z.number().describe('Total duration in seconds'),
+    scenes: z.array(
+        z.object({
+            sceneNumber: z.number().describe('Scene number in sequence'),
+            duration: z.number().describe('Scene duration: 5 or 10 seconds only'),
+            details: z.string().describe('Internal production note about the scene (not shown to viewer).'),
+            narration: z.string().describe(`Voiceover narration. WORD LIMITS: ${wpsDescription}. Emotionally engaging, character-focused.`),
+            imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description. The main character MUST be the focal point. Describe: character action/pose, emotional expression, environment, lighting, camera angle. If reference images provided, DO NOT describe physical appearance - just actions and poses. Include visual style keywords.'),
+            cameraAngle: z.enum(['close-up', 'medium shot', 'wide shot', 'birds-eye', 'low angle', 'over-the-shoulder']).describe('Camera angle for this scene'),
+            mood: z.enum(['tense', 'hopeful', 'melancholic', 'triumphant', 'mysterious', 'peaceful', 'dramatic', 'romantic']).describe('Emotional tone of the scene')
+        })
+    ).describe('Scenes with the main character as the center of each')
+});
+
