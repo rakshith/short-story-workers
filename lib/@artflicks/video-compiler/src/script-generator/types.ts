@@ -8,7 +8,6 @@ export interface ScriptGenerationContext {
     topic?: string;
     // Character consistency via reference images
     characterReferenceImages?: string[]; // Array of image URLs for character reference
-    visualPreset?: string; // e.g. "cinematic", "anime", "analog-film"
 }
 
 export interface ScriptGenerationResult {

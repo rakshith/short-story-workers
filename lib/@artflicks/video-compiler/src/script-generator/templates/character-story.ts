@@ -20,8 +20,7 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
   getSystemPrompt(context: ScriptGenerationContext): string {
     const {
       duration,
-      characterReferenceImages,
-      visualPreset = 'cinematic'
+      characterReferenceImages
     } = context;
 
     const hasCharacterImages = characterReferenceImages && characterReferenceImages.length > 0;
@@ -56,7 +55,7 @@ CRITICAL RULES FOR imagePrompt:
 4. ✅ The character MUST appear in EVERY scene's imagePrompt.
 
 Example imagePrompt WITH reference:
-"The main character standing at the edge of a cliff, arms outstretched, silhouetted against a ${visualPreset} sunset. Wind blowing through the scene. Wide shot, dramatic lighting."`
+"The main character standing at the edge of a cliff, arms outstretched, silhouetted against a cinematic sunset. Wind blowing through the scene. Wide shot, dramatic lighting."`
         : `⚠️ NO CHARACTER REFERENCE PROVIDED
 
 You must create and describe a consistent character yourself.
@@ -67,12 +66,9 @@ You must create and describe a consistent character yourself.
 ═══════════════════════════════════════════════════════════════
                     VISUAL STYLE
 ═══════════════════════════════════════════════════════════════
-STYLE PRESET: ${visualPreset.toUpperCase()}
-
-Apply this style to EVERY imagePrompt:
-- Include "${visualPreset} style" or "${visualPreset} aesthetic" in each prompt.
-- Match lighting, color palette, and mood to this style.
-- Be specific: "warm golden hour lighting", "high contrast shadows", "soft diffused glow".
+Apply a consistent cinematic style to EVERY imagePrompt:
+- Match lighting, color palette, and mood.
+- Be specific: "cinematic lighting", "high contrast", "atmospheric".
 
 ═══════════════════════════════════════════════════════════════
                     STORY STRUCTURE
@@ -97,7 +93,7 @@ NARRATIVE ARC:
       "duration": 5 or 10,
       "narration": "Voiceover text. 2-3 sentences. Engaging and emotional.",
       "details": "Brief internal note about what happens (not shown to viewer).",
-      "imagePrompt": "DETAILED scene description. ${hasCharacterImages ? 'Character actions/pose only.' : 'Include character appearance.'} Environment, lighting, camera angle, ${visualPreset} style.",
+      "imagePrompt": "DETAILED scene description. ${hasCharacterImages ? 'Character actions/pose only.' : 'Include character appearance.'} Environment, lighting, camera angle, cinematic style.",
       "cameraAngle": "close-up | medium shot | wide shot | birds-eye | low angle",
       "mood": "tense | hopeful | melancholic | triumphant | mysterious"
     }
@@ -109,7 +105,6 @@ NARRATIVE ARC:
 ═══════════════════════════════════════════════════════════════
 ✓ Total scene durations add up to ${duration} seconds
 ✓ Every imagePrompt features the main character
-✓ Every imagePrompt includes "${visualPreset}" style keywords
 ✓ Narration fits scene duration (5s ≈ 12-15 words, 10s ≈ 25-30 words)
 ✓ Story has clear beginning, middle, and end
 ✓ Final scene provides resolution

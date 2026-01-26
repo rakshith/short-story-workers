@@ -12,6 +12,9 @@ export interface ScriptGenerationParams {
   duration: number;
   language?: string;
   model?: string;
+  templateId?: string;
+  // Allow passing extra context fields for specific templates
+  characterReferenceImages?: string[];
 }
 
 export interface ScriptGenerationResult {
@@ -29,7 +32,14 @@ export async function generateScript(
   params: ScriptGenerationParams,
   openaiApiKey: string
 ): Promise<ScriptGenerationResult> {
-  const { prompt, duration, language = 'en', model } = params;
+  const {
+    prompt,
+    duration,
+    language = 'en',
+    model,
+    templateId,
+    characterReferenceImages
+  } = params;
 
   try {
     const openai = createOpenAI({
@@ -46,8 +56,9 @@ export async function generateScript(
       prompt,
       duration,
       language,
-      model: model || 'gpt-5.2'
-    }, ScriptTemplateIds.YOUTUBE_SHORTS);
+      model: model || 'gpt-5.2',
+      characterReferenceImages
+    }, templateId || ScriptTemplateIds.YOUTUBE_SHORTS);
 
     if (!result.success || !result.script) {
       return {
