@@ -16,6 +16,10 @@
   ],
   "author": "ArtFlicks",
   "license": "MIT",
+  "dependencies": {
+    "ai": "^6.0.3",
+    "zod": "^3.22.4"
+  },
   "devDependencies": {
     "typescript": "^5.3.3"
   }
