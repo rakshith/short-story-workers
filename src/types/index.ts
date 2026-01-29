@@ -97,6 +97,8 @@ export interface VideoConfig {
   userTier?: UserTier; // User tier for resource restrictions
   audioModel: string;
   resolution: string;
+  templateId?: string;
+  characterReferenceImages?: string[];
 }
 
 export interface Scene {

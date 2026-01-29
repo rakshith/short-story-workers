@@ -1,5 +1,11 @@
 // Scene adapter for stories with scenes array
-import { StoryAdapter, Story, VideoConfig, Timeline, TimelineItem } from '../types';
+import {
+  StoryAdapter,
+  Story,
+  VideoConfig,
+  Timeline,
+  TimelineItem,
+} from '../types';
 
 const MIN_SCENE_DURATION = 0.1; // prevents zero-length scenes
 
@@ -25,7 +31,6 @@ export class SceneAdapter implements StoryAdapter {
       const visualDuration = scene.duration ?? 0;
       const resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
 
-      // Scene must last long enough for visuals OR audio
       const effectiveSceneDuration = Math.max(
         visualDuration,
         resolvedAudioDuration,
@@ -42,14 +47,14 @@ export class SceneAdapter implements StoryAdapter {
           end: sceneEnd,
           payload: {
             type: 'image',
-            url: scene.generatedImageUrl || null,
-            prompt: scene.imagePrompt || null,
+            url: scene.generatedImageUrl ?? null,
+            prompt: scene.imagePrompt ?? null,
             sceneNumber: scene.sceneNumber,
           },
         });
       }
 
-      /* ---------------- Audio Track ---------------- */
+      /* ---------------- Voiceover Track ---------------- */
       if (scene.audioUrl && resolvedAudioDuration > 0) {
         audio.push({
           start: sceneStart,
@@ -69,19 +74,14 @@ export class SceneAdapter implements StoryAdapter {
         scene.captions.length > 0 &&
         resolvedAudioDuration > 0
       ) {
-        const captionEnd = Math.min(
-          sceneStart + resolvedAudioDuration,
-          sceneEnd
-        );
-
         text.push({
           start: sceneStart,
-          end: captionEnd,
+          end: sceneStart + resolvedAudioDuration,
           payload: {
             type: 'caption',
             sceneNumber: scene.sceneNumber,
-            stylePreset: videoConfig.captionStylePreset || null,
-            captions: scene.captions, // full token structure preserved
+            stylePreset: videoConfig.captionStylePreset ?? null,
+            captions: scene.captions,
           },
         });
       }
@@ -89,29 +89,10 @@ export class SceneAdapter implements StoryAdapter {
       currentTime = sceneEnd;
     }
 
-    // Timeline duration is the source of truth
     const finalDuration = Math.max(
       currentTime,
-      story.totalDuration || 0
+      story.totalDuration ?? 0
     );
-
-    /* ---------------- Background Music ---------------- */
-    if (videoConfig.music) {
-      const musicVolume =
-        videoConfig.musicVolume !== undefined
-          ? Math.max(0, Math.min(1, videoConfig.musicVolume / 100))
-          : 0.5;
-
-      audio.push({
-        start: 0,
-        end: finalDuration,
-        payload: {
-          type: 'music',
-          url: videoConfig.music,
-          volume: musicVolume,
-        },
-      });
-    }
 
     /* ---------------- Watermark Effect ---------------- */
     if (videoConfig.watermark?.show === true) {
@@ -120,8 +101,8 @@ export class SceneAdapter implements StoryAdapter {
         end: finalDuration,
         payload: {
           type: 'watermark',
-          text: videoConfig.watermark.text || '',
-          variant: videoConfig.watermark.variant || 'minimal',
+          text: videoConfig.watermark.text ?? '',
+          variant: videoConfig.watermark.variant ?? 'minimal',
         },
       });
     }
@@ -130,7 +111,7 @@ export class SceneAdapter implements StoryAdapter {
       duration: finalDuration,
       tracks: {
         visual,
-        audio,
+        audio, // voiceovers ONLY
         text,
         effects: effects.length > 0 ? effects : undefined,
       },

@@ -7,6 +7,8 @@ import { uploadToDefaultBucket } from '../utils/image-upload';
 import { FOLDER_NAMES, video_output_format } from '../config/table-config';
 import { v4 as uuidv4 } from 'uuid';
 import { VideoConfig } from '../types';
+import { attachImageInputs } from '../utils/replicate-model-config';
+import { ScriptTemplateIds } from '@artflicks/video-compiler';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -52,6 +54,23 @@ export async function triggerReplicateGeneration(
     num_outputs: params.num_outputs || 1,
     output_format: params.output_format || 'jpg',
   };
+
+  // Get model config and apply default inputs
+  const { getModelImageConfig } = await import('../utils/replicate-model-config');
+  const modelConfig = getModelImageConfig(params.model);
+  if (modelConfig.defaultInputs) {
+    Object.assign(input, modelConfig.defaultInputs);
+  }
+  // Remove width/height if model uses size parameter instead
+  if (modelConfig.ignoreWidthHeight) {
+    delete input.width;
+    delete input.height;
+  }
+
+  if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY) {
+    // Attach image inputs based on model type only in CHARACTER_STORY
+    attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
+  }
 
   if (params.output_quality) {
     input.output_quality = params.output_quality;

@@ -36,22 +36,37 @@ export async function processSceneImage(
   }
 
   try {
-    const modelToUse = scene.model || videoConfig.model;
-    const selectedModel = getModelForTier(modelToUse);
+    // const modelToUse = scene.model || videoConfig.model;
+    // const selectedModel = getModelForTier(modelToUse);
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,
-      model: selectedModel,
+      model: videoConfig.model,
       userId,
     });
+
+    const { getModelImageConfig } = await import('../utils/replicate-model-config');
+    const modelConfig = getModelImageConfig(videoConfig.model);
 
     const parts = videoConfig.aspectRatio.split(':').map(Number);
     const widthRatio = parts[0] || 16;
     const heightRatio = parts[1] || 9;
     const baseSize = 1024;
 
-    const width = Math.round((widthRatio / Math.max(widthRatio, heightRatio)) * baseSize);
-    const height = Math.round((heightRatio / Math.max(widthRatio, heightRatio)) * baseSize);
+    let width = Math.round((widthRatio / Math.max(widthRatio, heightRatio)) * baseSize);
+    let height = Math.round((heightRatio / Math.max(widthRatio, heightRatio)) * baseSize);
+
+    // Check minimum width requirement (skip if model ignores width/height)
+    if (!modelConfig.ignoreWidthHeight && modelConfig.minWidth && width < modelConfig.minWidth) {
+      const scaleFactor = modelConfig.minWidth / width;
+      width = Math.round(width * scaleFactor);
+      height = Math.round(height * scaleFactor);
+      processorLogger.debug(`Scaled image dimensions to meet minWidth requirement`, {
+        minWidth: modelConfig.minWidth,
+        newWidth: width,
+        newHeight: height
+      });
+    }
 
     const prompt = `${scene.imagePrompt}, ${videoConfig.preset.stylePrompt}`;
 
@@ -61,7 +76,7 @@ export async function processSceneImage(
 
     processorLogger.debug(`Triggering async Replicate generation`, {
       sceneIndex,
-      model: selectedModel,
+      model: videoConfig.model,
       webhookUrl,
     });
 
@@ -69,7 +84,7 @@ export async function processSceneImage(
     const result = await triggerReplicateGeneration(
       {
         prompt,
-        model: selectedModel,
+        model: videoConfig.model,
         width,
         height,
         num_outputs: 1,
@@ -99,7 +114,7 @@ export async function processSceneImage(
       userId,
       teamId: message.teamId,
       provider: 'replicate',
-      model: selectedModel,
+      model: videoConfig.model,
       feature: 'image-generation',
       type: 'image',
       width,

@@ -215,6 +215,8 @@ async function generateAIScript(
             duration: body.duration,
             language: body.language || body.videoConfig?.language || 'en',
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
+            templateId: body.videoConfig?.templateId,
+            characterReferenceImages: body.videoConfig?.characterReferenceImages
         },
         env.OPENAI_API_KEY
     );
