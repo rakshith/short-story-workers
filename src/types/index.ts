@@ -145,7 +145,7 @@ export interface CreateStoryRequest {
   script: string | StoryTimeline;
   videoConfig: VideoConfig;
   userId: string;
-  seriesId: string;
+  seriesId?: string;
   teamId: string;
   title: string;
   userTier?: UserTier; // User tier for resource restrictions

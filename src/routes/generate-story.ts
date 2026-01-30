@@ -13,7 +13,7 @@ interface GenerateStoryRequest {
     duration: number;
     videoConfig: VideoConfig;
     userId: string;
-    seriesId: string;
+    seriesId?: string;
     teamId?: string;
     language?: string;
     model?: string;
@@ -31,10 +31,10 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
     try {
         const body: GenerateStoryRequest = await request.json();
 
-        // Validate required fields
-        if (!body.prompt || !body.duration || !body.videoConfig || !body.userId || !body.seriesId) {
+        // Validate required fields (seriesId is optional)
+        if (!body.prompt || !body.duration || !body.videoConfig || !body.userId) {
             return jsonResponse(
-                { error: 'Missing required fields: prompt, duration, videoConfig, userId, seriesId' },
+                { error: 'Missing required fields: prompt, duration, videoConfig, userId' },
                 400
             );
         }

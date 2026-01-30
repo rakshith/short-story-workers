@@ -17,10 +17,10 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
     try {
         const body: CreateStoryRequest = await request.json();
 
-        // Validate required fields
-        if (!body.script || !body.videoConfig || !body.userId || !body.seriesId) {
+        // Validate required fields (seriesId is optional)
+        if (!body.script || !body.videoConfig || !body.userId) {
             return jsonResponse(
-                { error: 'Missing required fields: script, videoConfig, userId, seriesId' },
+                { error: 'Missing required fields: script, videoConfig, userId' },
                 400
             );
         }

@@ -20,7 +20,7 @@ export interface Story {
 export interface CreateStoryParams {
   userId: string;
   title: string;
-  seriesId: string;
+  seriesId?: string;
   videoType: string;
   story: StoryTimeline;
   status: ProjectStatusType;
@@ -41,12 +41,15 @@ export class StoryService {
     const insertData: any = {
       user_id: params.userId,
       title: params.title,
-      series_id: params.seriesId,
       video_type: params.videoType,
       story: params.story,
       status: params.status,
       team_id: params.teamId,
     };
+
+    if (params.seriesId) {
+      insertData.series_id = params.seriesId;
+    }
 
     if (params.videoConfig) {
       insertData.video_config = params.videoConfig;

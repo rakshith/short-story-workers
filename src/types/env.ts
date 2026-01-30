@@ -8,7 +8,7 @@ import { StoryTimeline, VideoConfig } from '.';
 export interface QueueMessage {
   jobId: string;
   userId: string;
-  seriesId: string;
+  seriesId?: string;
   storyId: string;
   title: string;
   storyData: StoryTimeline; // StoryTimeline - typed at usage sites
