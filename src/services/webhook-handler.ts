@@ -76,7 +76,9 @@ export async function handleReplicateWebhook(request: Request, env: Env): Promis
         // 1. Process and upload to R2 - use dedicated service based on type
         let storageUrls: string[];
         const folderName = SHORT_STORIES_FOLDER_NAMES["FACELess"];
-        const path_name = `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/${userId}/${seriesId}/${storyId}`
+        const path_name = seriesId 
+            ? `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/${userId}/${seriesId}/${storyId}`
+            : `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/${userId}/${storyId}`
         if (type === 'video') {
             const { processFinishedVideoPrediction } = await import('./video-generation');
             storageUrls = await processFinishedVideoPrediction(prediction, {

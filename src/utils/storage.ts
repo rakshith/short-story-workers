@@ -5,12 +5,14 @@ import { FOLDER_NAMES } from '../config/table-config';
 export function generateShortStoryPath(
   storyType: string,
   userId: string,
-  seriesId: string | number,
+  seriesId: string | number | undefined,
   storyId: string,
   outputFormat: string = 'jpg'
 ): string {
   const folderName = storyType.toLowerCase();
-  return `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/series/${userId}/${seriesId}/${storyId}`;
+  return seriesId
+    ? `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/series/${userId}/${seriesId}/${storyId}`
+    : `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/series/${userId}/${storyId}`;
 }
 
 export function generateUUID(): string {
