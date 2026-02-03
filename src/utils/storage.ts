@@ -10,7 +10,8 @@ export function generateShortStoryPath(
   outputFormat: string = 'jpg'
 ): string {
   const folderName = storyType.toLowerCase();
-  return seriesId
+  const hasSeriesId = seriesId != null && String(seriesId).trim() !== '';
+  return hasSeriesId
     ? `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/series/${userId}/${seriesId}/${storyId}`
     : `${FOLDER_NAMES.SHORT_STORIES}/${folderName}/series/${userId}/${storyId}`;
 }

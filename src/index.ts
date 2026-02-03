@@ -6,7 +6,7 @@ import { handleStatus } from './routes/status';
 import { handleCancelStory } from './routes/cancel-story';
 import { handleCreateStory } from './routes/create-story';
 import { handleGenerateAndCreateStory } from './routes/generate-story';
-import { handleReplicateWebhook } from './services/webhook-handler';
+import { handleReplicateWebhook, handleReplicateWebhookRecover } from './services/webhook-handler';
 import { jsonResponse, corsResponse, notFoundResponse } from './utils/response';
 
 // Export Durable Object class
@@ -35,9 +35,13 @@ export default {
       case method === 'POST' && pathname === '/cancel-generation':
         return handleCancelStory(request, env);
 
-      // POST /webhooks/replicate - Replicate callback webhook
+      // POST /webhooks/replicate - Replicate callback webhook (fire-and-forget when ctx provided)
       case method === 'POST' && pathname === '/webhooks/replicate':
-        return handleReplicateWebhook(request, env);
+        return handleReplicateWebhook(request, env, ctx);
+
+      // POST /webhooks/replicate/recover - Recover missed webhook by prediction ID (fetch from Replicate, then process)
+      case method === 'POST' && pathname === '/webhooks/replicate/recover':
+        return handleReplicateWebhookRecover(request, env);
 
       // POST /generate-and-create-story - AI script generation + story creation
       case method === 'POST' && pathname === '/generate-and-create-story':

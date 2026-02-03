@@ -70,9 +70,9 @@ export async function processSceneImage(
 
     const prompt = `${scene.imagePrompt}, ${videoConfig.preset.stylePrompt}`;
 
-    // Construct webhook URL with metadata
+    // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
-    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}&seriesId=${seriesId}&jobId=${message.jobId}`;
+    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}`;
 
     processorLogger.debug(`Triggering async Replicate generation`, {
       sceneIndex,
@@ -96,7 +96,7 @@ export async function processSceneImage(
       },
       {
         userId,
-        seriesId,
+        seriesId: seriesId ?? '',
         storyId,
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
@@ -172,9 +172,9 @@ export async function processSceneVideo(
 
     const prompt = scene.imagePrompt;
 
-    // Construct webhook URL with metadata
+    // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
-    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}&seriesId=${seriesId}&jobId=${message.jobId}`;
+    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}`;
 
     processorLogger.debug(`Triggering async video generation`, {
       sceneIndex,
@@ -196,9 +196,9 @@ export async function processSceneVideo(
         videoConfig: videoConfig,
       },
       {
-        userId,
-        seriesId,
-        storyId,
+        userId: userId!,
+        seriesId: seriesId ?? '',
+        storyId: storyId!,
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
         webhookUrl,

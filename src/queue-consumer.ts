@@ -57,8 +57,8 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         activeJobs.add(data.jobId);
       }
 
-      // Check concurrency limits for cost control
-      const concurrencyCheck = await canProcessJob(data.userId, data.userTier, env);
+      // Check concurrency limits for cost control (allow messages for jobs already in progress)
+      const concurrencyCheck = await canProcessJob(data.userId, data.userTier, env, data.jobId);
 
       if (!concurrencyCheck.allowed) {
         queueLogger.warn(
@@ -92,51 +92,57 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
       const startTime = Date.now();
 
       if (data.type === 'image') {
-        // Generate the image
+        // Generate the image (async: triggers Replicate, webhook will update DO with URL)
         const result = await processSceneImage(data, env);
         queueLogger.info(`Image result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, imageUrl: result.imageUrl });
 
-        const updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            imageUrl: result.imageUrl,
-            imageError: result.success ? undefined : result.error,
-          }),
-        }));
-
-        const status = await updateRes.json() as any;
-        if (status.isComplete) {
-          await syncStoryToSupabase({
-            jobId: data.jobId,
-            storyId: data.storyId,
-            userId: data.userId
-          }, coordinator, env);
+        // Only update DO when we have a URL or an error. When imageUrl is null (async Replicate),
+        // the webhook will update the DO—avoid double update and "total: 0/3" from worker.
+        if (result.imageUrl != null || result.error != null) {
+          const updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
+            method: 'POST',
+            body: JSON.stringify({
+              sceneIndex: data.sceneIndex,
+              imageUrl: result.imageUrl,
+              imageError: result.success ? undefined : result.error,
+            }),
+          }));
+          const status = await updateRes.json() as any;
+          if (status.isComplete) {
+            await syncStoryToSupabase({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
+          }
         }
 
         await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'image', env);
         message.ack();
       } else if (data.type === 'video') {
-        // Generate the video
+        // Generate the video (async: triggers Replicate, webhook will update DO with URL)
         const result = await processSceneVideo(data, env);
         queueLogger.info(`Video result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, videoUrl: result.videoUrl });
 
-        const updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            videoUrl: result.videoUrl,
-            videoError: result.success ? undefined : result.error,
-          }),
-        }));
-
-        const status = await updateRes.json() as any;
-        if (status.isComplete) {
-          await syncStoryToSupabase({
-            jobId: data.jobId,
-            storyId: data.storyId,
-            userId: data.userId
-          }, coordinator, env);
+        // Only update DO when we have a URL or an error. When videoUrl is null (async Replicate),
+        // the webhook will update the DO—avoid double update and conflict with webhook.
+        if (result.videoUrl != null || result.error != null) {
+          const updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
+            method: 'POST',
+            body: JSON.stringify({
+              sceneIndex: data.sceneIndex,
+              videoUrl: result.videoUrl,
+              videoError: result.success ? undefined : result.error,
+            }),
+          }));
+          const status = await updateRes.json() as any;
+          if (status.isComplete) {
+            await syncStoryToSupabase({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
+          }
         }
 
         await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'video', env);

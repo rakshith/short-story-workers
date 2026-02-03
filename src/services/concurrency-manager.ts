@@ -5,13 +5,16 @@ import { Env } from '../types/env';
 import { parseTier, getConcurrencyForTier } from '../config/tier-config';
 
 /**
- * Check if user can process more jobs based on their tier concurrency limit
- * Uses Supabase to track active jobs per user
+ * Check if user can process more jobs based on their tier concurrency limit.
+ * Uses Supabase to track active jobs per user.
+ * If jobId is provided and that job is already in "processing", we allow it—
+ * we only block starting a *new* job when the user is at their concurrency limit.
  */
 export async function canProcessJob(
   userId: string,
   userTier: string | undefined,
-  env: Env
+  env: Env,
+  jobId?: string
 ): Promise<{ allowed: boolean; reason?: string; activeConcurrency?: number; maxConcurrency?: number }> {
   try {
     const tier = parseTier(userTier);
@@ -34,7 +37,18 @@ export async function canProcessJob(
     }
 
     const activeConcurrency = activeJobs?.length || 0;
+    const activeJobIds = new Set((activeJobs ?? []).map((r) => r.job_id));
 
+    // This message is for a job already in progress—allow so we can complete it
+    if (jobId && activeJobIds.has(jobId)) {
+      return {
+        allowed: true,
+        activeConcurrency,
+        maxConcurrency,
+      };
+    }
+
+    // At limit: block only *new* jobs (this message's job is not in the active set)
     if (activeConcurrency >= maxConcurrency) {
       return {
         allowed: false,
