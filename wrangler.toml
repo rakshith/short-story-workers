@@ -49,11 +49,21 @@ preview_bucket_name = "videos"
 queue = "story-processing-staging"
 binding = "STORY_QUEUE"
 
+[[env.staging.queues.producers]]
+queue = "webhook-processing-staging"
+binding = "WEBHOOK_QUEUE"
+
 [[env.staging.queues.consumers]]
 queue = "story-processing-staging"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
+
+[[env.staging.queues.consumers]]
+queue = "webhook-processing-staging"
+max_batch_size = 10
+max_batch_timeout = 5
+max_concurrency = 10
 
 [env.staging.vars]
 TIER1_CONCURRENCY = 2
@@ -105,11 +115,21 @@ preview_bucket_name = "videos"
 queue = "story-processing-production"
 binding = "STORY_QUEUE"
 
+[[env.production.queues.producers]]
+queue = "webhook-processing-production"
+binding = "WEBHOOK_QUEUE"
+
 [[env.production.queues.consumers]]
 queue = "story-processing-production"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
+
+[[env.production.queues.consumers]]
+queue = "webhook-processing-production"
+max_batch_size = 10
+max_batch_timeout = 5
+max_concurrency = 10
 
 [env.production.vars]
 TIER1_CONCURRENCY = 2

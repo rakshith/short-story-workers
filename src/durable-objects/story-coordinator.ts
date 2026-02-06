@@ -25,6 +25,12 @@ interface StoryState {
   totalScenes: number;
   isCancelled?: boolean;
   videoConfig?: any;
+  /** Prevents double-counting: tracks which scene indices already recorded an image/video result */
+  imageScenesDone: number[];
+  /** Prevents double-counting: tracks which scene indices already recorded an audio result */
+  audioScenesDone: number[];
+  /** Set once the first caller receives isComplete=true; subsequent callers get false */
+  completionSignaled?: boolean;
 }
 
 export class StoryCoordinator {
@@ -79,6 +85,9 @@ export class StoryCoordinator {
       audioCompleted: 0,
       totalScenes,
       videoConfig,
+      imageScenesDone: [],
+      audioScenesDone: [],
+      completionSignaled: false,
     };
 
     // Persist to durable storage
@@ -97,6 +106,9 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+      // Backfill new fields for DOs created before this deploy
+      if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
     }
 
     // Check if cancelled
@@ -120,18 +132,27 @@ export class StoryCoordinator {
       };
     }
 
-    // Increment counter (both on success and failure to allow finalization)
-    if (update.imageUrl || update.imageError) {
+    // Deduplicate: only increment if this scene hasn't already been counted
+    if (
+      (update.imageUrl || update.imageError) &&
+      !this.storyState.imageScenesDone.includes(update.sceneIndex)
+    ) {
+      this.storyState.imageScenesDone.push(update.sceneIndex);
       this.storyState.imagesCompleted++;
+    }
+
+    // Signal completion at most once across ALL update handlers
+    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
+      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isComplete = allDone && !this.storyState.completionSignaled;
+    if (isComplete) {
+      this.storyState.completionSignaled = true;
     }
 
     // Persist
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
-
-    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
 
     return new Response(JSON.stringify({
       success: true,
@@ -151,6 +172,8 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+      if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
     }
 
     // Check if cancelled
@@ -174,18 +197,27 @@ export class StoryCoordinator {
       };
     }
 
-    // Increment counter (reuse imagesCompleted as "visuals completed")
-    if (update.videoUrl || update.videoError) {
+    // Deduplicate: reuse imageScenesDone since video replaces image for the same visual slot
+    if (
+      (update.videoUrl || update.videoError) &&
+      !this.storyState.imageScenesDone.includes(update.sceneIndex)
+    ) {
+      this.storyState.imageScenesDone.push(update.sceneIndex);
       this.storyState.imagesCompleted++;
+    }
+
+    // Signal completion at most once across ALL update handlers
+    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
+      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isComplete = allDone && !this.storyState.completionSignaled;
+    if (isComplete) {
+      this.storyState.completionSignaled = true;
     }
 
     // Persist
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
-
-    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
 
     return new Response(JSON.stringify({
       success: true,
@@ -205,6 +237,8 @@ export class StoryCoordinator {
       if (!this.storyState) {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
+      if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
     }
 
     // Check if cancelled
@@ -235,16 +269,24 @@ export class StoryCoordinator {
       this.storyState.scenes[update.sceneIndex] = sceneUpdate;
     }
 
-    // Always increment audio counter (even if skipped due to no narration)
-    this.storyState.audioCompleted++;
+    // Deduplicate: only increment if this scene hasn't already been counted
+    if (!this.storyState.audioScenesDone.includes(update.sceneIndex)) {
+      this.storyState.audioScenesDone.push(update.sceneIndex);
+      this.storyState.audioCompleted++;
+    }
+
+    // Signal completion at most once across ALL update handlers
+    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
+      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isComplete = allDone && !this.storyState.completionSignaled;
+    if (isComplete) {
+      this.storyState.completionSignaled = true;
+    }
 
     // Persist
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Audio updated for scene ${update.sceneIndex}, total: ${this.storyState.audioCompleted}/${this.storyState.totalScenes}`);
-
-    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
 
     return new Response(JSON.stringify({
       success: true,
@@ -279,6 +321,7 @@ export class StoryCoordinator {
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
+      completionSignaled: this.storyState.completionSignaled || false,
       isCancelled: this.storyState.isCancelled || false,
       scenes: this.storyState.scenes,
     }));
@@ -324,6 +367,13 @@ export class StoryCoordinator {
         audioCompleted: this.storyState.audioCompleted,
         totalScenes: this.storyState.totalScenes,
       }));
+    }
+
+    // Guard against duplicate finalize calls (e.g. two callers raced to completion)
+    if (!this.storyState.completionSignaled) {
+      console.warn(`[StoryCoordinator] finalize called but completionSignaled was false — forcing it`);
+      this.storyState.completionSignaled = true;
+      await this.state.storage.put('storyState', this.storyState);
     }
 
     // Calculate total duration from scenes

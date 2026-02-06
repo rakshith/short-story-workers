@@ -1,7 +1,8 @@
 // Queue consumer worker for processing story generation jobs
 
-import { Env, QueueMessage } from './types/env';
+import { Env, QueueMessage, WebhookQueueMessage } from './types/env';
 import { processSceneImage, processSceneAudio, processSceneVideo } from './services/queue-processor';
+import { processWebhookInBackground } from './services/webhook-handler';
 import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
 import { sendStoryCompletionEmail } from './services/email-service';
@@ -371,5 +372,22 @@ export async function syncStoryToSupabase(
   } catch (error) {
     queueLogger.error('Error syncing to Supabase', error, { jobId: data.jobId });
     throw error; // Re-throw to be caught by the main queue catch block
+  }
+}
+
+/**
+ * Webhook queue consumer - processes Replicate webhook payloads (R2 upload, DO update, sync).
+ * Durable so work is not lost to Worker eviction; retries on failure.
+ */
+export async function handleWebhookQueue(batch: MessageBatch<WebhookQueueMessage>, env: Env): Promise<void> {
+  for (const message of batch.messages) {
+    try {
+      const { prediction, metadata } = message.body;
+      await processWebhookInBackground(prediction as any, metadata, env);
+      message.ack();
+    } catch (error) {
+      queueLogger.error('Webhook queue processing error', error, { storyId: message.body.metadata?.storyId, sceneIndex: message.body.metadata?.sceneIndex });
+      message.retry();
+    }
   }
 }

@@ -1,7 +1,7 @@
 // Main Cloudflare Worker entry point - Uses Queues + Durable Objects for async processing
 
-import { Env, QueueMessage } from './types/env';
-import { handleQueue } from './queue-consumer';
+import { Env, QueueMessage, WebhookQueueMessage } from './types/env';
+import { handleQueue, handleWebhookQueue } from './queue-consumer';
 import { handleStatus } from './routes/status';
 import { handleCancelStory } from './routes/cancel-story';
 import { handleCreateStory } from './routes/create-story';
@@ -77,9 +77,12 @@ export default {
   },
 
   /**
-   * Queue consumer - Processes story generation jobs
+   * Queue consumer - Story jobs or webhook processing (routed by batch.queue)
    */
-  async queue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
-    return handleQueue(batch, env);
+  async queue(batch: MessageBatch<QueueMessage | WebhookQueueMessage>, env: Env): Promise<void> {
+    if (batch.queue.includes('webhook-processing')) {
+      return handleWebhookQueue(batch as MessageBatch<WebhookQueueMessage>, env);
+    }
+    return handleQueue(batch as MessageBatch<QueueMessage>, env);
   },
 };

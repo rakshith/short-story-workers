@@ -6,7 +6,7 @@ import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 
 /** Metadata extracted from webhook URL, passed to background work */
-interface WebhookMetadata {
+export interface WebhookMetadata {
     storyId: string;
     sceneIndex: number;
     type: 'image' | 'video';
@@ -66,20 +66,25 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
 
     const metadata: WebhookMetadata = { storyId, sceneIndex, type, userId, seriesId, jobId, model };
 
+    // Queue path: durable processing, Replicate always gets 200; no waitUntil eviction
+    if (env.WEBHOOK_QUEUE) {
+        await env.WEBHOOK_QUEUE.send({ prediction, metadata });
+        return new Response('OK', { status: 200 });
+    }
+    // Fallback (e.g. dev without queue): waitUntil or sync
     if (ctx) {
-        // Fire-and-forget: return 200 immediately so Replicate gets a fast response; do heavy work in background
         ctx.waitUntil(processWebhookInBackground(prediction, metadata, env));
         return new Response('OK', { status: 200 });
     }
-    // No ctx (e.g. recover): run processing synchronously
     await processWebhookInBackground(prediction, metadata, env);
     return new Response('OK', { status: 200 });
 }
 
 /**
- * Runs in background after webhook responded: upload to R2, update DO, sync if complete.
+ * Runs in background (queue consumer or waitUntil): upload to R2, update DO, sync if complete.
+ * Exported for webhook queue consumer.
  */
-async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env): Promise<void> {
+export async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env): Promise<void> {
     const { storyId, sceneIndex, type, userId, seriesId, jobId, model } = metadata;
 
     try {

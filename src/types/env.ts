@@ -21,14 +21,29 @@ export interface QueueMessage {
   priority?: number; // Calculated priority from tier
 }
 
+/** Webhook queue: durable processing so Replicate always gets 200 without waitUntil eviction */
+export interface WebhookQueueMessage {
+  prediction: unknown;
+  metadata: {
+    storyId: string;
+    sceneIndex: number;
+    type: 'image' | 'video';
+    userId: string;
+    seriesId: string;
+    jobId: string;
+    model: string;
+  };
+}
+
 export interface Env {
   // R2 Buckets
   IMAGES_BUCKET: R2Bucket;
   AUDIO_BUCKET: R2Bucket;
   VIDEO_BUCKET: R2Bucket;
 
-  // Queue
+  // Queues
   STORY_QUEUE: Queue<QueueMessage>;
+  WEBHOOK_QUEUE?: Queue<WebhookQueueMessage>;
 
   // Durable Objects
   STORY_COORDINATOR: DurableObjectNamespace;
