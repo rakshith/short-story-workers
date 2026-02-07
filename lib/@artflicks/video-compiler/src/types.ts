@@ -27,6 +27,7 @@ export interface Story {
     audioDuration?: number;
     imagePrompt?: string;
     generatedImageUrl?: string;
+    generatedVideoUrl?: string;
     captions?: Array<{
       text: string;
       tokens?: Array<{

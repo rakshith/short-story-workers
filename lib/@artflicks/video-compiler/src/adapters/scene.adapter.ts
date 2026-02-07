@@ -41,7 +41,19 @@ export class SceneAdapter implements StoryAdapter {
       const sceneEnd = sceneStart + effectiveSceneDuration;
 
       /* ---------------- Visual Track ---------------- */
-      if (scene.generatedImageUrl || scene.imagePrompt) {
+      if (scene.generatedVideoUrl) {
+        // Video clip takes priority over still image
+        visual.push({
+          start: sceneStart,
+          end: sceneEnd,
+          payload: {
+            type: 'video',
+            url: scene.generatedVideoUrl,
+            prompt: scene.imagePrompt ?? null,
+            sceneNumber: scene.sceneNumber,
+          },
+        });
+      } else if (scene.generatedImageUrl || scene.imagePrompt) {
         visual.push({
           start: sceneStart,
           end: sceneEnd,
