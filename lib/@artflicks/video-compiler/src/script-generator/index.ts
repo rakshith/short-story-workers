@@ -24,7 +24,7 @@ export class ScriptGenerator {
         }
 
         const systemPrompt = template.getSystemPrompt(context);
-        const schema = template.getSchema();
+        const schema = template.getSchema(context);
 
         try {
             const { output, usage } = await generateText({

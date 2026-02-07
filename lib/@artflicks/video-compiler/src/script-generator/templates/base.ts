@@ -6,7 +6,7 @@ export abstract class BaseScriptTemplate implements ScriptTemplate {
 
     abstract getSystemPrompt(context: ScriptGenerationContext): string;
 
-    abstract getSchema(): z.ZodType<any>;
+    abstract getSchema(context?: ScriptGenerationContext): z.ZodType<any>;
 
     getConstraints(context: ScriptGenerationContext): any {
         return {};

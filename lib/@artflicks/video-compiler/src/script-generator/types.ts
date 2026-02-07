@@ -44,9 +44,10 @@ export interface ScriptTemplate {
     getSystemPrompt(context: ScriptGenerationContext): string;
 
     /**
-     * Returns the Zod schema for the output validation
+     * Returns the Zod schema for the output validation.
+     * Accepts optional context to build dynamic schemas (e.g. min scene count by duration).
      */
-    getSchema(): z.ZodType<any>;
+    getSchema(context?: ScriptGenerationContext): z.ZodType<any>;
 
     /**
      * Optional: Calculates scene plan or constraints

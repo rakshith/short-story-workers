@@ -1,19 +1,24 @@
 import { z } from 'zod';
 import { BaseScriptTemplate } from './base';
 import { ScriptGenerationContext, TemplateManifest } from '../types';
-import { CHARACTER_STORY_SCHEMA } from '../schema';
+import { createCharacterStorySchema, CHARACTER_STORY_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
+import { getScenePlan } from '../utils/scene-math';
 
 export class CharacterStoryTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
     id: ScriptTemplateIds.CHARACTER_STORY,
     name: 'Character Centric Story',
-    version: '1.0.0',
-    description: 'Generates a story with strict character consistency and defined visual style.',
-    tags: ['character', 'story', 'consistent', 'cinematic'],
+    version: '4.0.0',
+    description: 'Cinematic character story with rapid visual cuts. ~3s per scene, flowing narration.',
+    tags: ['character', 'story', 'cinematic', 'fast-paced'],
   };
 
-  getSchema(): z.ZodType<any> {
+  getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
+    if (context?.duration) {
+      const plan = getScenePlan(context.duration);
+      return createCharacterStorySchema(plan.minScenes);
+    }
     return CHARACTER_STORY_SCHEMA;
   }
 
@@ -24,90 +29,144 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
     } = context;
 
     const hasCharacterImages = characterReferenceImages && characterReferenceImages.length > 0;
+    const plan = getScenePlan(duration);
 
-    return `You are a professional film director and screenwriter. Your job is to transform the user's story idea into a scene-by-scene visual script for AI video generation.
-
-═══════════════════════════════════════════════════════════════
-                    PIPELINE OVERVIEW
-═══════════════════════════════════════════════════════════════
-1. USER INPUT: A story prompt/script describing what they want.
-2. YOUR OUTPUT: A structured JSON with scenes, narration, and image prompts.
-3. NEXT STEP: Each scene's imagePrompt will be sent to an AI image generator${hasCharacterImages ? ' WITH the character reference images attached' : ''}.
-4. FINAL: Images + audio narration are compiled into a video.
+    return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
 
 ═══════════════════════════════════════════════════════════════
-                    CHARACTER REFERENCE SYSTEM
+    ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════
+VIDEO DURATION: ${duration} seconds
+YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})
+TOTAL WORDS REQUIRED: ~${plan.totalWordsTarget} (range: ${plan.totalWordsMin}–${plan.totalWordsMax})
+
+${plan.sceneGuidance}
+
+═══════════════════════════════════════════════════════════════
+                    PIPELINE
+═══════════════════════════════════════════════════════════════
+1. YOUR OUTPUT: Structured JSON with scenes, narration, image prompts.
+2. Each scene's imagePrompt → AI image generator${hasCharacterImages ? ' + character reference images' : ''}.
+3. Each scene's narration → TTS audio (audio length = scene duration).
+4. Images + audio compiled into final video.
+
+~2.5 words per second. So ~8 words ≈ 3 seconds of audio.
+
+PER-SCENE RULES:
+• Target: ~${plan.perSceneWordsTarget} words per scene (~${plan.perSceneDurationTarget}s)
+• Hard max: ${plan.perSceneWordsMax} words (${plan.perSceneDurationMax}s). NEVER exceed this.
+• If a thought needs more → SPLIT into two scenes with two visuals.
+
+═══════════════════════════════════════════════════════════════
+    🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
+═══════════════════════════════════════════════════════════════
+The narration must flow as ONE continuous story. When you read
+ALL scenes aloud back-to-back, it should sound like a single
+seamless voiceover — like a documentary narrator telling a gripping
+character story while the camera keeps cutting to new visuals.
+
+SLIDESHOW (❌ WRONG):
+  Scene 1: "The hero was born in a small village."
+  Scene 2: "He had a difficult childhood."
+  Scene 3: "He found a sword."
+  → Disconnected facts. No momentum. Boring.
+
+CINEMATIC (✅ RIGHT):
+  Scene 1: "No one expected the boy from the village—"
+  Scene 2: "—to become the most feared warrior in the land."
+  Scene 3: "But the day he pulled that blade from the stone—"
+  Scene 4: "—everything changed."
+  → One flowing story. Each cut = new visual. Voice never stops.
+
+KEY PRINCIPLES:
+1. All scene narrations read as ONE flowing monologue
+2. Scene breaks = VISUAL changes, story never pauses
+3. Each scene connects naturally to the next
+4. Mid-sentence cuts create momentum
+5. Tension builds ACROSS scenes, not within one
+
+═══════════════════════════════════════════════════════════════
+                    CHARACTER SYSTEM
 ═══════════════════════════════════════════════════════════════
 ${hasCharacterImages
-        ? `✅ CHARACTER REFERENCE IMAGES PROVIDED (${characterReferenceImages.length} image(s))
+        ? `✅ CHARACTER REFERENCE IMAGES PROVIDED (${characterReferenceImages.length})
 
-The user has uploaded reference images of their MAIN CHARACTER.
-The image generation AI will use these to maintain visual consistency.
+The image AI will use these for visual consistency.
 
-CRITICAL RULES FOR imagePrompt:
-1. ❌ DO NOT describe the character's physical appearance (face, hair, body, clothes).
-2. ✅ DO describe the character's:
-   - Action/pose ("the protagonist running through rain")
-   - Emotion ("with a determined expression")
-   - Position in frame ("in the foreground, facing left")
-   - Interaction with environment ("reaching for the door handle")
-3. ✅ Always refer to them as "the main character", "the protagonist", or "the figure".
-4. ✅ The character MUST appear in EVERY scene's imagePrompt.
+imagePrompt RULES:
+1. ❌ DO NOT describe physical appearance (face, hair, body, clothes)
+2. ✅ DO describe: action/pose, emotion, position, environment interaction
+3. ✅ Refer to them as "the main character", "the protagonist", "the figure"
+4. ✅ Character MUST appear in EVERY imagePrompt`
+        : `⚠️ NO CHARACTER REFERENCE
 
-Example imagePrompt WITH reference:
-"The main character standing at the edge of a cliff, arms outstretched, silhouetted against a cinematic sunset. Wind blowing through the scene. Wide shot, dramatic lighting."`
-        : `⚠️ NO CHARACTER REFERENCE PROVIDED
-
-You must create and describe a consistent character yourself.
-- Define clear physical traits in the FIRST scene (age, hair, clothing, distinguishing features).
-- Repeat these EXACT traits in every subsequent imagePrompt.
-- Example: "A young woman with short silver hair and a red scarf, standing in the rain..."`}
+Define clear physical traits in Scene 1 and repeat EXACTLY in every imagePrompt.
+Example: "A young woman with short silver hair and a red scarf, standing in the rain..."`}
 
 ═══════════════════════════════════════════════════════════════
                     VISUAL STYLE
 ═══════════════════════════════════════════════════════════════
-Apply a consistent cinematic style to EVERY imagePrompt:
-- Match lighting, color palette, and mood.
-- Be specific: "cinematic lighting", "high contrast", "atmospheric".
+- Consistent cinematic style across ALL imagePrompts
+- Dramatic lighting, high contrast, atmospheric
+- EVERY scene must be visually DISTINCT (change angle, setting, or action)
+- The visual must match what's being narrated in that moment
 
 ═══════════════════════════════════════════════════════════════
-                    STORY STRUCTURE
+                    NARRATION RULES
 ═══════════════════════════════════════════════════════════════
-TOTAL DURATION: ${duration} seconds
-SCENE DURATIONS: 5 seconds OR 10 seconds only (for video inference compatibility)
-
-NARRATIVE ARC:
-- Scene 1: HOOK - Grab attention immediately. Show the character in a compelling situation.
-- Middle scenes: BUILD - Develop the story, raise stakes, show character's journey.
-- Final scene: PAYOFF - Resolve the story. Must feel complete, not abrupt.
+${plan.narrationGuidance}
 
 ═══════════════════════════════════════════════════════════════
-                    OUTPUT FORMAT (STRICT JSON)
+                    STORY ARC
+═══════════════════════════════════════════════════════════════
+SCENE 1 — HOOK (${plan.perSceneDurationMin}–${plan.perSceneDurationTarget}s)
+Character in a compelling moment. Instant intrigue.
+
+MIDDLE — RAPID CINEMATIC BUILD
+- One sentence per scene, story flows across cuts
+- Character at center of every visual
+- Rising stakes, emotional shifts
+- Mid-sentence cuts for momentum
+
+FINAL — PAYOFF
+- Resolve the character's journey
+- Emotional closure, complete sentence
+
+═══════════════════════════════════════════════════════════════
+                    OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
 {
-  "title": "Short, catchy title (4-8 words)",
+  "title": "4-8 words",
   "totalDuration": ${duration},
-  "scenes": [
-    {
-      "sceneNumber": 1,
-      "duration": 5 or 10,
-      "narration": "Voiceover text. 2-3 sentences. Engaging and emotional.",
-      "details": "Brief internal note about what happens (not shown to viewer).",
-      "imagePrompt": "DETAILED scene description. ${hasCharacterImages ? 'Character actions/pose only.' : 'Include character appearance.'} Environment, lighting, camera angle, cinematic style.",
-      "cameraAngle": "close-up | medium shot | wide shot | birds-eye | low angle",
-      "mood": "tense | hopeful | melancholic | triumphant | mysterious"
-    }
-  ]
+  "scenes": [{
+    "sceneNumber": 1,
+    "duration": <words ÷ 2.5, rounded>,
+    "narration": "${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. One flowing sentence.",
+    "details": "Internal note.",
+    "imagePrompt": "Character-centric. ${hasCharacterImages ? 'Actions/pose only.' : 'Include appearance.'} Cinematic.",
+    "cameraAngle": "close-up | medium shot | wide shot | birds-eye | low angle | over-the-shoulder",
+    "mood": "tense | hopeful | melancholic | triumphant | mysterious | peaceful | dramatic | romantic"
+  }]
 }
 
 ═══════════════════════════════════════════════════════════════
-                    FINAL CHECKLIST
+                    RULES
 ═══════════════════════════════════════════════════════════════
-✓ Total scene durations add up to ${duration} seconds
-✓ Every imagePrompt features the main character
-✓ Narration fits scene duration (5s ≈ 12-15 words, 10s ≈ 25-30 words)
-✓ Story has clear beginning, middle, and end
-✓ Final scene provides resolution
+✓ AT LEAST ${plan.minScenes} scenes (target ${plan.targetScenes})
+✓ Each scene: ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words MAX
+✓ Total narration: ${plan.totalWordsMin}–${plan.totalWordsMax} words
+✓ All narrations read as ONE flowing story
+✓ No scene over ${plan.perSceneDurationMax}s
+✓ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s
+✓ Character in every imagePrompt
+✓ Story resolves — not cut off
+
+FAIL CONDITIONS (output will be REJECTED):
+❌ Fewer than ${plan.minScenes} scenes — video will be too SHORT
+❌ Total words under ${plan.totalWordsMin} — won't reach ${duration}s
+❌ Any scene over ${plan.perSceneWordsMax} words
+❌ Narration reads like disconnected facts (slideshow)
+❌ Story unfinished
 `;
   }
 }

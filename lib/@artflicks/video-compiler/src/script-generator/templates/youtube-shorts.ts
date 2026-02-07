@@ -2,19 +2,23 @@ import { z } from 'zod';
 import { BaseScriptTemplate } from './base';
 import { ScriptGenerationContext, TemplateManifest } from '../types';
 import { getScenePlan } from '../utils/scene-math';
-import { YOUTUBE_SHORTS_SCHEMA } from '../schema';
+import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
 
 export class YouTubeShortsTemplate extends BaseScriptTemplate {
     manifest: TemplateManifest = {
         id: ScriptTemplateIds.YOUTUBE_SHORTS,
         name: 'YouTube Shorts',
-        version: '1.0.0',
-        description: 'Fast-paced, viral style YouTube Shorts script with 5s/10s scenes.',
-        tags: ['youtube', 'shorts', 'viral', 'fast-paced'],
+        version: '4.0.0',
+        description: 'Cinematic fast-paced storytelling. ~3s per scene, flowing narration with rapid visual cuts.',
+        tags: ['youtube', 'shorts', 'viral', 'cinematic', 'fast-paced'],
     };
 
-    getSchema(): z.ZodType<any> {
+    getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
+        if (context?.duration) {
+            const plan = getScenePlan(context.duration);
+            return createYouTubeShortsSchema(plan.minScenes);
+        }
         return YOUTUBE_SHORTS_SCHEMA;
     }
 
@@ -24,112 +28,137 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
             language = 'en'
         } = context;
 
-        // TODO: Determine language name from code if possible, or pass it in context
-        // For now using code as name if name not provided, but ideally we should map it
         const languageName = this.getLanguageName(language);
         const languageCode = language;
-
-        // --- Scene Plan ---
         const plan = getScenePlan(duration);
 
-        const {
-            totalScenes,
-            sceneGuidance,
-            min5,
-            tgt5,
-            max5,
-            min10,
-            tgt10,
-            max10,
-            num5sScenes,
-            num10sScenes,
-            tolerance,
-        } = plan;
+        return `You are an elite YouTube Shorts scriptwriter. You create cinematic, scene-by-scene scripts for AI video generation that grip viewers from first second to last.
 
-        const totalMax = (num5sScenes * max5) + (num10sScenes * max10);
-        const totalMin = (num5sScenes * min5) + (num10sScenes * min10);
+═══════════════════════════════════════════════════════════════
+    ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
+═══════════════════════════════════════════════════════════════
+VIDEO DURATION: ${duration} seconds
+YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})
+TOTAL WORDS REQUIRED: ~${plan.totalWordsTarget} (range: ${plan.totalWordsMin}–${plan.totalWordsMax})
 
-        return `You are an elite YouTube Shorts scriptwriter and viral content specialist. You create scene-by-scene scripts for AI video generation that HOOK viewers instantly and keep them watching until the very last second.
+${plan.sceneGuidance}
 
 LANGUAGE REQUIREMENT:
-- All narration and details MUST be written in ${languageName} (language code: ${languageCode})
-- The "imagePrompt" field MUST ALWAYS be written in English
+- All narration and details: ${languageName} (${languageCode})
+- imagePrompt: ALWAYS in English
 
-TITLE REQUIREMENT:
-- Short, punchy, 4–8 words max
+TITLE: Short, punchy, 4–8 words max.
 
-VIDEO DURATION:
-- Target: ${duration} seconds
-- Acceptable range: ${tolerance.min}–${tolerance.max} seconds
-- Number of scenes: ${totalScenes}
-${sceneGuidance}
+═══════════════════════════════════════════════════════════════
+                HOW THIS WORKS
+═══════════════════════════════════════════════════════════════
+Your narration → converted to speech (TTS) → audio length = scene duration.
+~2.5 words per second. So ~8 words ≈ 3 seconds of audio.
 
-WORD COUNT PER SCENE TYPE (FLEXIBLE RANGES):
-• 5s scenes: ${min5}–${max5} words (target: ${tgt5})
-• 10s scenes: ${min10}–${max10} words (target: ${tgt10})
+Each scene = ONE image/video on screen.
+You control pacing by controlling narration length per scene.
 
-IMPORTANT: If narration feels too short to fill the scene, ADD MORE WORDS up to the MAX.
-The goal is to FILL the ${duration} seconds naturally — not leave dead air.
+PER-SCENE RULES:
+• Target: ~${plan.perSceneWordsTarget} words per scene (~${plan.perSceneDurationTarget}s)
+• Hard max: ${plan.perSceneWordsMax} words (${plan.perSceneDurationMax}s). NEVER exceed this.
+• If a thought needs more → SPLIT into two scenes with two visuals.
 
-Scene breakdown:
-• ${num5sScenes}× 5-second scenes
-${num10sScenes > 0 ? `• ${num10sScenes}× 10-second scenes` : ''}
+═══════════════════════════════════════════════════════════════
+    🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
+═══════════════════════════════════════════════════════════════
+The narration must flow as ONE continuous story. When you read
+ALL scenes aloud back-to-back, it should sound like a single
+seamless voiceover — like a documentary narrator telling a gripping
+story while the camera keeps cutting to new visuals.
 
-TOTAL WORDS: ${totalMin}–${totalMax}
+SLIDESHOW (❌ WRONG — disconnected, choppy, boring):
+  Scene 1: "Grace O'Malley was an Irish pirate queen."
+  Scene 2: "She was also known as Granuaile."
+  Scene 3: "She gave birth on a ship."
+  Scene 4: "A Turkish ship attacked."
+  → Each scene is an isolated fact. No flow. No grip. Viewer scrolls away.
 
-SCENE 1 — HOOK IMMEDIATELY.
-Use curiosity, conflict, bold claims, or transformation.
+CINEMATIC (✅ RIGHT — flowing, gripping, one continuous story):
+  Scene 1: "In 1593, a sixty-year-old pirate walked into the English court—"
+  Scene 2: "—and looked Queen Elizabeth dead in the eye."
+  Scene 3: "Her name was Grace O'Malley."
+  Scene 4: "They called her the sea queen of Ireland—"
+  Scene 5: "—and she'd come to negotiate the release of her sons."
+  Scene 6: "Neither spoke the other's language."
+  Scene 7: "So they spoke in Latin."
+  Scene 8: "And Elizabeth, for the first time, listened."
+  → One flowing story. Each scene CUTs to a new visual. The voice NEVER pauses.
+  → The viewer is hooked because the story pulls them forward across every cut.
 
-Maintain tension loops:
-- open questions
-- rising stakes
-- micro-cliffhangers
-- reversals
-- emotional beats
+KEY PRINCIPLES:
+1. The narration across all scenes reads as ONE flowing monologue
+2. Scene breaks are for VISUAL changes — the story never stops
+3. Each scene's narration connects naturally to the next
+4. Use mid-sentence scene breaks for momentum ("she reached for—" / "—the door")
+5. Build tension ACROSS scenes, not within one scene
 
-FINAL SCENE — MANDATORY PAYOFF.
-The final scene MUST:
-- resolve the core tension or question
-- provide emotional closure
-- end with a complete sentence
-- feel intentionally finished — NOT abruptly cut off
+═══════════════════════════════════════════════════════════════
+                    NARRATION RULES
+═══════════════════════════════════════════════════════════════
+${plan.narrationGuidance}
 
-SCENE STRUCTURE (for EVERY scene):
-1. sceneNumber
-2. duration (5 or 10 ONLY)
-3. narration (MUST fit word limits)
-4. details (internal — NOT spoken)
-5. imagePrompt (English, cinematic & scroll-stopping)
-6. cameraAngle
-7. mood
+═══════════════════════════════════════════════════════════════
+                    STORY ARC
+═══════════════════════════════════════════════════════════════
+SCENE 1 — HOOK (${plan.perSceneDurationMin}–${plan.perSceneDurationTarget}s)
+One jaw-dropping opening line. Curiosity, conflict, or bold claim.
 
-IMAGE PROMPT RULES:
-- dramatic lighting
-- strong colors
-- emotion-focused
-- cinematic composition
-- Scene 1 must be MOST striking
+MIDDLE — RAPID CINEMATIC BUILD
+- One sentence per scene, story flows across cuts
+- Rising stakes with every visual change
+- Tension loops: questions opened, answered scenes later
+- Emotional shifts scene-to-scene
+- Mid-sentence cuts for momentum
 
-CRITICAL RULES:
-✔ Write EXACTLY ${totalScenes} scenes
-✔ Each 5s scene = ${min5}–${tgt5} words ONLY
-✔ Each 10s scene = ${min10}–${tgt10} words ONLY
-✔ Total duration within ${tolerance.min}–${tolerance.max} seconds
-✔ Complete the story — no truncation
-✔ Final scene delivers resolution
+FINAL SCENE — PAYOFF
+- Resolve the story, emotional closure
+- Complete sentence — not cut off
+- Viewer should feel satisfied
 
-FAIL CONDITIONS:
-❌ More or fewer than ${totalScenes} scenes
-❌ Scene narration outside word limits
-❌ Duration outside ${tolerance.min}–${tolerance.max}s range
-❌ Story cut off before resolution
+═══════════════════════════════════════════════════════════════
+                    SCENE OUTPUT
+═══════════════════════════════════════════════════════════════
+Each scene:
+1. sceneNumber — sequential
+2. duration — word count ÷ 2.5, rounded
+3. narration — ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. ONE flowing sentence.
+4. details — internal notes (not spoken)
+5. imagePrompt — English. Cinematic, dramatic, visually distinct per scene.
+6. cameraAngle — shot type
+7. mood — emotional tone
 
-Your goal: create cinematic, emotionally compelling micro-stories that viewers CANNOT scroll past.
+IMAGE PROMPTS:
+- Dramatic lighting, strong colors, cinematic composition
+- Scene 1 = most striking visual
+- EVERY scene must look visually DIFFERENT (change angle, setting, lighting, or subject)
+- The visual should match what's being narrated in that moment
+
+═══════════════════════════════════════════════════════════════
+                    RULES
+═══════════════════════════════════════════════════════════════
+✔ AT LEAST ${plan.minScenes} scenes (target ${plan.targetScenes})
+✔ Each scene: ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words MAX
+✔ Total narration: ${plan.totalWordsMin}–${plan.totalWordsMax} words
+✔ All scene narrations read as ONE flowing story back-to-back
+✔ duration = word count ÷ 2.5
+✔ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s
+✔ Story completes with resolution
+
+FAIL CONDITIONS (your output will be REJECTED if any of these are true):
+❌ Fewer than ${plan.minScenes} scenes — this means the video will be too SHORT
+❌ Total words under ${plan.totalWordsMin} — the video won't reach ${duration}s
+❌ Any scene over ${plan.perSceneWordsMax} words
+❌ Narration reads like disconnected facts (slideshow feel)
+❌ Story unfinished or cut off
 `;
     }
 
     private getLanguageName(code: string): string {
-        // Basic mapping, can be expanded or injected
         const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
         try {
             return displayNames.of(code) || code;
