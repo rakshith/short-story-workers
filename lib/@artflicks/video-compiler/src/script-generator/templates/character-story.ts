@@ -17,7 +17,11 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
   getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
     if (context?.duration) {
       const plan = getScenePlan(context.duration);
-      return createCharacterStorySchema(plan.minScenes);
+      return createCharacterStorySchema({
+        minScenes: plan.minScenes,
+        totalWordsMin: plan.totalWordsMin,
+        durationSeconds: plan.durationSeconds,
+      });
     }
     return CHARACTER_STORY_SCHEMA;
   }

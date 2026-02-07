@@ -1,6 +1,19 @@
 import { z } from "zod";
 
 // ═══════════════════════════════════════════════════════════════
+// SCHEMA CONSTRAINTS (passed from templates at runtime)
+// ═══════════════════════════════════════════════════════════════
+
+export interface SchemaConstraints {
+    /** Minimum number of scenes (Zod .min() on the scenes array) */
+    minScenes: number;
+    /** Minimum total narration words across ALL scenes (Zod .refine()) */
+    totalWordsMin: number;
+    /** Target duration in seconds (used in error messages) */
+    durationSeconds: number;
+}
+
+// ═══════════════════════════════════════════════════════════════
 // SCENE OBJECT SCHEMAS (shared shape, reusable)
 // ═══════════════════════════════════════════════════════════════
 
@@ -25,36 +38,67 @@ const characterStorySceneSchema = z.object({
 });
 
 // ═══════════════════════════════════════════════════════════════
-// DYNAMIC SCHEMA FACTORIES
-// These enforce minimum scene count via Zod .min() validation.
-// If the LLM generates fewer scenes, Zod will reject the output.
+// HELPER — count total narration words across all scenes
 // ═══════════════════════════════════════════════════════════════
 
-export function createYouTubeShortsSchema(minScenes: number) {
+function countTotalNarrationWords(scenes: { narration: string }[]): number {
+    return scenes.reduce(
+        (sum, s) => sum + s.narration.split(/\s+/).filter(Boolean).length,
+        0
+    );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DYNAMIC SCHEMA FACTORIES
+//
+// Two layers of Zod enforcement:
+//   1. .min(minScenes) — rejects if too few scenes
+//   2. .refine(totalWordsMin) — rejects if narration is too short
+//
+// If the LLM under-generates, Zod catches it at parse time.
+// ═══════════════════════════════════════════════════════════════
+
+export function createYouTubeShortsSchema(constraints: SchemaConstraints) {
+    const { minScenes, totalWordsMin, durationSeconds } = constraints;
+
     return z.object({
         title: z.string().describe('Short, punchy title (3-6 words MAX). Catchy, intriguing, or hook-driven.'),
         totalDuration: z.number().describe('Estimated total duration in seconds (sum of all scene durations)'),
         scenes: z.array(youtubeShortsSceneSchema)
-            .min(minScenes, `Must have at least ${minScenes} scenes to fill the target duration`)
-            .describe(`Array of scenes. MINIMUM ${minScenes} scenes required.`)
-    });
+            .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
+            .describe(`Array of scenes. MINIMUM ${minScenes} scenes required, with at least ${totalWordsMin} total narration words.`)
+    }).refine(
+        (data) => countTotalNarrationWords(data.scenes) >= totalWordsMin,
+        {
+            message: `Total narration must be at least ${totalWordsMin} words to fill ${durationSeconds}s of video. The generated narration is too short.`,
+            path: ['scenes'],
+        }
+    );
 }
 
-export function createCharacterStorySchema(minScenes: number) {
+export function createCharacterStorySchema(constraints: SchemaConstraints) {
+    const { minScenes, totalWordsMin, durationSeconds } = constraints;
+
     return z.object({
         title: z.string().describe('Compelling story title (4-8 words). Should hint at the character journey.'),
         totalDuration: z.number().describe('Estimated total duration in seconds (sum of all scene durations)'),
         scenes: z.array(characterStorySceneSchema)
-            .min(minScenes, `Must have at least ${minScenes} scenes to fill the target duration`)
-            .describe(`Array of scenes. MINIMUM ${minScenes} scenes required.`)
-    });
+            .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
+            .describe(`Array of scenes. MINIMUM ${minScenes} scenes required, with at least ${totalWordsMin} total narration words.`)
+    }).refine(
+        (data) => countTotalNarrationWords(data.scenes) >= totalWordsMin,
+        {
+            message: `Total narration must be at least ${totalWordsMin} words to fill ${durationSeconds}s of video. The generated narration is too short.`,
+            path: ['scenes'],
+        }
+    );
 }
 
 // ═══════════════════════════════════════════════════════════════
-// STATIC SCHEMAS (backward-compatible defaults, no min enforced)
+// STATIC SCHEMAS (backward-compatible defaults, no strict enforcement)
 // ═══════════════════════════════════════════════════════════════
-export const YOUTUBE_SHORTS_SCHEMA = createYouTubeShortsSchema(1);
-export const CHARACTER_STORY_SCHEMA = createCharacterStorySchema(1);
+export const YOUTUBE_SHORTS_SCHEMA = createYouTubeShortsSchema({ minScenes: 1, totalWordsMin: 1, durationSeconds: 0 });
+export const CHARACTER_STORY_SCHEMA = createCharacterStorySchema({ minScenes: 1, totalWordsMin: 1, durationSeconds: 0 });
 
 // Legacy alias
 export const SCRIPT_WRITER_SCENE_SCHEMA = YOUTUBE_SHORTS_SCHEMA;

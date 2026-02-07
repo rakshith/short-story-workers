@@ -22,15 +22,21 @@ export const NARRATION_WPS = {
 /**
  * Scene count guidelines per total video duration.
  *
- * ~3s per scene target = rapid visual changes.
- * For reference: top-tier apps do 10–12 scenes for 30s.
+ * min = FLOOR that guarantees the target duration even at ~2.7s avg/scene.
+ *   Formula: min = ceil(toleranceMin / 2.7)
+ * target = ideal scene count at ~3s/scene.
+ * max = upper bound before scenes feel too choppy.
+ *
+ * The LLM tends to generate near `min`, so `min` must be high enough
+ * on its own to fill the duration. This was learned from production:
+ * 15 min scenes for 60s only produced 41s of actual video.
  */
 export const SCENE_COUNT_GUIDE: Record<number, { min: number; target: number; max: number }> = {
-    15: { min: 4, target: 5, max: 6 },       // ~3s per scene
-    30: { min: 8, target: 10, max: 12 },      // ~3s per scene  (industry standard)
-    60: { min: 15, target: 18, max: 22 },     // ~3-3.5s per scene
-    120: { min: 28, target: 35, max: 42 },    // ~3-3.5s per scene
-    180: { min: 40, target: 48, max: 55 },    // ~3.5-4s per scene
+    15: { min: 5, target: 6, max: 8 },        // 5×2.7=13.5s  (tol: 13–17) ✓
+    30: { min: 10, target: 12, max: 14 },      // 10×2.7=27s   (tol: 27–33) ✓
+    60: { min: 21, target: 24, max: 28 },      // 21×2.7=56.7s (tol: 55–65) ✓
+    120: { min: 41, target: 46, max: 52 },     // 41×2.7=110.7s(tol: 110–130) ✓
+    180: { min: 62, target: 68, max: 76 },     // 62×2.7=167.4s(tol: 165–195) ✓
 };
 
 /**

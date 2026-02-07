@@ -17,7 +17,11 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
     getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
         if (context?.duration) {
             const plan = getScenePlan(context.duration);
-            return createYouTubeShortsSchema(plan.minScenes);
+            return createYouTubeShortsSchema({
+                minScenes: plan.minScenes,
+                totalWordsMin: plan.totalWordsMin,
+                durationSeconds: plan.durationSeconds,
+            });
         }
         return YOUTUBE_SHORTS_SCHEMA;
     }
