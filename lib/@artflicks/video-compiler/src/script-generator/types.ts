@@ -6,6 +6,8 @@ export interface ScriptGenerationContext {
     language?: string; // e.g. 'en', 'es', 'fr'
     model?: string; // Model name for logging/tracking
     topic?: string;
+    // Media type: 'image' (default, ~3s scenes) or 'video' (~5-10s scenes)
+    mediaType?: 'image' | 'video';
     // Character consistency via reference images
     characterReferenceImages?: string[]; // Array of image URLs for character reference
 }

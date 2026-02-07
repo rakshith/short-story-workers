@@ -3,6 +3,8 @@ import {
     SCENE_COUNT_GUIDE,
     SCENE_DURATION_GUIDE,
     DURATION_TOLERANCE,
+    VIDEO_SCENE_COUNT_GUIDE,
+    VIDEO_SCENE_DURATION_GUIDE,
 } from '../constants';
 
 // ═══════════════════════════════════════════════════════════════
@@ -46,7 +48,7 @@ export interface ScenePlan {
     narrationGuidance: string;
 }
 
-export function getScenePlan(durationSeconds: number): ScenePlan {
+export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'video' = 'image'): ScenePlan {
     // ---------- VALIDATION ----------
     if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) {
         throw new Error('durationSeconds must be a positive number.');
@@ -59,11 +61,16 @@ export function getScenePlan(durationSeconds: number): ScenePlan {
         );
     }
 
+    // ---------- SELECT GUIDES BASED ON MEDIA TYPE ----------
+    const isVideo = mediaType === 'video';
+    const sceneCountGuide = isVideo ? VIDEO_SCENE_COUNT_GUIDE : SCENE_COUNT_GUIDE;
+    const sceneDurationGuide = isVideo ? VIDEO_SCENE_DURATION_GUIDE : SCENE_DURATION_GUIDE;
+
     // ---------- SCENE COUNT ----------
-    const sceneGuide = SCENE_COUNT_GUIDE[durationSeconds] ?? {
-        min: Math.max(3, Math.floor(durationSeconds / 4)),
-        target: Math.round(durationSeconds / 3),
-        max: Math.ceil(durationSeconds / 2.5),
+    const sceneGuide = sceneCountGuide[durationSeconds] ?? {
+        min: Math.max(3, Math.floor(durationSeconds / (isVideo ? 10 : 4))),
+        target: Math.round(durationSeconds / (isVideo ? 7 : 3)),
+        max: Math.ceil(durationSeconds / (isVideo ? 5 : 2.5)),
     };
 
     const { min: minScenes, target: targetScenes, max: maxScenes } = sceneGuide;
@@ -75,7 +82,7 @@ export function getScenePlan(durationSeconds: number): ScenePlan {
 
     // ---------- PER-SCENE WORD COUNT ----------
     // Hard cap: max words per scene = max duration × max WPS
-    const absoluteMaxWordsPerScene = Math.round(SCENE_DURATION_GUIDE.max * NARRATION_WPS.max);  // 4s × 2.8 = ~11 words
+    const absoluteMaxWordsPerScene = Math.round(sceneDurationGuide.max * NARRATION_WPS.max);  // image: 4×2.8=~11, video: 10×2.8=~28
     const perSceneWordsTarget = Math.round(totalWordsTarget / targetScenes);
     const perSceneWordsMin = Math.max(5, Math.round(totalWordsMin / maxScenes));
     const perSceneWordsMax = Math.min(
@@ -84,9 +91,9 @@ export function getScenePlan(durationSeconds: number): ScenePlan {
     );
 
     // ---------- PER-SCENE DURATION ----------
-    const perSceneDurationTarget = SCENE_DURATION_GUIDE.target;   // 3s
-    const perSceneDurationMin = SCENE_DURATION_GUIDE.min;         // 2s
-    const perSceneDurationMax = SCENE_DURATION_GUIDE.max;         // 4s
+    const perSceneDurationTarget = sceneDurationGuide.target;   // image: 3s, video: 7s
+    const perSceneDurationMin = sceneDurationGuide.min;         // image: 2s, video: 5s
+    const perSceneDurationMax = sceneDurationGuide.max;         // image: 4s, video: 10s
 
     // ---------- DURATION TOLERANCE ----------
     const tolerance = DURATION_TOLERANCE[durationSeconds] ?? {

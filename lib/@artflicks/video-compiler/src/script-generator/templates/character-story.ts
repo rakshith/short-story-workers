@@ -16,7 +16,7 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
 
   getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
     if (context?.duration) {
-      const plan = getScenePlan(context.duration);
+      const plan = getScenePlan(context.duration, context.mediaType || 'image');
       return createCharacterStorySchema({
         minScenes: plan.minScenes,
         totalWordsMin: plan.totalWordsMin,
@@ -29,11 +29,12 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
   getSystemPrompt(context: ScriptGenerationContext): string {
     const {
       duration,
-      characterReferenceImages
+      characterReferenceImages,
+      mediaType = 'image'
     } = context;
 
     const hasCharacterImages = characterReferenceImages && characterReferenceImages.length > 0;
-    const plan = getScenePlan(duration);
+    const plan = getScenePlan(duration, mediaType);
 
     return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
 

@@ -16,7 +16,7 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
 
     getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
         if (context?.duration) {
-            const plan = getScenePlan(context.duration);
+            const plan = getScenePlan(context.duration, context.mediaType || 'image');
             return createYouTubeShortsSchema({
                 minScenes: plan.minScenes,
                 totalWordsMin: plan.totalWordsMin,
@@ -29,12 +29,13 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
     getSystemPrompt(context: ScriptGenerationContext): string {
         const {
             duration,
-            language = 'en'
+            language = 'en',
+            mediaType = 'image'
         } = context;
 
         const languageName = this.getLanguageName(language);
         const languageCode = language;
-        const plan = getScenePlan(duration);
+        const plan = getScenePlan(duration, mediaType);
 
         return `You are an elite YouTube Shorts scriptwriter. You create cinematic, scene-by-scene scripts for AI video generation that grip viewers from first second to last.
 

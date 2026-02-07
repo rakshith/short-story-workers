@@ -13,6 +13,8 @@ export interface ScriptGenerationParams {
   language?: string;
   model?: string;
   templateId?: string;
+  // Media type: 'image' (many short scenes) or 'video' (fewer longer scenes)
+  mediaType?: 'image' | 'video';
   // Allow passing extra context fields for specific templates
   characterReferenceImages?: string[];
 }
@@ -38,6 +40,7 @@ export async function generateScript(
     language = 'en',
     model,
     templateId,
+    mediaType,
     characterReferenceImages
   } = params;
 
@@ -57,6 +60,7 @@ export async function generateScript(
       duration,
       language,
       model: model || 'gpt-5.2',
+      mediaType,
       characterReferenceImages
     }, templateId || ScriptTemplateIds.YOUTUBE_SHORTS);
 

@@ -62,6 +62,43 @@ export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = 
     180: { min: 165, max: 195 },
 };
 
+// ═══════════════════════════════════════════════════════════════
+// VIDEO-CLIP MODE CONSTANTS
+//
+// When mediaType === 'video', each scene becomes an AI-generated
+// video clip (5–10s) instead of a still image (~3s). Fewer scenes,
+// longer holds, lower cost, and the motion carries the visuals.
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Per-scene duration guidelines for VIDEO mode (seconds).
+ *
+ * Target: ~7s — a full cinematic moment with motion.
+ * Min: 5s — short punchy clip.
+ * Max: 10s — HARD CAP per clip.
+ */
+export const VIDEO_SCENE_DURATION_GUIDE = {
+    min: 5,     // short punchy video clip
+    target: 7,  // sweet spot — one sentence, one moving visual
+    max: 10,    // absolute max per clip
+} as const;
+
+/**
+ * Scene count guidelines for VIDEO mode per total video duration.
+ *
+ * Fewer scenes than image mode because each clip already has motion.
+ * min = ceil(toleranceMin / maxDuration)
+ * target = round(duration / targetDuration)
+ * max = ceil(toleranceMax / minDuration)
+ */
+export const VIDEO_SCENE_COUNT_GUIDE: Record<number, { min: number; target: number; max: number }> = {
+    15: { min: 2, target: 2, max: 3 },         // 2×7=14s  (tol: 13–17) ✓
+    30: { min: 3, target: 4, max: 6 },          // 4×7=28s  (tol: 27–33) ✓
+    60: { min: 6, target: 9, max: 12 },         // 9×7=63s  (tol: 55–65) ✓
+    120: { min: 11, target: 17, max: 22 },      // 17×7=119s(tol: 110–130) ✓
+    180: { min: 17, target: 26, max: 32 },      // 26×7=182s(tol: 165–195) ✓
+};
+
 // Legacy export kept for backward compatibility
 export const SCENE_WORD_LIMITS = {
     SCENE_5S: {
