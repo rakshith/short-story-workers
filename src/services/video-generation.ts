@@ -11,6 +11,8 @@ export interface VideoGenerationParams {
     width: number;
     height: number;
     resolution: string;
+    /** Scene duration in seconds (5 or 10 for video). Passed to the video model when supported. */
+    duration?: number;
     aspect_ratio?: string;
     seed?: number;
     videoConfig: VideoConfig;
@@ -47,6 +49,10 @@ export async function triggerVideoGeneration(
         prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
     };
 
+    // Scene duration (5 or 10s) — many Replicate video models accept duration
+    if (params.duration !== undefined && params.duration > 0) {
+        input.duration = params.duration;
+    }
     // Video models often use aspect_ratio instead of width/height
     if (params.aspect_ratio) {
         input.aspect_ratio = params.aspect_ratio;

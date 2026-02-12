@@ -26,12 +26,13 @@ export class ScriptGenerator {
         const systemPrompt = template.getSystemPrompt(context);
         const schema = template.getSchema(context);
 
+        const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
         try {
             const { output, usage } = await generateText({
                 model: this.model,
                 system: systemPrompt,
                 prompt: context.prompt,
-                temperature: 0.7,
+                temperature,
                 output: Output.object({
                     schema,
                 }),
@@ -56,11 +57,39 @@ export class ScriptGenerator {
                     : undefined,
             };
         } catch (error) {
-            console.error('[ScriptGenerator] Error:', error);
+            const err = error instanceof Error ? error : new Error(String(error));
+            const message = err.message;
+
+            // Log detailed schema validation info when response didn't match schema
+            if (message.includes('did not match schema') || message.includes('No object generated')) {
+                console.error('[ScriptGenerator] Schema validation failed:', message);
+                if (err.cause) {
+                    console.error('[ScriptGenerator] Cause:', err.cause);
+                    const cause = err.cause as Error & { issues?: unknown[]; format?: () => unknown };
+                    if (cause.issues) {
+                        console.error('[ScriptGenerator] Zod issues:', JSON.stringify(cause.issues, null, 2));
+                    }
+                    if (typeof cause.format === 'function') {
+                        try {
+                            console.error('[ScriptGenerator] Zod format:', JSON.stringify(cause.format(), null, 2));
+                        } catch (_) {}
+                    }
+                }
+                // Log any extra details the SDK may attach
+                const raw = error as Record<string, unknown>;
+                if (raw.validationErrors) {
+                    console.error('[ScriptGenerator] validationErrors:', JSON.stringify(raw.validationErrors, null, 2));
+                }
+                if (raw.response !== undefined) {
+                    console.error('[ScriptGenerator] response:', typeof raw.response === 'string' ? raw.response.slice(0, 500) : raw.response);
+                }
+            } else {
+                console.error('[ScriptGenerator] Error:', error);
+            }
 
             return {
                 success: false,
-                error: error instanceof Error ? error.message : 'Unknown error',
+                error: message,
                 systemPrompt, // useful for debugging
             };
         }

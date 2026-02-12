@@ -53,13 +53,18 @@ export async function generateScript(
     // but static import is fine given we added paths
     const { ScriptGenerator, ScriptTemplateIds } = await import('@artflicks/video-compiler');
 
-    const generator = new ScriptGenerator(openai(model || 'gpt-5.2'));
+    // Video mode requires a capable model for reliable structured output (word-count adherence).
+    // Force gpt-5.2 minimum for video; respect caller's choice for image mode.
+    const VIDEO_MIN_MODEL = 'gpt-5.2';
+    // const effectiveModel = mediaType === 'video' ? VIDEO_MIN_MODEL : (model || 'gpt-5.2');
+    const effectiveModel = 'gpt-5.2';
+    const generator = new ScriptGenerator(openai(effectiveModel));
 
     const result = await generator.generate({
       prompt,
       duration,
       language,
-      model: model || 'gpt-5.2',
+      model: effectiveModel,
       mediaType,
       characterReferenceImages
     }, templateId || ScriptTemplateIds.YOUTUBE_SHORTS);

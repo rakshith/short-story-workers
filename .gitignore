@@ -7,4 +7,5 @@ logs/
 .env.local
 .dev.vars
 .DS_Store
-
+.agent/
+.cursor/

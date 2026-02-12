@@ -4,6 +4,7 @@ import { ScriptGenerationContext, TemplateManifest } from '../types';
 import { createCharacterStorySchema, CHARACTER_STORY_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
 import { getScenePlan } from '../utils/scene-math';
+import { VIDEO_NARRATION_WPS } from '../constants';
 
 export class CharacterStoryTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
@@ -21,6 +22,7 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
         minScenes: plan.minScenes,
         totalWordsMin: plan.totalWordsMin,
         durationSeconds: plan.durationSeconds,
+        mediaType: context.mediaType,
       });
     }
     return CHARACTER_STORY_SCHEMA;
@@ -37,7 +39,15 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
     const plan = getScenePlan(duration, mediaType);
 
     return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
-
+${mediaType === 'video' ? `
+═══════════════════════════════════════════════════════════════
+    ⚠️ MANDATORY VIDEO WORD COUNTS — OUTPUT REJECTED IF WRONG ⚠️
+═══════════════════════════════════════════════════════════════
+• duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count them. Over ${VIDEO_NARRATION_WPS.maxWords5s} = REJECTED.
+• duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count them. Outside this range = REJECTED.
+Before you output, count the words in each scene's narration. If any scene is wrong, fix it.
+═══════════════════════════════════════════════════════════════
+` : ''}
 ═══════════════════════════════════════════════════════════════
     ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
 ═══════════════════════════════════════════════════════════════
@@ -61,6 +71,9 @@ PER-SCENE RULES:
 • Target: ~${plan.perSceneWordsTarget} words per scene (~${plan.perSceneDurationTarget}s)
 • Hard max: ${plan.perSceneWordsMax} words (${plan.perSceneDurationMax}s). NEVER exceed this.
 • If a thought needs more → SPLIT into two scenes with two visuals.
+${mediaType === 'video' ? `
+• DURATION: Each scene must be exactly 5 or exactly 10 seconds (no other values).
+• NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (2.0 wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (2.8 wps; never exceed or audio exceeds 10s).` : ''}
 
 ═══════════════════════════════════════════════════════════════
     🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
@@ -145,7 +158,7 @@ FINAL — PAYOFF
   "totalDuration": ${duration},
   "scenes": [{
     "sceneNumber": 1,
-    "duration": <words ÷ 2.5, rounded>,
+    "duration": ${mediaType === 'video' ? '5 or 10 only' : '<words ÷ 2.5, rounded>'},
     "narration": "${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. One flowing sentence.",
     "details": "Internal note.",
     "imagePrompt": "Character-centric. ${hasCharacterImages ? 'Actions/pose only.' : 'Include appearance.'} Cinematic.",
@@ -162,6 +175,7 @@ FINAL — PAYOFF
 ✓ Total narration: ${plan.totalWordsMin}–${plan.totalWordsMax} words
 ✓ All narrations read as ONE flowing story
 ✓ No scene over ${plan.perSceneDurationMax}s
+✓ duration: ${mediaType === 'video' ? '5 or 10 only per scene' : 'word count ÷ 2.5'}
 ✓ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s
 ✓ Character in every imagePrompt
 ✓ Story resolves — not cut off

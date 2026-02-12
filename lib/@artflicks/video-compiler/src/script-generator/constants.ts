@@ -71,15 +71,35 @@ export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = 
 // ═══════════════════════════════════════════════════════════════
 
 /**
+ * Allowed per-scene durations for VIDEO mode (seconds).
+ * Standard for video generation: only 5s or 10s clips.
+ */
+export const VIDEO_ALLOWED_SCENE_DURATIONS = [5, 10] as const;
+
+/**
+ * Words-per-second and min/max words for VIDEO mode per scene duration.
+ * Used in system prompts so LLM-generated narration fits within clip length.
+ * Spec: voice-over and captions must never exceed scene duration (enforced at generation only).
+ * - 5s: 2.0 wps → at most 10 words (never exceed or audio/captions exceed 5s).
+ * - 10s: 2.8 wps → at most 28 words (never exceed or audio/captions exceed 10s).
+ */
+export const VIDEO_NARRATION_WPS = {
+    wps5s: 2.0,
+    wps10s: 2.8,
+    minWords5s: 6,   // 5s scene minimum for substance (not bare 1–2 words)
+    maxWords5s: 10,  // 10 words max at 2.0 wps = 5s — never exceed or TTS exceeds scene
+    maxWords10s: 28, // 28 words max at 2.8 wps = 10s — never exceed or TTS exceeds scene
+    minWords10s: 15, // 10s scene: 15–28 words at 2.8 wps — enough substance, never exceed 28 or audio exceeds 10s
+} as const;
+
+/**
  * Per-scene duration guidelines for VIDEO mode (seconds).
  *
- * Target: ~7s — a full cinematic moment with motion.
- * Min: 5s — short punchy clip.
- * Max: 10s — HARD CAP per clip.
+ * Only 5s or 10s are allowed (standard for video generation).
  */
 export const VIDEO_SCENE_DURATION_GUIDE = {
     min: 5,     // short punchy video clip
-    target: 7,  // sweet spot — one sentence, one moving visual
+    target: 5,  // use 5 or 10 only
     max: 10,    // absolute max per clip
 } as const;
 

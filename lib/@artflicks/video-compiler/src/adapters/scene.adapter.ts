@@ -28,14 +28,24 @@ export class SceneAdapter implements StoryAdapter {
     let currentTime = 0;
 
     for (const scene of story.scenes) {
-      const visualDuration = scene.duration ?? 0;
-      const resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
+      const sceneDuration = scene.duration ?? 0;
+      const visualDuration = sceneDuration;
+      let resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
 
-      const effectiveSceneDuration = Math.max(
+      // For video clips: keep both visual and audio within scene duration so clip stays in sync
+      const isVideoScene = Boolean(scene.generatedVideoUrl);
+      if (isVideoScene && sceneDuration > 0) {
+        resolvedAudioDuration = Math.min(resolvedAudioDuration, sceneDuration);
+      }
+
+      let effectiveSceneDuration = Math.max(
         visualDuration,
         resolvedAudioDuration,
         MIN_SCENE_DURATION
       );
+      if (isVideoScene && sceneDuration > 0) {
+        effectiveSceneDuration = Math.min(effectiveSceneDuration, sceneDuration);
+      }
 
       const sceneStart = currentTime;
       const sceneEnd = sceneStart + effectiveSceneDuration;

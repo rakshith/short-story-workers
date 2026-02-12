@@ -5,6 +5,8 @@ import {
     DURATION_TOLERANCE,
     VIDEO_SCENE_COUNT_GUIDE,
     VIDEO_SCENE_DURATION_GUIDE,
+    VIDEO_ALLOWED_SCENE_DURATIONS,
+    VIDEO_NARRATION_WPS,
 } from '../constants';
 
 // ═══════════════════════════════════════════════════════════════
@@ -43,6 +45,9 @@ export interface ScenePlan {
     // Duration tolerance
     tolerance: { min: number; max: number };
 
+    /** For video mode: only these durations are allowed (e.g. [5, 10]) */
+    allowedSceneDurations?: readonly number[];
+
     // Pre-built prompt fragments
     sceneGuidance: string;
     narrationGuidance: string;
@@ -76,7 +81,10 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
     const { min: minScenes, target: targetScenes, max: maxScenes } = sceneGuide;
 
     // ---------- TOTAL WORD COUNT ----------
-    const totalWordsMin = Math.round(durationSeconds * NARRATION_WPS.min);
+    // Video: require ~12 words per scene average so we don't accept bare minimum (9+9). Cap max at achievable (all 10s).
+    const totalWordsMin = isVideo
+        ? minScenes * 12
+        : Math.round(durationSeconds * NARRATION_WPS.min);
     const totalWordsTarget = Math.round(durationSeconds * NARRATION_WPS.target);
     const totalWordsMax = Math.round(durationSeconds * NARRATION_WPS.max);
 
@@ -108,6 +116,13 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
     const wrongWords = wrongScenes * perSceneWordsTarget;
     const wrongDuration = Math.round(wrongWords / NARRATION_WPS.target);
 
+    const durationRule = isVideo
+        ? `- Each scene duration must be exactly 5 or exactly 10 seconds (no other values). Sum of scene durations ≈ ${durationSeconds}s.
+- NARRATION MUST FIT THE SCENE (voice-over and captions must never exceed scene duration): 5s scene = ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words at 2.0 wps (never exceed ${VIDEO_NARRATION_WPS.maxWords5s} or audio exceeds 5s). 10s scene = ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words at 2.8 wps (never exceed ${VIDEO_NARRATION_WPS.maxWords10s} or audio exceeds 10s).`
+        : `- Each scene: ${perSceneWordsMin}–${perSceneWordsMax} words (~${perSceneDurationMin}–${perSceneDurationMax}s)
+- No scene may exceed ${perSceneWordsMax} words / ${perSceneDurationMax}s. Split if longer.
+- Mix short ${perSceneDurationMin}s punch scenes with ${perSceneDurationTarget}–${perSceneDurationMax}s story scenes.`;
+
     const sceneGuidance = `
 ⚠️⚠️⚠️ MANDATORY SCENE COUNT ⚠️⚠️⚠️
 You MUST create AT LEAST ${minScenes} scenes. Target: ${targetScenes} scenes.
@@ -122,16 +137,18 @@ COMMON MISTAKE — generating too few scenes:
 
 SCENE RULES:
 - MINIMUM ${minScenes} scenes, target ${targetScenes}, maximum ${maxScenes}
-- Each scene: ${perSceneWordsMin}–${perSceneWordsMax} words (~${perSceneDurationMin}–${perSceneDurationMax}s)
-- No scene may exceed ${perSceneWordsMax} words / ${perSceneDurationMax}s. Split if longer.
+${durationRule}
 - Every scene = a NEW visual. ${targetScenes} scenes = ${targetScenes} unique images.
-- Mix short ${perSceneDurationMin}s punch scenes with ${perSceneDurationTarget}–${perSceneDurationMax}s story scenes.
 `.trim();
 
+    const videoWordLimit = isVideo
+        ? `
+- CRITICAL for video (audio/captions must never exceed scene duration): 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (2.0 wps). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (2.8 wps).`
+        : '';
     const narrationGuidance = `
 NARRATION (FLOWING CINEMATIC STORY — NOT A SLIDESHOW):
 - TOTAL WORDS REQUIRED: ${totalWordsMin}–${totalWordsMax} (target ~${totalWordsTarget} for ${durationSeconds}s)
-- Per scene: ${perSceneWordsMin}–${perSceneWordsMax} words (target ~${perSceneWordsTarget})
+- Per scene: ${perSceneWordsMin}–${perSceneWordsMax} words (target ~${perSceneWordsTarget})${videoWordLimit}
 - The narration must read as ONE continuous flowing story when all scenes are read aloud together.
 - Scene breaks are for VISUAL changes — the narration never "pauses" or "resets" between scenes.
 - Each scene's last words should naturally flow into the next scene's first words.
@@ -140,7 +157,7 @@ NARRATION (FLOWING CINEMATIC STORY — NOT A SLIDESHOW):
 SELF-CHECK BEFORE FINISHING:
 1. Count your scenes. Is it ≥ ${minScenes}? If not, ADD more scenes.
 2. Count total words across ALL narrations. Is it ~${totalWordsTarget}? If not, ADD more scenes.
-3. Total words ÷ 2.5 ≈ ${durationSeconds}s? If way under, you need MORE scenes.
+3. Total words ÷ 2.5 ≈ ${durationSeconds}s? If way under, you need MORE scenes.${isVideo ? `\n4. For each scene: 5s → at most ${VIDEO_NARRATION_WPS.maxWords5s} words; 10s → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (never exceed or audio exceeds scene).` : ''}
 `.trim();
 
     return {
@@ -158,6 +175,7 @@ SELF-CHECK BEFORE FINISHING:
         perSceneDurationTarget,
         perSceneDurationMax,
         tolerance,
+        allowedSceneDurations: isVideo ? VIDEO_ALLOWED_SCENE_DURATIONS : undefined,
         sceneGuidance,
         narrationGuidance,
     };
