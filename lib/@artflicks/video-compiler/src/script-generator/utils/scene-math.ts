@@ -118,7 +118,7 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
 
     const durationRule = isVideo
         ? `- Each scene duration must be exactly 5 or exactly 10 seconds (no other values). Sum of scene durations ≈ ${durationSeconds}s.
-- NARRATION MUST FIT THE SCENE (voice-over and captions must never exceed scene duration): 5s scene = ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words at 2.0 wps (never exceed ${VIDEO_NARRATION_WPS.maxWords5s} or audio exceeds 5s). 10s scene = ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words at 2.8 wps (never exceed ${VIDEO_NARRATION_WPS.maxWords10s} or audio exceeds 10s).`
+- NARRATION MUST FIT THE SCENE (voice-over and captions must never exceed scene duration): 5s scene = ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words at ${VIDEO_NARRATION_WPS.wps5s} wps (never exceed ${VIDEO_NARRATION_WPS.maxWords5s} or audio exceeds 5s). 10s scene = ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words at ${VIDEO_NARRATION_WPS.wps10s} wps (never exceed ${VIDEO_NARRATION_WPS.maxWords10s} or audio exceeds 10s).`
         : `- Each scene: ${perSceneWordsMin}–${perSceneWordsMax} words (~${perSceneDurationMin}–${perSceneDurationMax}s)
 - No scene may exceed ${perSceneWordsMax} words / ${perSceneDurationMax}s. Split if longer.
 - Mix short ${perSceneDurationMin}s punch scenes with ${perSceneDurationTarget}–${perSceneDurationMax}s story scenes.`;
@@ -143,7 +143,7 @@ ${durationRule}
 
     const videoWordLimit = isVideo
         ? `
-- CRITICAL for video (audio/captions must never exceed scene duration): 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (2.0 wps). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (2.8 wps).`
+- CRITICAL for video (audio/captions must never exceed scene duration): 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (${VIDEO_NARRATION_WPS.wps5s} wps). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (${VIDEO_NARRATION_WPS.wps10s} wps).`
         : '';
     const narrationGuidance = `
 NARRATION (FLOWING CINEMATIC STORY — NOT A SLIDESHOW):

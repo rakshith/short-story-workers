@@ -79,7 +79,7 @@ PER-SCENE RULES:
 • If a thought needs more → SPLIT into two scenes with two visuals.
 ${mediaType === 'video' ? `
 • DURATION: Each scene must be exactly 5 or exactly 10 seconds (no other values).
-• NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (2.0 wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (2.8 wps; never exceed or audio exceeds 10s).` : ''}
+• NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (${VIDEO_NARRATION_WPS.wps5s} wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (${VIDEO_NARRATION_WPS.wps10s} wps; never exceed or audio exceeds 10s).` : ''}
 
 ═══════════════════════════════════════════════════════════════
     🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
