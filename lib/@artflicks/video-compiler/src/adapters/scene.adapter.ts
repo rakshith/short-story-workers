@@ -116,6 +116,25 @@ export class SceneAdapter implements StoryAdapter {
       story.totalDuration ?? 0
     );
 
+    /* ---------------- Background Music (full duration) ---------------- */
+    const musicUrl =
+      typeof videoConfig.music === 'string' ? videoConfig.music.trim() : '';
+    if (musicUrl && musicUrl !== 'none' && finalDuration > 0) {
+      const rawVolume = videoConfig.musicVolume ?? 0.2;
+      const volume =
+        rawVolume > 1 ? Math.min(1, rawVolume / 100) : Math.max(0, Math.min(1, rawVolume));
+      audio.push({
+        start: 0,
+        end: finalDuration,
+        payload: {
+          type: 'background-music',
+          role: 'background',
+          url: musicUrl,
+          volume,
+        },
+      });
+    }
+
     /* ---------------- Watermark Effect ---------------- */
     if (videoConfig.watermark?.show === true) {
       effects.push({
@@ -133,7 +152,7 @@ export class SceneAdapter implements StoryAdapter {
       duration: finalDuration,
       tracks: {
         visual,
-        audio, // voiceovers ONLY
+        audio, // voiceovers + optional background music
         text,
         effects: effects.length > 0 ? effects : undefined,
       },
