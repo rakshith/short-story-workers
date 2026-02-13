@@ -285,7 +285,7 @@ export async function syncStoryToSupabase(
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-    // Get current story and merge with Durable Object state
+    // Get current story and merge with Durable Object state (do NOT update video_config here)
     const { data: currentStory } = await supabase
       .from('stories')
       .select('story')
@@ -306,7 +306,7 @@ export async function syncStoryToSupabase(
         }
       });
 
-      // Single DB write with all updates (story + timeline)
+      // Update only story, timeline, status — do NOT touch video_config so script stays the user's raw prompt
       await supabase
         .from('stories')
         .update({

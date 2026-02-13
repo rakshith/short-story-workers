@@ -264,6 +264,14 @@ async function createStoryRecord(
         const { ProjectStatus } = await import('../types');
         const storyService = new StoryService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+        // Persist video_config with user's raw prompt in script (never the generated story JSON)
+        const videoConfigToPersist = {
+            ...body.videoConfig,
+            mediaType: body.videoConfig?.mediaType ?? 'image',
+            // script: body.prompt,
+            prompt: body.prompt,
+        };
+
         const createdStory = await storyService.createStory({
             userId: body.userId,
             seriesId: body.seriesId,
@@ -271,7 +279,7 @@ async function createStoryRecord(
             videoType: body.videoConfig?.videoType || 'faceless-video',
             story: storyData,
             status: ProjectStatus.PROCESSING,
-            videoConfig: body.videoConfig,
+            videoConfig: videoConfigToPersist,
             storyCost: body.videoConfig?.estimatedCredits,
             teamId: body.teamId,
         });

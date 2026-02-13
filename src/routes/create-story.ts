@@ -125,6 +125,11 @@ async function createInitialStory(
         const { ProjectStatus } = await import('../types');
         const storyService = new StoryService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+        // Persist videoConfig with mediaType set from request
+        const videoConfigToPersist = {
+            ...body.videoConfig,
+            mediaType: body.videoConfig?.mediaType ?? 'image',
+        };
         const createdStory = await storyService.createStory({
             userId: body.userId,
             seriesId: body.seriesId,
@@ -132,7 +137,7 @@ async function createInitialStory(
             videoType: body.videoConfig?.videoType || 'faceless-video',
             story: storyData,
             status: ProjectStatus.PROCESSING,
-            videoConfig: body.videoConfig,
+            videoConfig: videoConfigToPersist,
             storyCost: body.videoConfig?.estimatedCredits,
             teamId: body.teamId,
         });
