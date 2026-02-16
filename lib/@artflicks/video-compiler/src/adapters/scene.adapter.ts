@@ -8,6 +8,23 @@ import {
 } from '../types';
 
 const MIN_SCENE_DURATION = 0.1; // prevents zero-length scenes
+const TRANSITION_BUFFER = 0.2; // small gap so next scene does not cut active narration/caption
+
+function getCaptionDuration(scene: Story['scenes'][number]): number {
+  if (!Array.isArray(scene.captions) || scene.captions.length === 0) return 0;
+
+  let maxEnd = 0;
+  for (const caption of scene.captions) {
+    const tokenEnd =
+      Array.isArray(caption.tokens) && caption.tokens.length > 0
+        ? Math.max(...caption.tokens.map((token) => token.endTime ?? 0))
+        : 0;
+    const captionEnd = Math.max(caption.endTime ?? 0, tokenEnd);
+    if (captionEnd > maxEnd) maxEnd = captionEnd;
+  }
+
+  return maxEnd;
+}
 
 export class SceneAdapter implements StoryAdapter {
   supports(story: any): boolean {
@@ -31,6 +48,7 @@ export class SceneAdapter implements StoryAdapter {
       const sceneDuration = scene.duration ?? 0;
       const visualDuration = sceneDuration;
       let resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
+      const captionDuration = getCaptionDuration(scene);
 
       // For video clips: keep both visual and audio within scene duration so clip stays in sync
       const isVideoScene = Boolean(scene.generatedVideoUrl);
@@ -38,13 +56,16 @@ export class SceneAdapter implements StoryAdapter {
         resolvedAudioDuration = Math.min(resolvedAudioDuration, sceneDuration);
       }
 
+      // Scene should not advance until narration/captions have finished.
+      const narrationDuration = Math.max(resolvedAudioDuration, captionDuration);
       let effectiveSceneDuration = Math.max(
         visualDuration,
-        resolvedAudioDuration,
+        narrationDuration > 0 ? narrationDuration + TRANSITION_BUFFER : 0,
         MIN_SCENE_DURATION
       );
       if (isVideoScene && sceneDuration > 0) {
-        effectiveSceneDuration = Math.min(effectiveSceneDuration, sceneDuration);
+        // For generated video clips, preserve clip length and keep strict sync.
+        effectiveSceneDuration = sceneDuration;
       }
 
       const sceneStart = currentTime;
@@ -94,11 +115,11 @@ export class SceneAdapter implements StoryAdapter {
         videoConfig.enableCaptions &&
         Array.isArray(scene.captions) &&
         scene.captions.length > 0 &&
-        resolvedAudioDuration > 0
+        narrationDuration > 0
       ) {
         text.push({
           start: sceneStart,
-          end: sceneStart + resolvedAudioDuration,
+          end: sceneStart + narrationDuration,
           payload: {
             type: 'caption',
             sceneNumber: scene.sceneNumber,
