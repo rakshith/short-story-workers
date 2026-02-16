@@ -4,6 +4,8 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
+import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { attachImageInputs, getNearestDuration } from '../utils/replicate-model-config';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -49,9 +51,14 @@ export async function triggerVideoGeneration(
         prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
     };
 
-    // Scene duration (5 or 10s) — many Replicate video models accept duration
+    if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY) {
+        // Attach image inputs based on model type only in CHARACTER_STORY
+        attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
+    }
+
+    // Scene duration — snap to model-allowed values (e.g. Veo: 4, 6, 8) when applicable
     if (params.duration !== undefined && params.duration > 0) {
-        input.duration = params.duration;
+        input.duration = getNearestDuration(params.duration, params.model);
     }
     // Video models often use aspect_ratio instead of width/height
     if (params.aspect_ratio) {

@@ -76,9 +76,68 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     //runwayml/gen4-image-turbo
     'gen4-image-turbo': { multiField: 'reference_images' },
 
+    // Video Models starts from here
+    // openai/sora-2
+    'openai/sora-2': { singleField: 'input_reference' },
+
+    // google/veo-3.1-fast
+    'google/veo-3.1-fast': { singleField: 'image' },
+
+    // bytedance/seedance-1-pro-fast
+    'bytedance/seedance-1-pro-fast': { singleField: 'image' },
+
+    // wan-video/wan-2.5-i2v
+    'wan-video/wan-2.5-i2v': { singleField: 'image' },
+
+    // wan-video/wan-2.5-i2v-fast
+    'wan-video/wan-2.5-i2v-fast': { singleField: 'image' },
+
+    // wan-video/wan-2.5-i2v
+    'wan-video/wan-2.6-i2v': { singleField: 'image' },
+
+    // wan-video/wan-2.6-t2v
+    'wan-video/wan-2.6-t2v': { singleField: 'image' },
+
+    // wan-video/wan-2.5-t2v
+    'wan-video/wan-2.5-t2v': { singleField: 'image' },
+
+    // wan-video/wan-2.5-t2v-fast
+    'wan-video/wan-2.5-t2v-fast': { singleField: 'image' },
+
+    // wan-video/wan2.6-i2v-flash
+    'wan-video/wan2.6-i2v-flash': { singleField: 'image' },
+
+    // kwaivgi/kling-v2.6
+    'kwaivgi/kling-v2.6': { singleField: 'start_image' },
+
+    // kwaivgi/kling-v2.5-turbo-pro
+    'kwaivgi/kling-v2.5-turbo-pro': { singleField: 'start_image' },
+
+    // kwaivgi/kling-v2.1-master
+    'kwaivgi/kling-v2.1-master': { singleField: 'start_image' },
+
     // Default fallback (works for most flux-based models)
     'default': { singleField: 'input_image', multiField: 'image_prompt', setSingleFromFirst: true },
 };
+
+/**
+ * Allowed duration values per video model (seconds). If set, requested duration is snapped to nearest.
+ */
+export const MODEL_DURATION_OPTIONS: Record<string, number[]> = {
+    'veo': [4, 6, 8],
+};
+
+/**
+ * Returns the nearest allowed duration for the model, or the requested duration if no constraint.
+ */
+export function getNearestDuration(requestedDuration: number, modelName: string): number {
+    const lower = modelName.toLowerCase();
+    const allowed = Object.entries(MODEL_DURATION_OPTIONS).find(([pattern]) => lower.includes(pattern))?.[1];
+    if (!allowed || allowed.length === 0) return requestedDuration;
+    return allowed.reduce((prev, curr) =>
+        Math.abs(curr - requestedDuration) < Math.abs(prev - requestedDuration) ? curr : prev
+    );
+}
 
 /**
  * Detects model type from model name and returns appropriate config
