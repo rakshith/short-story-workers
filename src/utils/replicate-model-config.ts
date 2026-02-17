@@ -116,6 +116,9 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     // kwaivgi/kling-v2.1-master
     'kwaivgi/kling-v2.1-master': { singleField: 'start_image' },
 
+    // kwaivgi/kling-v2.1
+    'kwaivgi/kling-v2.1': { singleField: 'start_image' },
+
     // Default fallback (works for most flux-based models)
     'default': { singleField: 'input_image', multiField: 'image_prompt', setSingleFromFirst: true },
 };

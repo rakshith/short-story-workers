@@ -87,7 +87,7 @@ export async function triggerVideoGeneration(
     } else {
         predictionParams.model = params.model;
     }
-
+    console.log(`[VIDEO-GENERATION] Prediction params:`, predictionParams);
     const prediction = await replicate.predictions.create(predictionParams);
 
     console.log(`[VIDEO-GENERATION] Prediction created: ${prediction.id}`);
