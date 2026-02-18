@@ -5,7 +5,7 @@ import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
 import { ScriptTemplateIds } from '@artflicks/video-compiler';
-import { attachImageInputs, getNearestDuration } from '../utils/replicate-model-config';
+import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -50,6 +50,11 @@ export async function triggerVideoGeneration(
     const input: any = {
         prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
     };
+
+    const modelConfig = getModelImageConfig(params.model);
+    if (modelConfig.defaultInputs) {
+        Object.assign(input, modelConfig.defaultInputs);
+    }
 
     if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY) {
         // Attach image inputs based on model type only in CHARACTER_STORY

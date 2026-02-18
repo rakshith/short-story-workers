@@ -105,10 +105,10 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'wan-video/wan-2.5-t2v-fast': { singleField: 'image' },
 
     // wan-video/wan2.6-i2v-flash
-    'wan-video/wan2.6-i2v-flash': { singleField: 'image' },
+    'wan-video/wan2.6-i2v-flash': { singleField: 'image', defaultInputs: { audio_enabled: false} },
 
     // kwaivgi/kling-v2.6
-    'kwaivgi/kling-v2.6': { singleField: 'start_image' },
+    'kwaivgi/kling-v2.6': { singleField: 'start_image', defaultInputs: { generate_audio: false } },
 
     // kwaivgi/kling-v2.5-turbo-pro
     'kwaivgi/kling-v2.5-turbo-pro': { singleField: 'start_image' },
