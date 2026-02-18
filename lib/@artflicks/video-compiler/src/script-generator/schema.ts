@@ -27,7 +27,7 @@ const sceneDurationSchema = (mediaType?: 'image' | 'video') =>
 
 const narrationDescribe = (base: string, mediaType?: 'image' | 'video') =>
     mediaType === 'video'
-        ? `MANDATORY word count by scene duration: if duration=5 use EXACTLY ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words; if duration=10 use EXACTLY ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count words; wrong count = rejected. ${base}`
+        ? `Word count must match scene duration: duration=5 → ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words; duration=10 → ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Adjust so narration fits the scene. ${base}`
         : base;
 
 const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => z.object({
@@ -83,13 +83,12 @@ export function createYouTubeShortsSchema(constraints: SchemaConstraints) {
             .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
             .describe(
                 mediaType === 'video'
-                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration.`
+                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration. Sum of all scene durations must match the user-requested total.`
                     : `Array of scenes. MINIMUM ${minScenes} scenes, at least ${totalWordsMin} total narration words.`
             ),
     });
 
     if (mediaType === 'video') {
-        // Video: no post-generation word-count refine — enforced via prompt only
         return base;
     }
     return base.refine(
@@ -111,13 +110,12 @@ export function createCharacterStorySchema(constraints: SchemaConstraints) {
             .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
             .describe(
                 mediaType === 'video'
-                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration.`
+                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration. Sum of all scene durations must match the user-requested total.`
                     : `Array of scenes. MINIMUM ${minScenes} scenes, at least ${totalWordsMin} total narration words.`
             ),
     });
 
     if (mediaType === 'video') {
-        // Video: no post-generation word-count refine — enforced via prompt only
         return base;
     }
     return base.refine(

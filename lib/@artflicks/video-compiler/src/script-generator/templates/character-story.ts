@@ -41,18 +41,19 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
     return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
 ${mediaType === 'video' ? `
 ═══════════════════════════════════════════════════════════════
-    ⚠️ MANDATORY VIDEO WORD COUNTS — OUTPUT REJECTED IF WRONG ⚠️
+    ⚠️ ADJUST YOUR RESPONSE TO MATCH USER REQUEST ⚠️
 ═══════════════════════════════════════════════════════════════
-• duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count them. Over ${VIDEO_NARRATION_WPS.maxWords5s} = REJECTED.
-• duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count them. Outside this range = REJECTED.
-Before you output, count the words in each scene's narration. If any scene is wrong, fix it.
+The user requested exactly ${duration} seconds. Always adjust your script so the SUM of all scene durations equals ${duration}s (range ${plan.tolerance.min}–${plan.tolerance.max}s). Never exceed ${plan.tolerance.max}s — if your draft is too long, use fewer scenes or more 5s and fewer 10s until total = ${duration}s.
+
+• duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count and fix before output.
+• duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count and fix before output.
 ═══════════════════════════════════════════════════════════════
 ` : ''}
 ═══════════════════════════════════════════════════════════════
     ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
 ═══════════════════════════════════════════════════════════════
 VIDEO DURATION: ${duration} seconds
-YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})
+YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})${mediaType === 'video' ? `, total duration SUM = ${duration}s` : ''}
 TOTAL WORDS REQUIRED: ~${plan.totalWordsTarget} (range: ${plan.totalWordsMin}–${plan.totalWordsMax})
 
 ${plan.sceneGuidance}
@@ -176,14 +177,15 @@ FINAL — PAYOFF
 ✓ All narrations read as ONE flowing story
 ✓ No scene over ${plan.perSceneDurationMax}s
 ✓ duration: ${mediaType === 'video' ? '5 or 10 only per scene' : 'word count ÷ 2.5'}
-✓ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s
+✓ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s — adjust scene count and 5s/10s mix so total = ${duration}s
 ✓ Character in every imagePrompt
 ✓ Story resolves — not cut off
 
-FAIL CONDITIONS (output will be REJECTED):
-❌ Fewer than ${plan.minScenes} scenes — video will be too SHORT
-❌ Total words under ${plan.totalWordsMin} — won't reach ${duration}s
-❌ Any scene over ${plan.perSceneWordsMax} words
+ADJUST YOUR OUTPUT so none of these occur (fix before returning):
+❌ Fewer than ${plan.minScenes} scenes — add more scenes to reach ${duration}s
+❌ Total words under ${plan.totalWordsMin} — add more scenes
+❌ Any scene over ${plan.perSceneWordsMax} words — shorten or split
+❌ Sum of scene durations over ${plan.tolerance.max}s — use fewer scenes or more 5s and fewer 10s so total = ${duration}s
 ❌ Narration reads like disconnected facts (slideshow)
 ❌ Story unfinished
 `;

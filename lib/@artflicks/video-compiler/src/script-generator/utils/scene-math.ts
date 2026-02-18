@@ -117,23 +117,35 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
     const wrongDuration = Math.round(wrongWords / NARRATION_WPS.target);
 
     const durationRule = isVideo
-        ? `- Each scene duration must be exactly 5 or exactly 10 seconds (no other values). Sum of scene durations ≈ ${durationSeconds}s.
+        ? `- Each scene duration must be exactly 5 or exactly 10 seconds (no other values).
+- TOTAL DURATION: Sum of ALL scene durations MUST equal ${durationSeconds}s (acceptable range: ${tolerance.min}–${tolerance.max}s). Always adjust your response to match the user request — plan your mix of 5s and 10s scenes so the total is exactly ${durationSeconds}s. Do not exceed ${tolerance.max}s.
 - NARRATION MUST FIT THE SCENE (voice-over and captions must never exceed scene duration): 5s scene = ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words at ${VIDEO_NARRATION_WPS.wps5s} wps (never exceed ${VIDEO_NARRATION_WPS.maxWords5s} or audio exceeds 5s). 10s scene = ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words at ${VIDEO_NARRATION_WPS.wps10s} wps (never exceed ${VIDEO_NARRATION_WPS.maxWords10s} or audio exceeds 10s).`
         : `- Each scene: ${perSceneWordsMin}–${perSceneWordsMax} words (~${perSceneDurationMin}–${perSceneDurationMax}s)
 - No scene may exceed ${perSceneWordsMax} words / ${perSceneDurationMax}s. Split if longer.
 - Mix short ${perSceneDurationMin}s punch scenes with ${perSceneDurationTarget}–${perSceneDurationMax}s story scenes.`;
 
+    const sceneGuidanceVideo = isVideo
+        ? `
+BEFORE YOU FINISH — TOTAL DURATION CHECK:
+  Add up every scene: (number of 5s scenes × 5) + (number of 10s scenes × 10) = total seconds.
+  Total MUST be ${tolerance.min}–${tolerance.max}s (user requested ${durationSeconds}s). If over ${tolerance.max}s, use fewer scenes or more 5s and fewer 10s. Adjust your script so the output always matches the requested duration.
+`
+        : '';
+
     const sceneGuidance = `
 ⚠️⚠️⚠️ MANDATORY SCENE COUNT ⚠️⚠️⚠️
 You MUST create AT LEAST ${minScenes} scenes. Target: ${targetScenes} scenes.
+${isVideo ? `Maximum ${maxScenes} scenes — do not exceed or total duration will be too long.` : ''}
 
 THE MATH (do this check before you finish):
   ${targetScenes} scenes × ~${perSceneWordsTarget} words each = ~${totalWordsTarget} words total
   ${totalWordsTarget} words ÷ 2.5 words/sec = ~${durationSeconds} seconds ✓
+${sceneGuidanceVideo}
 
 COMMON MISTAKE — generating too few scenes:
   ${wrongScenes} scenes × ~${perSceneWordsTarget} words = ~${wrongWords} words = only ~${wrongDuration}s ❌ (HALF the target!)
   You MUST write MORE scenes to fill ${durationSeconds} seconds.
+${isVideo ? `COMMON MISTAKE — too many or too long scenes: Sum of durations over ${tolerance.max}s = video too long. Use fewer scenes or more 5s scenes so total = ${durationSeconds}s.` : ''}
 
 SCENE RULES:
 - MINIMUM ${minScenes} scenes, target ${targetScenes}, maximum ${maxScenes}
