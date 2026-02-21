@@ -264,12 +264,14 @@ async function createStoryRecord(
         const { ProjectStatus } = await import('../types');
         const storyService = new StoryService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
-        // Persist video_config with user's raw prompt in script (never the generated story JSON)
+        // Persist video_config with user's raw prompt only — never the LLM-generated script.
+        // Override both prompt and script so client-supplied videoConfig.script (often the generated
+        // story) cannot overwrite the user's original prompt in later reads or merges.
         const videoConfigToPersist = {
             ...body.videoConfig,
             mediaType: body.videoConfig?.mediaType ?? 'image',
-            // script: body.prompt,
             prompt: body.prompt,
+            script: body.prompt,
         };
 
         const createdStory = await storyService.createStory({
