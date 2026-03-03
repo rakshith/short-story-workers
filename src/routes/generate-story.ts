@@ -206,6 +206,17 @@ async function generateAIScript(
 ): Promise<{ story: StoryTimeline; usage?: any } | Response> {
     console.log(`[Generate Story] Generating script from prompt: "${body.prompt.substring(0, 50)}..."`);
 
+    // Default skeleton references for skeleton-3d-shorts template
+    const DEFAULT_SKELETON_REFERENCES = [
+        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/3607c50b-d616-422d-b8c1-1ca9fe76bed6.png',
+        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/85462027-2172-4e37-8bf4-3e2d94c94791.jpg'
+    ];
+
+    // Use default skeleton references if template is skeleton-3d-shorts and no references provided
+    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !body.videoConfig?.characterReferenceImages)
+        ? DEFAULT_SKELETON_REFERENCES
+        : body.videoConfig?.characterReferenceImages;
+
     // Restore import
     const { generateScript } = await import('../services/script-generation');
 
@@ -217,7 +228,7 @@ async function generateAIScript(
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: body.videoConfig?.templateId,
             mediaType: body.videoConfig?.mediaType || 'image',
-            characterReferenceImages: body.videoConfig?.characterReferenceImages
+            characterReferenceImages: effectiveReferences
         },
         env.OPENAI_API_KEY
     );
@@ -374,6 +385,23 @@ async function queueGenerationJobs(
     env: Env
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
+    
+    // Default skeleton references for skeleton-3d-shorts template
+    const DEFAULT_SKELETON_REFERENCES = [
+        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/3607c50b-d616-422d-b8c1-1ca9fe76bed6.png',
+        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/85462027-2172-4e37-8bf4-3e2d94c94791.jpg'
+    ];
+
+    // Use default skeleton references if template is skeleton-3d-shorts and no references provided
+    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !body.videoConfig?.characterReferenceImages)
+        ? DEFAULT_SKELETON_REFERENCES
+        : body.videoConfig?.characterReferenceImages;
+
+    // Create updated videoConfig with effective references
+    const updatedVideoConfig = {
+        ...body.videoConfig,
+        characterReferenceImages: effectiveReferences
+    };
 
     // Queue visual generation jobs with tier and priority
     const visualPromises = storyData.scenes.map((scene, index) => {
@@ -384,7 +412,7 @@ async function queueGenerationJobs(
             storyId,
             title: storyData.title || body.title || '',
             storyData,
-            videoConfig: body.videoConfig,
+            videoConfig: updatedVideoConfig,
             sceneIndex: index,
             type: mediaType,
             baseUrl,
@@ -406,7 +434,7 @@ async function queueGenerationJobs(
             storyId,
             title: storyData.title || body.title || '',
             storyData,
-            videoConfig: body.videoConfig,
+            videoConfig: updatedVideoConfig,
             sceneIndex: index,
             type: 'audio',
             baseUrl,
