@@ -67,8 +67,12 @@ export async function triggerReplicateGeneration(
     delete input.height;
   }
 
-  if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY) {
-    // Attach image inputs based on model type only in CHARACTER_STORY
+  if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY || 
+      params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
+      params.videoConfig.templateId === 'skeleton-3d-shorts') {
+    // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
+    console.log('[IMAGE-GEN] Template ID:', params.videoConfig.templateId);
+    console.log('[IMAGE-GEN] Character References:', params.videoConfig?.characterReferenceImages);
     attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
   }
 

@@ -33,7 +33,6 @@ const narrationDescribe = (base: string, mediaType?: 'image' | 'video') =>
 const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => z.object({
     sceneNumber: z.number().describe('Scene number in sequence'),
     duration: sceneDurationSchema(mediaType),
-    details: z.string().describe('A brief, readable description of what happens in this scene. Write 2-3 sentences describing the action, setting, and key moment.'),
     narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene. Write naturally — the narration length DETERMINES the scene duration via text-to-speech. Fill the scene fully. No dead air.', mediaType)),
     imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English. Include: dramatic lighting, vivid colors, emotional expressions, dynamic composition, atmospheric elements. Scene 1 must be the MOST visually striking.'),
     cameraAngle: z.string().nullable().describe('Camera angle or shot type (e.g., close-up, wide shot, birds eye view)'),
@@ -43,7 +42,6 @@ const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => z.obje
 const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => z.object({
     sceneNumber: z.number().describe('Scene number in sequence'),
     duration: sceneDurationSchema(mediaType),
-    details: z.string().describe('Internal production note about the scene (not shown to viewer).'),
     narration: z.string().describe(narrationDescribe('Voiceover narration. Write naturally — narration length DETERMINES scene duration via TTS. Emotionally engaging, character-focused.', mediaType)),
     imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description. The main character MUST be the focal point. Describe: character action/pose, emotional expression, environment, lighting, camera angle.'),
     cameraAngle: z.enum(['close-up', 'medium shot', 'wide shot', 'birds-eye', 'low angle', 'over-the-shoulder']).describe('Camera angle for this scene'),

@@ -7,6 +7,7 @@ import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { trackAIUsageInternal } from '../services/usage-tracking';
+import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -206,14 +207,9 @@ async function generateAIScript(
 ): Promise<{ story: StoryTimeline; usage?: any } | Response> {
     console.log(`[Generate Story] Generating script from prompt: "${body.prompt.substring(0, 50)}..."`);
 
-    // Default skeleton references for skeleton-3d-shorts template
-    const DEFAULT_SKELETON_REFERENCES = [
-        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/3607c50b-d616-422d-b8c1-1ca9fe76bed6.png',
-        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/85462027-2172-4e37-8bf4-3e2d94c94791.jpg'
-    ];
-
+   
     // Use default skeleton references if template is skeleton-3d-shorts and no references provided
-    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !body.videoConfig?.characterReferenceImages)
+    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
         ? DEFAULT_SKELETON_REFERENCES
         : body.videoConfig?.characterReferenceImages;
 
@@ -386,14 +382,8 @@ async function queueGenerationJobs(
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
     
-    // Default skeleton references for skeleton-3d-shorts template
-    const DEFAULT_SKELETON_REFERENCES = [
-        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/3607c50b-d616-422d-b8c1-1ca9fe76bed6.png',
-        'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/85462027-2172-4e37-8bf4-3e2d94c94791.jpg'
-    ];
-
     // Use default skeleton references if template is skeleton-3d-shorts and no references provided
-    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !body.videoConfig?.characterReferenceImages)
+    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
         ? DEFAULT_SKELETON_REFERENCES
         : body.videoConfig?.characterReferenceImages;
 

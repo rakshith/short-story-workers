@@ -39,6 +39,9 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     //black-forest-labs/flux-dev
     'flux-dev': { singleField: 'image' },
 
+    // black-forest-labs/flux-2-dev (newer dev model)
+    'flux-2-dev': { multiField: 'input_images' },
+
     //black-forest-labs/flux-redux-dev
     'flux-redux-dev': { singleField: 'redux_image' },
 
@@ -124,6 +127,12 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
 
     //kwaivgi/kling-v3-video
     'kwaivgi/kling-v3-video': { singleField: 'start_image', defaultInputs: { generate_audio: false } },
+
+    //runwayml/gen4-turbo
+    'runwayml/gen4-turbo': { singleField: 'image' },
+
+    //runwayml/gen-4.5
+    'runwayml/gen-4.5': { singleField: 'image' },
 
     // Default fallback (works for most flux-based models)
     'default': { singleField: 'input_image', multiField: 'image_prompt', setSingleFromFirst: true },

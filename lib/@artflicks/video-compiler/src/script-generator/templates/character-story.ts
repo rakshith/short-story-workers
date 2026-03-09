@@ -115,7 +115,7 @@ The image AI will use these for visual consistency.
 imagePrompt RULES:
 1. ❌ DO NOT describe physical appearance (face, hair, body, clothes)
 2. ✅ DO describe: action/pose, emotion, position, environment interaction
-3. ✅ Refer to them as "the main character", "the protagonist", "the figure"
+3. ✅ Refer to them as "The character in the reference image"
 4. ✅ Character MUST appear in EVERY imagePrompt`
         : `⚠️ NO CHARACTER REFERENCE
 

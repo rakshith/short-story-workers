@@ -176,6 +176,7 @@ To update pricing (e.g., Replicate changes their prices):
 export const PRICING = {
   replicate: {
     'flux-schnell': 0.003, // ← Update this
+    'flux-2-dev': 0.025, // add new model if you plan to use it
     // ...
   },
   // ...

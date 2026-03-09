@@ -327,7 +327,8 @@ The service supports different model tiers. Update `src/utils/model-utils.ts` to
 const MODEL_TIERS: Record<string, string> = {
   'basic': 'black-forest-labs/flux-schnell',
   'lite': 'black-forest-labs/flux-schnell',
-  'pro': 'black-forest-labs/flux-dev',
+  'pro': 'black-forest-labs/flux-dev', // original developer tier
+  'pro2': 'black-forest-labs/flux-2-dev', // example of using the newer 2-dev model
   // Add more tiers as needed
 };
 ```

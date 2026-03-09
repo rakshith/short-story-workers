@@ -116,6 +116,7 @@ export const PRICING = {
   replicate: {
     'flux-schnell': 0.003,
     'flux-dev': 0.025,
+    'flux-2-dev': 0.025, // same price as flux-dev for now
     'flux-pro': 0.055,
     'video-generation': 0.05,
   },
