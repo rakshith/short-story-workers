@@ -371,6 +371,7 @@ async function initializeCoordinator(
             scenes: storyData.scenes,
             totalScenes: storyData.scenes.length,
             videoConfig,
+            sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
         }),
     }));
     console.log(`[Generate Story] Durable Object initialized for story ${storyId}`);
@@ -597,6 +598,7 @@ async function handleResumeVideoGeneration(
                 totalScenes: storyData.scenes.length,
                 videoConfig,
                 skipAudioCheck: true, // Step 2 only needs videos - ignore audio
+                sceneReviewRequired: false, // Step 2 is auto-completing videos, not review mode
             }),
         }));
 

@@ -35,6 +35,7 @@ export interface WebhookQueueMessage {
     model: string;
     sceneReviewRequired?: boolean;
   };
+  origin?: string;
 }
 
 export interface Env {

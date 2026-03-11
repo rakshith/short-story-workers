@@ -71,15 +71,16 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
 
     // Queue path: durable processing, Replicate always gets 200; no waitUntil eviction
     if (env.WEBHOOK_QUEUE) {
-        await env.WEBHOOK_QUEUE.send({ prediction, metadata });
+        const origin = new URL(request.url).origin;
+        await env.WEBHOOK_QUEUE.send({ prediction, metadata, origin });
         return new Response('OK', { status: 200 });
     }
     // Fallback (e.g. dev without queue): waitUntil or sync
     if (ctx) {
-        ctx.waitUntil(processWebhookInBackground(prediction, metadata, env));
+        ctx.waitUntil(processWebhookInBackground(prediction, metadata, env, new URL(request.url).origin));
         return new Response('OK', { status: 200 });
     }
-    await processWebhookInBackground(prediction, metadata, env);
+    await processWebhookInBackground(prediction, metadata, env, new URL(request.url).origin);
     return new Response('OK', { status: 200 });
 }
 
@@ -87,7 +88,7 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
  * Runs in background (queue consumer or waitUntil): upload to R2, update DO, sync if complete.
  * Exported for webhook queue consumer.
  */
-export async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env): Promise<void> {
+export async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env, origin?: string): Promise<void> {
     const { storyId, sceneIndex, type, userId, seriesId, jobId, model, sceneReviewRequired } = metadata;
 
     try {
@@ -153,6 +154,8 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         const updateRes = await coordinator.fetch(new Request(endpoint, { method: 'POST', body: JSON.stringify(body) }));
         const status = await updateRes.json() as any;
 
+        apiLogger.info(`Updated ${type} in DO, isComplete: ${status.isComplete}, videosCompleted: ${status.videosCompleted}/${status.totalScenes}, audioCompleted: ${status.audioCompleted}/${status.totalScenes}`, { storyId, sceneIndex });
+
         // Handle auto video generation (sceneReviewRequired=false): queue video after each image completes
         if (type === 'image' && !sceneReviewRequired && resultUrl) {
             apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
@@ -178,7 +181,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 const videoConfig = storyData.video_config;
                 const jobId = jobData.job_id;
                 
-                // Queue video with generated image URL as reference
+                // Queue video with generated image URL as reference - use dynamic origin
                 const queueMessage = {
                     jobId,
                     userId: jobData.user_id,
@@ -189,7 +192,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                     videoConfig,
                     sceneIndex,
                     type: 'video' as const,
-                    baseUrl: 'https://create-story-worker.artflicks.workers.dev',
+                    baseUrl: origin || 'https://create-story-worker-staging.matrixrak.workers.dev',
                     teamId: jobData.team_id,
                     userTier: videoConfig.userTier,
                     priority: 3, // Default priority
@@ -198,6 +201,13 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 
                 await env.STORY_QUEUE.send(queueMessage);
                 apiLogger.info(`Queued video generation for scene ${sceneIndex} with reference image`, { storyId, imageUrl: resultUrl });
+
+                // Incrementally sync image to DB so it's not lost if job fails before videos complete
+                const { syncPartialStory } = await import('../queue-consumer');
+                await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
+
+                // Return early - don't mark complete yet, let video webhooks handle final completion
+                return;
             }
         }
 
@@ -206,12 +216,6 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             apiLogger.info(`Images complete for review, setting status to awaiting_review`, { storyId });
             const { createClient } = await import('@supabase/supabase-js');
             const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-            
-            // Update job status to awaiting_review
-            await supabase
-                .from('story_jobs')
-                .update({ status: 'awaiting_review', progress: 50 })
-                .eq('job_id', jobId);
 
             // Update story to mark scene_review_required and video generation not triggered
             await supabase
@@ -223,7 +227,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 })
                 .eq('id', storyId);
 
-            // Sync story to DB (but don't finalize - videos will be generated later)
+            // Sync story to DB and update job status - syncStoryForReview handles story_jobs update
             await syncStoryForReview({ jobId, storyId, userId }, coordinator, env);
             return;
         }
@@ -233,6 +237,8 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             apiLogger.info(`Story is complete, triggering final sync`, { storyId });
             const { syncStoryToSupabase } = await import('../queue-consumer');
             await syncStoryToSupabase({ jobId, storyId, userId }, coordinator, env);
+        } else {
+            apiLogger.info(`Story not complete yet, waiting for more generations`, { storyId, videosComplete: status.videosCompleted, audioComplete: status.audioCompleted, total: status.totalScenes });
         }
     } catch (error) {
         console.error(`[WEBHOOK] Background processing error:`, error);

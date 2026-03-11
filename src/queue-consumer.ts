@@ -167,7 +167,36 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
 
         const status = await updateRes.json() as any;
         if (status.isComplete) {
-          await syncStoryToSupabase({
+          if (data.videoConfig?.sceneReviewRequired) {
+            // Audio completed last in review mode - transition to awaiting_review
+            // (completionSignaled ensures this fires exactly once - mutually exclusive with image webhook path)
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+            await supabase
+              .from('stories')
+              .update({
+                scene_review_required: true,
+                video_generation_triggered: false,
+                status: 'awaiting_review'
+              })
+              .eq('id', data.storyId);
+            const { syncStoryForReview } = await import('./services/webhook-handler');
+            await syncStoryForReview({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
+          } else {
+            // auto mode: all videos+audio done - finalize and send email
+            await syncStoryToSupabase({
+              jobId: data.jobId,
+              storyId: data.storyId,
+              userId: data.userId
+            }, coordinator, env);
+          }
+        } else {
+          // Incrementally sync audio to DB so it's not lost if job fails before videos complete
+          await syncPartialStory({
             jobId: data.jobId,
             storyId: data.storyId,
             userId: data.userId
@@ -376,14 +405,86 @@ export async function syncStoryToSupabase(
 }
 
 /**
+ * Incrementally sync partial story progress to database (images/audio) without finalizing.
+ * Called after each image/audio completion for sceneReviewRequired=false flow.
+ * Keeps status as 'processing' and saves generated URLs to DB so they are not lost if job fails.
+ */
+export async function syncPartialStory(
+  data: { jobId: string; storyId: string; userId: string },
+  coordinator: any,
+  env: Env
+): Promise<void> {
+  try {
+    // Get current state from DO WITHOUT finalizing (preserves state for video generation)
+    const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
+    const progressData = await progressRes.json() as any;
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+    // Get current story and merge generated content from DO
+    const { data: currentStory } = await supabase
+      .from('stories')
+      .select('story')
+      .eq('id', data.storyId)
+      .single();
+
+    if (currentStory?.story && progressData.scenes) {
+      const updatedStory = { ...currentStory.story };
+      progressData.scenes.forEach((scene: any, idx: number) => {
+        if (updatedStory.scenes[idx]) {
+          updatedStory.scenes[idx] = {
+            ...updatedStory.scenes[idx],
+            ...scene,
+          };
+        }
+      });
+
+      await supabase
+        .from('stories')
+        .update({
+          story: updatedStory,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', data.storyId);
+    }
+
+    // Progress: images + audio count toward 75% (videos are final 25%)
+    const totalScenes = progressData.totalScenes || 1;
+    const voiceOverEnabled = progressData.videoConfig?.enableVoiceOver !== false;
+    const denominator = voiceOverEnabled ? totalScenes * 2 : totalScenes;
+    const numerator = (progressData.imagesCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0);
+    const progress = Math.min(Math.round((numerator / denominator) * 75), 75);
+
+    await supabase
+      .from('story_jobs')
+      .update({
+        status: 'processing',
+        progress,
+        images_generated: progressData.imagesCompleted || 0,
+        audio_generated: progressData.audioCompleted || 0,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('job_id', data.jobId);
+
+    queueLogger.info(`Partial story synced to database`, { jobId: data.jobId, storyId: data.storyId, progress, imagesCompleted: progressData.imagesCompleted, audioCompleted: progressData.audioCompleted });
+  } catch (error) {
+    // Don't throw - partial sync failure should not block generation
+    queueLogger.error('Error in partial story sync (non-fatal)', error, { jobId: data.jobId });
+  }
+}
+
+/**
  * Webhook queue consumer - processes Replicate webhook payloads (R2 upload, DO update, sync).
  * Durable so work is not lost to Worker eviction; retries on failure.
  */
 export async function handleWebhookQueue(batch: MessageBatch<WebhookQueueMessage>, env: Env): Promise<void> {
   for (const message of batch.messages) {
     try {
-      const { prediction, metadata } = message.body;
-      await processWebhookInBackground(prediction as any, metadata, env);
+      const { prediction, metadata, origin } = message.body;
+      queueLogger.info(`Processing webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
+      await processWebhookInBackground(prediction as any, metadata, env, origin);
+      queueLogger.info(`Completed webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
       message.ack();
     } catch (error) {
       queueLogger.error('Webhook queue processing error', error, { storyId: message.body.metadata?.storyId, sceneIndex: message.body.metadata?.sceneIndex });

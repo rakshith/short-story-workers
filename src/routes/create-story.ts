@@ -201,6 +201,7 @@ async function initializeCoordinator(
             scenes: storyData.scenes,
             totalScenes: storyData.scenes.length,
             videoConfig,
+            sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
         }),
     }));
     console.log(`[Create Story] Durable Object initialized for story ${storyId}`);

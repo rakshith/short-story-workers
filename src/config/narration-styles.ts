@@ -14,9 +14,9 @@ export const DEFAULT_NARRATION_STYLE = 'neutral';
  */
 export const SCENE_WORD_LIMITS = {
     SCENE_5S: {
-        min: 10,    // ~2.0 wps - min for flow
-        target: 13, // ~2.6 wps - snappy pace
-        max: 15,    // ~3.0 wps - brisk
+        min: 11,    // ~2.0 wps - min for flow
+        target: 14, // ~2.6 wps - snappy pace
+        max: 16,    // ~3.0 wps - brisk
     },
     SCENE_10S: {
         min: 20,    // ~2.0 wps - min for flow

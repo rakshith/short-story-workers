@@ -34,6 +34,8 @@ interface StoryState {
   audioScenesDone: number[];
   /** Set once the first caller receives isComplete=true; subsequent callers get false */
   completionSignaled?: boolean;
+  /** Whether this story requires scene review before video generation */
+  sceneReviewRequired?: boolean;
 }
 
 export class StoryCoordinator {
@@ -78,7 +80,7 @@ export class StoryCoordinator {
   }
 
   private async handleInit(request: Request): Promise<Response> {
-    const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck } = await request.json() as any;
+    const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck, sceneReviewRequired } = await request.json() as any;
 
     // Count already completed items from scenes (for resume flow - Step 2)
     const imagesDone = scenes?.filter((s: any) => s.generatedImageUrl).length || 0;
@@ -98,6 +100,7 @@ export class StoryCoordinator {
       videoScenesDone: Array.from({ length: videosDone }, (_, i) => i),
       audioScenesDone: Array.from({ length: audioDone }, (_, i) => i),
       completionSignaled: false,
+      sceneReviewRequired: sceneReviewRequired || false,
     };
 
     // Persist to durable storage
@@ -154,20 +157,21 @@ export class StoryCoordinator {
       this.storyState.imagesCompleted++;
     }
 
-    // Check if images are all complete (for two-step flow)
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
-    // Check if all videos are done (for auto-flow)
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
-    // Check if audio is done - or if audio is disabled (enableVoiceOver=false)
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
 
-    // For two-step flow: complete when images + audio done (not videos)
+    // review mode: complete when images + audio done
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    // For auto flow: complete when videos + audio done
+    // auto mode: complete when videos + audio done (never on image update alone)
     const allDone = videosAllDone && audioAllDone;
 
-    const isComplete = (isImagesCompleteForReview || allDone) && !this.storyState.completionSignaled;
+    // Only signal complete for review mode here - auto mode waits for videos
+    const isComplete = this.storyState.sceneReviewRequired
+      ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
+      : (allDone && !this.storyState.completionSignaled);
+
     if (isComplete) {
       this.storyState.completionSignaled = true;
     }
@@ -310,18 +314,21 @@ export class StoryCoordinator {
       this.storyState.audioCompleted++;
     }
 
-    // Check completion: videos + audio (for auto flow) OR images + audio (for two-step)
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
 
-    // For two-step flow: complete when images + audio done
+    // review mode: complete when images + audio done
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    // For auto flow: complete when videos + audio done
+    // auto mode: complete when videos + audio done (never on audio update alone)
     const allDone = videosAllDone && audioAllDone;
 
-    const isComplete = (isImagesCompleteForReview || allDone) && !this.storyState.completionSignaled;
+    // Only signal complete for review mode here - auto mode waits for videos
+    const isComplete = this.storyState.sceneReviewRequired
+      ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
+      : (allDone && !this.storyState.completionSignaled);
+
     if (isComplete) {
       this.storyState.completionSignaled = true;
     }
@@ -373,6 +380,7 @@ export class StoryCoordinator {
       completionSignaled: this.storyState.completionSignaled || false,
       isCancelled: this.storyState.isCancelled || false,
       scenes: this.storyState.scenes,
+      videoConfig: this.storyState.videoConfig,
     }));
   }
 
