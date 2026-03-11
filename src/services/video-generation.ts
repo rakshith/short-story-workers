@@ -18,6 +18,7 @@ export interface VideoGenerationParams {
     aspect_ratio?: string;
     seed?: number;
     videoConfig: VideoConfig;
+    referenceImageUrl?: string; // The generated image to use as reference for video
 }
 
 export interface VideoGenerationResult {
@@ -56,10 +57,17 @@ export async function triggerVideoGeneration(
         Object.assign(input, modelConfig.defaultInputs);
     }
 
-    if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY ||
+    // Attach image inputs - priority: generated image > character references
+    const isSpecialTemplate = params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY ||
         params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
-        params.videoConfig.templateId === 'skeleton-3d-shorts') {
-        // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
+        params.videoConfig.templateId === 'skeleton-3d-shorts';
+
+    if (params.referenceImageUrl) {
+        // Use the generated image as reference (image-to-video) - highest priority
+        console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
+        attachImageInputs(input, params.model, params.referenceImageUrl ? [params.referenceImageUrl] : undefined);
+    } else if (isSpecialTemplate && params.videoConfig?.characterReferenceImages?.length) {
+        // Fall back to character reference images for special templates
         console.log('[VIDEO-GEN] Template ID:', params.videoConfig.templateId);
         console.log('[VIDEO-GEN] Character References:', params.videoConfig?.characterReferenceImages);
         attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);

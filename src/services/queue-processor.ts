@@ -11,7 +11,7 @@ import { trackAIUsageInternal } from './usage-tracking';
 export interface JobStatus {
   jobId: string;
   userId?: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'processing' | 'completed' | 'failed' | 'awaiting_review' | 'cancelled';
   progress: number;
   totalScenes: number;
   imagesGenerated: number;
@@ -36,17 +36,22 @@ export async function processSceneImage(
   }
 
   try {
-    // const modelToUse = scene.model || videoConfig.model;
-    // const selectedModel = getModelForTier(modelToUse);
+    // Determine image model: use imageModel if provided, otherwise use model
+    // For skeleton templates: default to xai/grok-imagine-image
+    const isSkeletonTemplate = videoConfig.templateId === 'skeleton-3d-shorts' || 
+                              videoConfig.templateId === 'skeleton-3d-shorts';
+    const defaultImageModel = isSkeletonTemplate ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
+    const imageModel = videoConfig.imageModel || videoConfig.model || defaultImageModel;
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,
-      model: videoConfig.model,
+      imageModel,
+      templateId: videoConfig.templateId,
       userId,
     });
 
     const { getModelImageConfig } = await import('../utils/replicate-model-config');
-    const modelConfig = getModelImageConfig(videoConfig.model);
+    const modelConfig = getModelImageConfig(imageModel);
 
     const parts = videoConfig.aspectRatio.split(':').map(Number);
     const widthRatio = parts[0] || 16;
@@ -72,11 +77,12 @@ export async function processSceneImage(
 
     // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
-    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}`;
+    const sceneReviewParam = videoConfig.sceneReviewRequired ? '&sceneReviewRequired=true' : '';
+    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}${sceneReviewParam}&model=${encodeURIComponent(imageModel)}`;
 
     processorLogger.debug(`Triggering async Replicate generation`, {
       sceneIndex,
-      model: videoConfig.model,
+      imageModel,
       webhookUrl,
     });
 
@@ -84,7 +90,7 @@ export async function processSceneImage(
     const result = await triggerReplicateGeneration(
       {
         prompt,
-        model: videoConfig.model,
+        model: imageModel,
         width,
         height,
         num_outputs: 1,
@@ -195,6 +201,7 @@ export async function processSceneVideo(
         aspect_ratio: videoConfig.aspectRatio,
         seed: videoConfig.preset.seed,
         videoConfig: videoConfig,
+        referenceImageUrl: message.generatedImageUrl,
       },
       {
         userId: userId!,

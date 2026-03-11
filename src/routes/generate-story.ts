@@ -20,11 +20,14 @@ interface GenerateStoryRequest {
     model?: string;
     title?: string;
     userTier?: string;
+    storyId?: string; // Existing story ID to resume video generation
+    baseUrl?: string; // Base URL for webhooks (optional - derived from request if not provided)
 }
 
 /**
  * POST /generate-and-create-story
  * Generates a script from a prompt and creates a story with queued generation jobs
+ * OR resumes video generation for an existing story with images
  */
 export async function handleGenerateAndCreateStory(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -32,7 +35,13 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
     try {
         const body: GenerateStoryRequest = await request.json();
 
-        // Validate required fields (seriesId is optional)
+        // Check if this is a resume request (storyId provided)
+        if (body.storyId) {
+            const baseUrl = new URL(request.url).origin;
+            return handleResumeVideoGeneration(body, env, baseUrl);
+        }
+
+        // Validate required fields for new story (seriesId is optional)
         if (!body.prompt || !body.duration || !body.videoConfig || !body.userId) {
             return jsonResponse(
                 { error: 'Missing required fields: prompt, duration, videoConfig, userId' },
@@ -41,8 +50,8 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         }
 
         // Parse user tier and get priority
-        console.log(`[Generate Story] Raw tier values - body.userTier: ${body.userTier}, videoConfig.userTier: ${body.videoConfig?.userTier}`);
-        const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
+        console.log(`[Generate Story] Raw tier values - body.userTier: ${body.userTier}, videoConfig.userTier: ${body.videoConfig.userTier}`);
+        const userTier = parseTier(body.userTier || body.videoConfig.userTier);
         const priority = getPriorityForTier(userTier, env);
         const maxConcurrency = getConcurrencyForTier(userTier, env);
 
@@ -381,6 +390,13 @@ async function queueGenerationJobs(
     env: Env
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
+    const sceneReviewRequired = body.videoConfig?.sceneReviewRequired === true;
+    
+    // For video mediaType: always queue images first
+    // - sceneReviewRequired=false → videos queued after image completes (in webhook)
+    // - sceneReviewRequired=true → videos queued after user triggers with storyId
+    // Videos are NEVER queued immediately - only for image mediaType
+    const shouldQueueVideos = mediaType === 'image';
     
     // Use default skeleton references if template is skeleton-3d-shorts and no references provided
     const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
@@ -393,7 +409,7 @@ async function queueGenerationJobs(
         characterReferenceImages: effectiveReferences
     };
 
-    // Queue visual generation jobs with tier and priority
+    // Queue visual generation jobs (images or videos based on shouldQueueVideos)
     const visualPromises = storyData.scenes.map((scene, index) => {
         const message: QueueMessage = {
             jobId,
@@ -404,7 +420,7 @@ async function queueGenerationJobs(
             storyData,
             videoConfig: updatedVideoConfig,
             sceneIndex: index,
-            type: mediaType,
+            type: shouldQueueVideos ? mediaType : 'image', // If not queuing videos, queue images only
             baseUrl,
             teamId: body.teamId,
             userTier,
@@ -413,28 +429,229 @@ async function queueGenerationJobs(
         return env.STORY_QUEUE.send(message);
     });
     await Promise.all(visualPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs (Priority: ${priority})`);
+    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : 'image'} generation jobs (Priority: ${priority})`);
 
-    // Queue audio generation jobs with tier and priority
-    const audioPromises = storyData.scenes.map((scene, index) => {
-        const message: QueueMessage = {
+    // Queue videos only for image mediaType (never for video - handled via webhook or user trigger)
+    if (!sceneReviewRequired && mediaType === 'video') {
+        console.log(`[Generate Story] Videos will be queued after image completion (sceneReviewRequired=false)`);
+    } else if (sceneReviewRequired && mediaType === 'video') {
+        console.log(`[Generate Story] Videos will be queued after user triggers with storyId (sceneReviewRequired=true)`);
+    }
+
+    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
+    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
+    
+    if (enableVoiceOver) {
+        const audioPromises = storyData.scenes.map((scene, index) => {
+            const message: QueueMessage = {
+                jobId,
+                userId: body.userId,
+                seriesId: body.seriesId,
+                storyId,
+                title: storyData.title || body.title || '',
+                storyData,
+                videoConfig: updatedVideoConfig,
+                sceneIndex: index,
+                type: 'audio',
+                baseUrl,
+                teamId: body.teamId,
+                userTier,
+                priority,
+            };
+            return env.STORY_QUEUE.send(message);
+        });
+        await Promise.all(audioPromises);
+        console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
+    } else {
+        console.log(`[Generate Story] Audio generation skipped (enableVoiceOver=false)`);
+    }
+
+}
+
+/**
+ * Handles resuming video generation for an existing story with images
+ * Called when user passes storyId to continue from image generation to video generation
+ */
+async function handleResumeVideoGeneration(
+    body: GenerateStoryRequest,
+    env: Env,
+    requestBaseUrl?: string
+): Promise<Response> {
+    const { storyId, userId } = body;
+
+    if (!storyId || !userId) {
+        return jsonResponse(
+            { error: 'Missing required fields: storyId, userId' },
+            400
+        );
+    }
+
+    console.log(`[Generate Story] Resume video generation for story ${storyId}`);
+
+    try {
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+        // Fetch existing story
+        const { data: story, error: storyError } = await supabase
+            .from('stories')
+            .select('id, story, video_config, status, video_generation_triggered')
+            .eq('id', storyId)
+            .single();
+
+        if (storyError || !story) {
+            return jsonResponse({ error: 'Story not found' }, 404);
+        }
+
+        // Check if video generation already triggered
+        if (story.video_generation_triggered) {
+            return jsonResponse(
+                { error: 'Video generation has already been triggered for this story' },
+                400
+            );
+        }
+
+        // Check if story has scenes
+        const storyData = story.story as StoryTimeline;
+        if (!storyData?.scenes) {
+            return jsonResponse(
+                { error: 'Story has no scenes' },
+                400
+            );
+        }
+
+        // Get scenes that have generated images - generate videos only for those
+        const scenesWithImages = storyData.scenes
+            .map((scene: any, index: number) => ({ scene, index }))
+            .filter(({ scene }: { scene: any; index: number }) => scene.generatedImageUrl);
+
+        if (scenesWithImages.length === 0) {
+            return jsonResponse(
+                { 
+                    error: 'No scenes have generated images yet. Cannot trigger video generation.',
+                    totalScenes: storyData.scenes.length
+                },
+                400
+            );
+        }
+
+        console.log(`[Generate Story] Found ${scenesWithImages.length} scenes with images out of ${storyData.scenes.length}`);
+
+        // Check if story is in a valid status (processing, completed, or awaiting_review)
+        const validStatuses = ['processing', 'completed', 'awaiting_review', 'draft'];
+        if (!validStatuses.includes(story.status)) {
+            return jsonResponse(
+                { error: `Story is in invalid status: ${story.status}. Cannot trigger video generation.` },
+                400
+            );
+        }
+
+        // Update story to mark video generation as triggered
+        await supabase
+            .from('stories')
+            .update({ 
+                video_generation_triggered: true,
+                status: 'processing'
+            })
+            .eq('id', storyId);
+
+        // Get or create job for this story
+        const { data: existingJob } = await supabase
+            .from('story_jobs')
+            .select('job_id')
+            .eq('story_id', storyId)
+            .in('status', ['processing', 'awaiting_review'])
+            .single();
+
+        const jobId = existingJob?.job_id || generateUUID();
+
+        // Create/update job
+        await supabase
+            .from('story_jobs')
+            .upsert({
+                job_id: jobId,
+                user_id: userId,
+                story_id: storyId,
+                status: 'processing',
+                progress: 50,
+                total_scenes: storyData.scenes.length,
+                images_generated: storyData.scenes.length,
+                audio_generated: 0,
+                updated_at: new Date().toISOString(),
+                teamId: body.teamId,
+            }, { onConflict: 'job_id' });
+
+        // Get videoConfig
+        const videoConfig = story.video_config as VideoConfig;
+        
+        // Initialize DO with story data - skip audio check for Step 2 (only videos needed)
+        const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
+        const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
+        
+        await coordinator.fetch(new Request('http://do/init', {
+            method: 'POST',
+            body: JSON.stringify({
+                storyId,
+                userId,
+                scenes: storyData.scenes,
+                totalScenes: storyData.scenes.length,
+                videoConfig,
+                skipAudioCheck: true, // Step 2 only needs videos - ignore audio
+            }),
+        }));
+
+        // The storyData.scenes already has audioUrl from Step 1
+        // So we need to mark audio as completed without calling updateAudio
+        // We'll use a special approach - call updateAudio with existing audio data
+
+        // Queue video generation jobs only for scenes with generated images
+
+        // Queue video generation jobs only for scenes with generated images
+        const userTier = parseTier(body.userTier || videoConfig?.userTier);
+        const priority = getPriorityForTier(userTier, env);
+        
+        // Use baseUrl from request or fallback to default
+        const webhookBaseUrl = requestBaseUrl || body.baseUrl || 'https://create-story-worker.artflicks.workers.dev';
+
+        const videoPromises = scenesWithImages.map(({ index, scene }) => {
+            const generatedImageUrl = scene.generatedImageUrl;
+            const message: QueueMessage = {
+                jobId,
+                userId,
+                seriesId: videoConfig?.seriesId,
+                storyId,
+                title: storyData.title || '',
+                storyData,
+                videoConfig,
+                sceneIndex: index,
+                type: 'video',
+                baseUrl: webhookBaseUrl,
+                teamId: body.teamId,
+                userTier,
+                priority,
+                generatedImageUrl,
+            };
+            return env.STORY_QUEUE.send(message);
+        });
+        await Promise.all(videoPromises);
+        
+        console.log(`[Generate Story] Queued ${scenesWithImages.length} video generation jobs for story ${storyId} (out of ${storyData.scenes.length} scenes)`);
+
+        return jsonResponse({
+            success: true,
             jobId,
-            userId: body.userId,
-            seriesId: body.seriesId,
             storyId,
-            title: storyData.title || body.title || '',
-            storyData,
-            videoConfig: updatedVideoConfig,
-            sceneIndex: index,
-            type: 'audio',
-            baseUrl,
-            teamId: body.teamId,
-            userTier,
-            priority,
-        };
-        return env.STORY_QUEUE.send(message);
-    });
-    await Promise.all(audioPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
-
+            message: 'Video generation started',
+            stats: {
+                totalScenes: storyData.scenes.length,
+                videosQueued: scenesWithImages.length,
+            },
+        });
+    } catch (error) {
+        console.error('[Generate Story] Resume error:', error);
+        return jsonResponse(
+            { error: 'Failed to resume video generation', details: error instanceof Error ? error.message : 'Unknown error' },
+            500
+        );
+    }
 }

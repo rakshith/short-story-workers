@@ -73,7 +73,8 @@ export interface VideoConfig {
   id?: string;
   mediaType?: MediaType;
   aspectRatio: string;
-  model: string;
+  model: string; // Video model for video generation
+  imageModel?: string; // Image model for image generation (default: xai/grok-imagine-image for skeleton templates)
   preset: AIPresetItem;
   music: string;
   musicVolume?: number; // Added missing field
@@ -82,7 +83,8 @@ export interface VideoConfig {
   userId?: string;
   seriesId?: string;
   teamId?: string | null; // Team context for collaboration
-  enableCaptions?: boolean; // Added missing field
+  enableCaptions?: boolean; // Show/hide captions in UI
+  enableVoiceOver?: boolean; // Generate audio (voice-over)
   watermark?: WatermarkConfig; // Watermark configuration
   videoType: string;
   outputFormat: string;
@@ -99,6 +101,8 @@ export interface VideoConfig {
   resolution: string;
   templateId?: string;
   characterReferenceImages?: string[];
+  sceneReviewRequired?: boolean; // If true, pause after image generation for user review
+  videoGenerationTriggered?: boolean; // Track if videos have been initiated
 }
 
 export interface Scene {
@@ -142,13 +146,14 @@ export interface AIPresetItem {
 }
 
 export interface CreateStoryRequest {
-  script: string | StoryTimeline;
-  videoConfig: VideoConfig;
+  script?: string | StoryTimeline;
+  videoConfig?: VideoConfig;
   userId: string;
   seriesId?: string;
   teamId: string;
-  title: string;
+  title?: string;
   userTier?: UserTier; // User tier for resource restrictions
+  storyId?: string; // Existing story ID to resume video generation
 }
 
 export interface CreateStoryResponse {
@@ -171,6 +176,7 @@ export const ProjectStatus = {
   COMPLETED: 'completed',
   FAILED: 'failed',
   CANCELLED: 'cancelled',
+  AWAITING_REVIEW: 'awaiting_review',
 } as const;
 
 export type ProjectStatusType = typeof ProjectStatus[keyof typeof ProjectStatus];

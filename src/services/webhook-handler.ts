@@ -14,6 +14,8 @@ export interface WebhookMetadata {
     seriesId: string;
     jobId: string;
     model: string;
+    sceneReviewRequired?: boolean;
+    videoConfig?: any;
 }
 
 /**
@@ -32,6 +34,7 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
     const seriesId = (rawSeriesId && rawSeriesId !== 'undefined' && rawSeriesId.trim() !== '') ? rawSeriesId.trim() : '';
     const jobId = url.searchParams.get('jobId') || '';
     const model = url.searchParams.get('model') || (type === 'video' ? 'wan-video/wan-2.5-t2v-fast' : 'black-forest-labs/flux-schnell');
+    const sceneReviewRequired = url.searchParams.get('sceneReviewRequired') === 'true';
 
     if (!storyId || !sceneIndexStr) {
         return new Response('Missing metadata', { status: 400 });
@@ -64,7 +67,7 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
         return new Response('Already processed', { status: 200 });
     }
 
-    const metadata: WebhookMetadata = { storyId, sceneIndex, type, userId, seriesId, jobId, model };
+    const metadata: WebhookMetadata = { storyId, sceneIndex, type, userId, seriesId, jobId, model, sceneReviewRequired };
 
     // Queue path: durable processing, Replicate always gets 200; no waitUntil eviction
     if (env.WEBHOOK_QUEUE) {
@@ -85,7 +88,7 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
  * Exported for webhook queue consumer.
  */
 export async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env): Promise<void> {
-    const { storyId, sceneIndex, type, userId, seriesId, jobId, model } = metadata;
+    const { storyId, sceneIndex, type, userId, seriesId, jobId, model, sceneReviewRequired } = metadata;
 
     try {
         if (prediction.status !== 'succeeded') {
@@ -149,6 +152,83 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
 
         const updateRes = await coordinator.fetch(new Request(endpoint, { method: 'POST', body: JSON.stringify(body) }));
         const status = await updateRes.json() as any;
+
+        // Handle auto video generation (sceneReviewRequired=false): queue video after each image completes
+        if (type === 'image' && !sceneReviewRequired && resultUrl) {
+            apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
+            
+            // Fetch story to get videoConfig and job info
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+            
+            const { data: storyData } = await supabase
+                .from('stories')
+                .select('story, video_config, status')
+                .eq('id', storyId)
+                .single();
+
+            const { data: jobData } = await supabase
+                .from('story_jobs')
+                .select('job_id, user_id, team_id')
+                .eq('story_id', storyId)
+                .in('status', ['processing', 'awaiting_review'])
+                .single();
+
+            if (storyData?.video_config && jobData?.job_id) {
+                const videoConfig = storyData.video_config;
+                const jobId = jobData.job_id;
+                
+                // Queue video with generated image URL as reference
+                const queueMessage = {
+                    jobId,
+                    userId: jobData.user_id,
+                    seriesId: videoConfig.seriesId,
+                    storyId,
+                    title: storyData.story?.title || '',
+                    storyData: storyData.story,
+                    videoConfig,
+                    sceneIndex,
+                    type: 'video' as const,
+                    baseUrl: 'https://create-story-worker.artflicks.workers.dev',
+                    teamId: jobData.team_id,
+                    userTier: videoConfig.userTier,
+                    priority: 3, // Default priority
+                    generatedImageUrl: resultUrl, // Use the generated image!
+                };
+                
+                await env.STORY_QUEUE.send(queueMessage);
+                apiLogger.info(`Queued video generation for scene ${sceneIndex} with reference image`, { storyId, imageUrl: resultUrl });
+            }
+        }
+
+        // Handle two-step video generation: if sceneReviewRequired is true and images + audio complete
+        if (type === 'image' && sceneReviewRequired && status.isImagesCompleteForReview) {
+            apiLogger.info(`Images complete for review, setting status to awaiting_review`, { storyId });
+            const { createClient } = await import('@supabase/supabase-js');
+            const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+            
+            // Update job status to awaiting_review
+            await supabase
+                .from('story_jobs')
+                .update({ status: 'awaiting_review', progress: 50 })
+                .eq('job_id', jobId);
+
+            // Update story to mark scene_review_required and video generation not triggered
+            await supabase
+                .from('stories')
+                .update({ 
+                    scene_review_required: true,
+                    video_generation_triggered: false,
+                    status: 'awaiting_review'
+                })
+                .eq('id', storyId);
+
+            // Sync story to DB (but don't finalize - videos will be generated later)
+            await syncStoryForReview({ jobId, storyId, userId }, coordinator, env);
+            return;
+        }
+
+        // Normal flow: finalize when all complete
         if (status.isComplete) {
             apiLogger.info(`Story is complete, triggering final sync`, { storyId });
             const { syncStoryToSupabase } = await import('../queue-consumer');
@@ -156,6 +236,74 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         }
     } catch (error) {
         console.error(`[WEBHOOK] Background processing error:`, error);
+    }
+}
+
+/**
+ * Syncs story to database when awaiting review - doesn't finalize, just saves current state
+ */
+export async function syncStoryForReview(
+    data: { jobId: string; storyId: string; userId: string },
+    coordinator: any,
+    env: Env
+): Promise<void> {
+    apiLogger.info(`Syncing story for review`, { jobId: data.jobId, storyId: data.storyId });
+
+    try {
+        // Get story state from DO WITHOUT finalizing (preserves state for Step 2)
+        const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
+        const progressData = await progressRes.json() as any;
+
+        const { createClient } = await import('@supabase/supabase-js');
+        const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+        // Get current story and merge with scenes from DO
+        const { data: currentStory } = await supabase
+            .from('stories')
+            .select('story')
+            .eq('id', data.storyId)
+            .single();
+
+        let updatedStory: any = null;
+
+        if (currentStory?.story && progressData.scenes) {
+            updatedStory = { ...currentStory.story };
+            progressData.scenes.forEach((scene: any, idx: number) => {
+                if (updatedStory.scenes[idx]) {
+                    updatedStory.scenes[idx] = {
+                        ...updatedStory.scenes[idx],
+                        ...scene,
+                    };
+                }
+            });
+
+            // Update story with images - status is awaiting_review
+            await supabase
+                .from('stories')
+                .update({
+                    story: updatedStory,
+                    status: 'awaiting_review',
+                    updated_at: new Date().toISOString(),
+                })
+                .eq('id', data.storyId);
+        }
+
+        // Update job progress to 50% (images done, waiting for review)
+        await supabase
+            .from('story_jobs')
+            .update({
+                status: 'awaiting_review',
+                progress: 50,
+                images_generated: progressData.imagesCompleted,
+                audio_generated: progressData.audioCompleted,
+                updated_at: new Date().toISOString(),
+            })
+            .eq('job_id', data.jobId);
+
+        apiLogger.info(`Story synced for review (DO state preserved for Step 2)`, { jobId: data.jobId, storyId: data.storyId });
+    } catch (error) {
+        apiLogger.error('Error syncing story for review', error, { jobId: data.jobId });
+        throw error;
     }
 }
 

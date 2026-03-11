@@ -11,14 +11,15 @@ export interface QueueMessage {
   seriesId?: string;
   storyId: string;
   title: string;
-  storyData: StoryTimeline; // StoryTimeline - typed at usage sites
+  storyData: StoryTimeline;
   videoConfig: VideoConfig;
   sceneIndex: number;
   type: 'image' | 'video' | 'audio' | 'finalize';
   baseUrl?: string;
   teamId?: string;
-  userTier?: string; // User tier for priority and concurrency control
-  priority?: number; // Calculated priority from tier
+  userTier?: string;
+  priority?: number;
+  generatedImageUrl?: string; // For video generation - use generated image as reference
 }
 
 /** Webhook queue: durable processing so Replicate always gets 200 without waitUntil eviction */
@@ -32,6 +33,7 @@ export interface WebhookQueueMessage {
     seriesId: string;
     jobId: string;
     model: string;
+    sceneReviewRequired?: boolean;
   };
 }
 

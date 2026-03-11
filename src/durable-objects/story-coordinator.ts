@@ -21,12 +21,15 @@ interface StoryState {
   userId: string;
   scenes: any[];
   imagesCompleted: number;
+  videosCompleted: number;
   audioCompleted: number;
   totalScenes: number;
   isCancelled?: boolean;
   videoConfig?: any;
-  /** Prevents double-counting: tracks which scene indices already recorded an image/video result */
+  /** Prevents double-counting: tracks which scene indices already recorded an image result */
   imageScenesDone: number[];
+  /** Prevents double-counting: tracks which scene indices already recorded a video result */
+  videoScenesDone: number[];
   /** Prevents double-counting: tracks which scene indices already recorded an audio result */
   audioScenesDone: number[];
   /** Set once the first caller receives isComplete=true; subsequent callers get false */
@@ -75,25 +78,32 @@ export class StoryCoordinator {
   }
 
   private async handleInit(request: Request): Promise<Response> {
-    const { storyId, userId, scenes, totalScenes, videoConfig } = await request.json() as any;
+    const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck } = await request.json() as any;
+
+    // Count already completed items from scenes (for resume flow - Step 2)
+    const imagesDone = scenes?.filter((s: any) => s.generatedImageUrl).length || 0;
+    const audioDone = skipAudioCheck ? totalScenes : (scenes?.filter((s: any) => s.audioUrl).length || 0);
+    const videosDone = scenes?.filter((s: any) => s.generatedVideoUrl).length || 0;
 
     this.storyState = {
       storyId,
       userId,
       scenes: scenes || [],
-      imagesCompleted: 0,
-      audioCompleted: 0,
+      imagesCompleted: imagesDone,
+      videosCompleted: videosDone,
+      audioCompleted: audioDone,
       totalScenes,
       videoConfig,
-      imageScenesDone: [],
-      audioScenesDone: [],
+      imageScenesDone: Array.from({ length: imagesDone }, (_, i) => i),
+      videoScenesDone: Array.from({ length: videosDone }, (_, i) => i),
+      audioScenesDone: Array.from({ length: audioDone }, (_, i) => i),
       completionSignaled: false,
     };
 
     // Persist to durable storage
     await this.state.storage.put('storyState', this.storyState);
 
-    console.log(`[StoryCoordinator] Initialized for story ${storyId} with ${totalScenes} scenes`);
+    console.log(`[StoryCoordinator] Initialized for story ${storyId} with ${totalScenes} scenes (images: ${imagesDone}, audio: ${audioDone}, videos: ${videosDone}, skipAudioCheck: ${skipAudioCheck})`);
     return new Response(JSON.stringify({ success: true }));
   }
 
@@ -108,7 +118,9 @@ export class StoryCoordinator {
       }
       // Backfill new fields for DOs created before this deploy
       if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.videoScenesDone) this.storyState.videoScenesDone = [];
       if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
+      if (this.storyState.videosCompleted === undefined) this.storyState.videosCompleted = 0;
     }
 
     // Check if cancelled
@@ -117,10 +129,11 @@ export class StoryCoordinator {
         error: 'Job cancelled', 
         isCancelled: true,
         imagesCompleted: this.storyState.imagesCompleted,
+        videosCompleted: this.storyState.videosCompleted,
         audioCompleted: this.storyState.audioCompleted,
         totalScenes: this.storyState.totalScenes,
         isComplete: false
-      }), { status: 499 }); // Using 499 Client Closed Request as a custom "Cancelled" code
+      }), { status: 499 });
     }
 
     // Update scene with image (single-threaded, no race condition)
@@ -141,10 +154,20 @@ export class StoryCoordinator {
       this.storyState.imagesCompleted++;
     }
 
-    // Signal completion at most once across ALL update handlers
-    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isComplete = allDone && !this.storyState.completionSignaled;
+    // Check if images are all complete (for two-step flow)
+    const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
+    // Check if all videos are done (for auto-flow)
+    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    // Check if audio is done - or if audio is disabled (enableVoiceOver=false)
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+
+    // For two-step flow: complete when images + audio done (not videos)
+    const isImagesCompleteForReview = imagesAllDone && audioAllDone;
+    // For auto flow: complete when videos + audio done
+    const allDone = videosAllDone && audioAllDone;
+
+    const isComplete = (isImagesCompleteForReview || allDone) && !this.storyState.completionSignaled;
     if (isComplete) {
       this.storyState.completionSignaled = true;
     }
@@ -157,9 +180,11 @@ export class StoryCoordinator {
     return new Response(JSON.stringify({
       success: true,
       imagesCompleted: this.storyState.imagesCompleted,
+      videosCompleted: this.storyState.videosCompleted,
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
+      isImagesCompleteForReview,
     }));
   }
 
@@ -173,7 +198,9 @@ export class StoryCoordinator {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
       if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.videoScenesDone) this.storyState.videoScenesDone = [];
       if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
+      if (this.storyState.videosCompleted === undefined) this.storyState.videosCompleted = 0;
     }
 
     // Check if cancelled
@@ -182,6 +209,7 @@ export class StoryCoordinator {
         error: 'Job cancelled', 
         isCancelled: true,
         imagesCompleted: this.storyState.imagesCompleted,
+        videosCompleted: this.storyState.videosCompleted,
         audioCompleted: this.storyState.audioCompleted,
         totalScenes: this.storyState.totalScenes,
         isComplete: false
@@ -197,18 +225,21 @@ export class StoryCoordinator {
       };
     }
 
-    // Deduplicate: reuse imageScenesDone since video replaces image for the same visual slot
+    // Deduplicate: track video completion separately from images
     if (
       (update.videoUrl || update.videoError) &&
-      !this.storyState.imageScenesDone.includes(update.sceneIndex)
+      !this.storyState.videoScenesDone.includes(update.sceneIndex)
     ) {
-      this.storyState.imageScenesDone.push(update.sceneIndex);
-      this.storyState.imagesCompleted++;
+      this.storyState.videoScenesDone.push(update.sceneIndex);
+      this.storyState.videosCompleted++;
     }
 
-    // Signal completion at most once across ALL update handlers
-    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    // Check completion: videos + audio
+    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const allDone = videosAllDone && audioAllDone;
+
     const isComplete = allDone && !this.storyState.completionSignaled;
     if (isComplete) {
       this.storyState.completionSignaled = true;
@@ -217,11 +248,12 @@ export class StoryCoordinator {
     // Persist
     await this.state.storage.put('storyState', this.storyState);
 
-    console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
+    console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.videosCompleted}/${this.storyState.totalScenes}`);
 
     return new Response(JSON.stringify({
       success: true,
       imagesCompleted: this.storyState.imagesCompleted,
+      videosCompleted: this.storyState.videosCompleted,
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
@@ -238,7 +270,9 @@ export class StoryCoordinator {
         return new Response(JSON.stringify({ error: 'Story not initialized' }), { status: 400 });
       }
       if (!this.storyState.imageScenesDone) this.storyState.imageScenesDone = [];
+      if (!this.storyState.videoScenesDone) this.storyState.videoScenesDone = [];
       if (!this.storyState.audioScenesDone) this.storyState.audioScenesDone = [];
+      if (this.storyState.videosCompleted === undefined) this.storyState.videosCompleted = 0;
     }
 
     // Check if cancelled
@@ -247,6 +281,7 @@ export class StoryCoordinator {
         error: 'Job cancelled', 
         isCancelled: true,
         imagesCompleted: this.storyState.imagesCompleted,
+        videosCompleted: this.storyState.videosCompleted,
         audioCompleted: this.storyState.audioCompleted,
         totalScenes: this.storyState.totalScenes,
         isComplete: false
@@ -275,10 +310,18 @@ export class StoryCoordinator {
       this.storyState.audioCompleted++;
     }
 
-    // Signal completion at most once across ALL update handlers
-    const allDone = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isComplete = allDone && !this.storyState.completionSignaled;
+    // Check completion: videos + audio (for auto flow) OR images + audio (for two-step)
+    const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
+    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+
+    // For two-step flow: complete when images + audio done
+    const isImagesCompleteForReview = imagesAllDone && audioAllDone;
+    // For auto flow: complete when videos + audio done
+    const allDone = videosAllDone && audioAllDone;
+
+    const isComplete = (isImagesCompleteForReview || allDone) && !this.storyState.completionSignaled;
     if (isComplete) {
       this.storyState.completionSignaled = true;
     }
@@ -291,6 +334,7 @@ export class StoryCoordinator {
     return new Response(JSON.stringify({
       success: true,
       imagesCompleted: this.storyState.imagesCompleted,
+      videosCompleted: this.storyState.videosCompleted,
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
@@ -306,6 +350,7 @@ export class StoryCoordinator {
     if (!this.storyState) {
       return new Response(JSON.stringify({
         imagesCompleted: 0,
+        videosCompleted: 0,
         audioCompleted: 0,
         totalScenes: 0,
         isComplete: false,
@@ -313,11 +358,15 @@ export class StoryCoordinator {
       }));
     }
 
-    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
+    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isComplete = (imagesAllDone && audioAllDone) || (videosAllDone && audioAllDone);
 
     return new Response(JSON.stringify({
       imagesCompleted: this.storyState.imagesCompleted,
+      videosCompleted: this.storyState.videosCompleted,
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
@@ -356,14 +405,21 @@ export class StoryCoordinator {
       return new Response(JSON.stringify({ error: 'Job cancelled', isCancelled: true }), { status: 499 });
     }
 
-    const isComplete = this.storyState.imagesCompleted >= this.storyState.totalScenes &&
-      this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+
+    // For two-step flow: can finalize when images + audio done
+    // For auto flow: can finalize when videos + audio done
+    const isComplete = (imagesAllDone && audioAllDone) || (videosAllDone && audioAllDone);
 
     if (!isComplete) {
       return new Response(JSON.stringify({
         success: false,
         isComplete: false,
         imagesCompleted: this.storyState.imagesCompleted,
+        videosCompleted: this.storyState.videosCompleted,
         audioCompleted: this.storyState.audioCompleted,
         totalScenes: this.storyState.totalScenes,
       }));
@@ -399,6 +455,7 @@ export class StoryCoordinator {
       userId: this.storyState.userId,
       scenes: this.storyState.scenes,
       imagesCompleted: this.storyState.imagesCompleted,
+      videosCompleted: this.storyState.videosCompleted,
       audioCompleted: this.storyState.audioCompleted,
       timeline,
     };
