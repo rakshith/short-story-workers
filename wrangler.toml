@@ -150,6 +150,7 @@ APP_URL = "https://artflicks.app"
 # Environment variables (set via wrangler secret put or dashboard)
 [vars]
 # Default top-level vars for local development (wrangler dev)
+GEN_PROVIDER = "mock"  # Set to "mock" for testing without external APIs
 TIER1_CONCURRENCY = 2
 TIER1_BATCH_SIZE = 3
 TIER1_PRIORITY = 1

@@ -9,6 +9,9 @@ import { handleGenerateAndCreateStory } from './routes/generate-story';
 import { handleReplicateWebhook, handleReplicateWebhookRecover } from './services/webhook-handler';
 import { jsonResponse, corsResponse, notFoundResponse } from './utils/response';
 
+// Generation Engine imports
+import { createCreateJobAPI, createJobStatusAPI, createApproveStepAPI } from './generation-engine/api';
+
 // Export Durable Object class
 export { StoryCoordinator } from './durable-objects/story-coordinator';
 
@@ -26,6 +29,10 @@ export default {
     }
 
     // Route requests to handlers
+    const isApproveRoute = method === 'POST' && /^\/api\/jobs\/[^/]+\/approve$/.test(pathname);
+    const isCancelRoute = method === 'POST' && /^\/api\/jobs\/[^/]+\/cancel$/.test(pathname);
+    const isJobStatusRoute = method === 'GET' && /^\/api\/jobs\/[^/]+$/.test(pathname) && !pathname.includes('/approve') && !pathname.includes('/cancel');
+    
     switch (true) {
       // GET /status - Check job progress
       case method === 'GET' && pathname === '/status':
@@ -55,16 +62,40 @@ export default {
       case method === 'POST' && pathname === '/create-story-sync':
         return jsonResponse({ error: 'Synchronous endpoint deprecated. Use /create-story instead.' }, 410);
 
+      // === Generation Engine API Routes ===
+      
+      // POST /api/jobs - Create new generation job
+      case method === 'POST' && pathname === '/api/jobs':
+        return handleCreateJob(request, env);
+
+      // GET /api/jobs/:id - Get job status
+      case isJobStatusRoute:
+        return handleGetJobStatus(request, env);
+
+      // POST /api/jobs/:id/approve - Approve step (scene review)
+      case isApproveRoute:
+        return handleApproveStep(request, env);
+
+      // POST /api/jobs/:id/cancel - Cancel job
+      case isCancelRoute:
+        return handleCancelJob(request, env);
+
       // Root path - Show available endpoints
       case pathname === '/':
         return jsonResponse({
           error: 'Invalid endpoint',
           message: `The root path '/' is not a valid endpoint. Please use one of the available endpoints:`,
           availableEndpoints: {
+            // Legacy endpoints
             'POST /create-story': 'Create a new story (queued for async processing)',
             'POST /generate-and-create-story': 'Generate script and create story',
             'POST /cancel-generation': 'Cancel a currently running generation job',
             'GET /status?jobId=<jobId>': 'Check the status of a story generation job',
+            // Generation Engine API
+            'POST /api/jobs': 'Create a new generation job (DAG-based)',
+            'GET /api/jobs/:id': 'Get job status',
+            'POST /api/jobs/:id/approve': 'Approve a step (e.g., scene review)',
+            'POST /api/jobs/:id/cancel': 'Cancel a job',
           },
           method,
           path: pathname,
@@ -86,3 +117,140 @@ export default {
     return handleQueue(batch as MessageBatch<QueueMessage>, env);
   },
 };
+
+// === Generation Engine API Handlers ===
+
+async function handleCreateJob(request: Request, env: Env): Promise<Response> {
+  try {
+    const body = await request.json() as any;
+    
+    if (!body.userId || !body.templateId || !body.prompt) {
+      return jsonResponse({ 
+        error: 'Missing required fields',
+        required: ['userId', 'templateId', 'prompt']
+      }, 400);
+    }
+
+    const api = createCreateJobAPI(env);
+    const result = await api.execute({
+      userId: body.userId,
+      templateId: body.templateId,
+      profileId: body.profileId,
+      prompt: body.prompt,
+      videoConfig: body.videoConfig,
+    });
+
+    if (!result.success) {
+      return jsonResponse({ error: result.error }, 500);
+    }
+
+    return jsonResponse({
+      success: true,
+      jobId: result.jobId,
+      storyId: result.storyId,
+    }, 201);
+  } catch (error) {
+    return jsonResponse({ 
+      error: error instanceof Error ? error.message : 'Failed to create job' 
+    }, 500);
+  }
+}
+
+async function handleGetJobStatus(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const jobId = url.pathname.split('/').pop();
+
+    if (!jobId) {
+      return jsonResponse({ error: 'Job ID required' }, 400);
+    }
+
+    const api = createJobStatusAPI(env);
+    const result = await api.execute(jobId);
+
+    if (!result.success) {
+      return jsonResponse({ error: result.error }, 404);
+    }
+
+    return jsonResponse(result);
+  } catch (error) {
+    return jsonResponse({ 
+      error: error instanceof Error ? error.message : 'Failed to get job status' 
+    }, 500);
+  }
+}
+
+async function handleApproveStep(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const jobId = pathParts[pathParts.length - 2];
+    const body = await request.json() as any;
+
+    if (!body.storyId || !body.userId) {
+      return jsonResponse({ 
+        error: 'Missing required fields',
+        required: ['storyId', 'userId']
+      }, 400);
+    }
+
+    const api = createApproveStepAPI(env);
+    const result = await api.execute({
+      jobId,
+      storyId: body.storyId,
+      userId: body.userId,
+      approvedScenes: body.approvedScenes,
+      step: body.step || 'scene-review',
+    });
+
+    if (!result.success) {
+      return jsonResponse({ error: result.error }, 500);
+    }
+
+    return jsonResponse(result);
+  } catch (error) {
+    return jsonResponse({ 
+      error: error instanceof Error ? error.message : 'Failed to approve step' 
+    }, 500);
+  }
+}
+
+async function handleCancelJob(request: Request, env: Env): Promise<Response> {
+  try {
+    const url = new URL(request.url);
+    const pathParts = url.pathname.split('/');
+    const jobId = pathParts[pathParts.length - 2];
+
+    if (!jobId) {
+      return jsonResponse({ error: 'Job ID required' }, 400);
+    }
+
+    const { createClient } = await import('@supabase/supabase-js');
+    const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
+
+    const { data: job, error: jobError } = await supabase
+      .from('story_jobs')
+      .select('story_id')
+      .eq('job_id', jobId)
+      .single();
+
+    if (jobError || !job) {
+      return jsonResponse({ error: 'Job not found' }, 404);
+    }
+
+    const id = env.STORY_COORDINATOR.idFromName(job.story_id);
+    const coordinator = env.STORY_COORDINATOR.get(id);
+    await coordinator.fetch(new Request('http://do/cancel', { method: 'POST' }));
+
+    await supabase
+      .from('story_jobs')
+      .update({ status: 'cancelled' })
+      .eq('job_id', jobId);
+
+    return jsonResponse({ success: true, jobId });
+  } catch (error) {
+    return jsonResponse({ 
+      error: error instanceof Error ? error.message : 'Failed to cancel job' 
+    }, 500);
+  }
+}
