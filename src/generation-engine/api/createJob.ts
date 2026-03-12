@@ -7,7 +7,7 @@ import { getMockStoryQueue, clearAllMockQueues } from '../queue/mockQueue';
 export interface CreateJobRequest {
   userId: string;
   templateId: string;
-  profileId: string;
+  profileId?: string;
   prompt: string;
   videoConfig?: {
     aspectRatio?: string;
