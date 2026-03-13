@@ -33,6 +33,7 @@ export class ScriptGenerator {
                 system: systemPrompt,
                 prompt: context.prompt,
                 temperature,
+                // @ts-ignore - Type instantiation is excessively deep for complex Zod schemas
                 output: Output.object({
                     schema,
                 }),

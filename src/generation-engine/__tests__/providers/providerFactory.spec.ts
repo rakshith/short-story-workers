@@ -45,7 +45,7 @@ describe('Providers Layer - Provider Factory', () => {
     });
 
     it('should not use mock when GEN_PROVIDER is not set', () => {
-      const env = {};
+      const env = {} as { GEN_PROVIDER?: string };
       const useMock = env.GEN_PROVIDER === 'mock';
       expect(useMock).toBe(false);
     });
@@ -61,7 +61,7 @@ describe('Providers Layer - Provider Factory', () => {
     it('should return mock image provider when useMock=true', () => {
       const useMock = true;
 
-      let provider;
+      let provider: any;
       if (useMock) {
         provider = {
           name: 'MockImageProvider',
@@ -76,7 +76,7 @@ describe('Providers Layer - Provider Factory', () => {
     it('should return mock video provider when useMock=true', () => {
       const useMock = true;
 
-      let provider;
+      let provider: any;
       if (useMock) {
         provider = {
           name: 'MockVideoProvider',
@@ -91,7 +91,7 @@ describe('Providers Layer - Provider Factory', () => {
     it('should return mock voice provider when useMock=true', () => {
       const useMock = true;
 
-      let provider;
+      let provider: any;
       if (useMock) {
         provider = {
           name: 'MockVoiceProvider',

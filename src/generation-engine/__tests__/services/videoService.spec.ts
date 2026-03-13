@@ -275,7 +275,7 @@ describe('Services Layer - Video Service', () => {
     });
 
     it('should identify skeleton-3d-shorts as special template', () => {
-      const templateId = 'skeleton-3d-shorts';
+      const templateId = 'skeleton-3d-shorts' as string;
 
       const isSpecialTemplate = templateId === 'character-story' ||
         templateId === 'skeleton-3d-shorts';
@@ -284,7 +284,7 @@ describe('Services Layer - Video Service', () => {
     });
 
     it('should not identify youtube-shorts as special', () => {
-      const templateId = 'youtube-shorts';
+      const templateId = 'youtube-shorts' as string;
 
       const isSpecialTemplate = templateId === 'character-story' ||
         templateId === 'skeleton-3d-shorts';

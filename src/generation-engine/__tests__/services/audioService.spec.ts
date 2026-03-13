@@ -72,7 +72,7 @@ describe('Services Layer - Audio Service', () => {
       const voiceInput = 'custom-voice-123';
       const defaultVoiceId = '21m00Tcm4TlvDq8ikWAM';
 
-      const voice = voiceInput;
+      const voice = voiceInput as string;
       const finalVoiceId = voice === 'alloy' ? defaultVoiceId : voice;
 
       expect(finalVoiceId).toBe('custom-voice-123');
@@ -82,7 +82,7 @@ describe('Services Layer - Audio Service', () => {
       const voiceInput = 'rachel';
       const defaultVoiceId = '21m00Tcm4TlvDq8ikWAM';
 
-      const voice = voiceInput;
+      const voice = voiceInput as string;
       const finalVoiceId = voice === 'alloy' ? defaultVoiceId : voice;
 
       expect(finalVoiceId).toBe('rachel');

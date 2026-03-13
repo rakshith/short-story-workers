@@ -207,7 +207,7 @@ describe('Blocks Layer - Input/Output Transformations', () => {
     });
 
     it('should fallback to creating provider when not injected', () => {
-      const providers = undefined;
+      const providers = undefined as any;
 
       const shouldFallback = !providers?.imageProvider;
 

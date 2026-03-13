@@ -12,7 +12,7 @@ export const DEFAULT_NARRATION_STYLE = 'neutral';
  * - target: ideal word count for smooth pacing
  * - max: upper limit (too long = rushed delivery)
  */
-const SCENE_WORD_LIMITS = {
+export const SCENE_WORD_LIMITS = {
     SCENE_5S: {
         min: 11,    // ~2.0 wps - min for flow
         target: 14, // ~2.6 wps - snappy pace
@@ -29,7 +29,7 @@ const SCENE_WORD_LIMITS = {
  * Duration tolerance ranges for video lengths
  * Tighter ranges for better TTS accuracy
  */
-const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
+export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
     15: { min: 14, max: 16 },  // ±1s
     30: { min: 28, max: 32 },  // ±2s
     60: { min: 57, max: 63 },  // ±3s
