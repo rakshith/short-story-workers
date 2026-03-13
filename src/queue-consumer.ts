@@ -8,6 +8,7 @@ import { sortMessagesByPriority, canProcessJob } from './services/concurrency-ma
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 import { isRetryableError } from './utils/error-handling';
+import { createJobStatusCache, JobStatusCache } from './services/job-status-cache';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
@@ -27,6 +28,9 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+  // Initialize job status cache with kill switch
+  const jobStatusCache = createJobStatusCache(env, queueLogger);
+  
   // Cache for job cancellation status to avoid redundant DB checks
   const cancelledJobs = new Set<string>();
   const activeJobs = new Set<string>();
@@ -42,16 +46,43 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         continue;
       }
 
-      // If we don't know the status, check the DB (but only once per job in this batch)
+      // If we don't know the status, check cache first (if enabled), then DB
       if (!activeJobs.has(data.jobId)) {
-        const { data: job, error: jobError } = await supabase
-          .from('story_jobs')
-          .select('status')
-          .eq('job_id', data.jobId)
-          .single();
+        let jobStatus: string | null = null;
+        let fromCache = false;
+        
+        // Try cache first (kill switch check happens inside)
+        const cachedStatus = await jobStatusCache.getJobStatus(data.jobId);
+        if (cachedStatus) {
+          jobStatus = cachedStatus.status;
+          fromCache = true;
+          queueLogger.debug(`Cache hit for job ${data.jobId}`, { status: jobStatus, fromCache: true });
+        } else {
+          // Cache miss or disabled - query Supabase
+          const { data: job, error: jobError } = await supabase
+            .from('story_jobs')
+            .select('status')
+            .eq('job_id', data.jobId)
+            .single();
+          
+          if (jobError) {
+            queueLogger.warn(`Failed to fetch job status from Supabase`, { jobId: data.jobId, error: jobError.message });
+          }
+          
+          jobStatus = job?.status || null;
+          
+          // Warm cache with this status for future requests (if enabled)
+          if (jobStatus) {
+            await jobStatusCache.warmCache(data.jobId, {
+              status: jobStatus as any,
+              scenesCompleted: 0,
+              totalScenes: data.storyData?.scenes?.length || 0,
+            });
+          }
+        }
 
-        if (job && job.status !== 'processing' && job.status !== 'pending') {
-          queueLogger.info(`Job ${data.jobId} is in terminal state (${job.status}), skipping and caching status`, { jobId: data.jobId });
+        if (jobStatus && jobStatus !== 'processing' && jobStatus !== 'pending') {
+          queueLogger.info(`Job ${data.jobId} is in terminal state (${jobStatus}), skipping and caching status`, { jobId: data.jobId, fromCache });
           cancelledJobs.add(data.jobId);
           message.ack();
           continue;
@@ -110,6 +141,20 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
             }),
           }));
           const status = await updateRes.json() as any;
+          
+          // Update cache with latest status
+          await jobStatusCache.setJobStatus(data.jobId, {
+            jobId: data.jobId,
+            status: status.isComplete ? 'completed' : 'processing',
+            progress: Math.round(((status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0)) / (status.totalScenes * 3) * 100),
+            scenesCompleted: (status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0),
+            totalScenes: status.totalScenes || 0,
+            imagesCompleted: status.imagesCompleted || 0,
+            videosCompleted: status.videosCompleted || 0,
+            audioCompleted: status.audioCompleted || 0,
+            updatedAt: Date.now(),
+          });
+          
           if (status.isComplete) {
             await syncStoryToSupabase({
               jobId: data.jobId,
@@ -138,6 +183,20 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
             }),
           }));
           const status = await updateRes.json() as any;
+          
+          // Update cache with latest status
+          await jobStatusCache.setJobStatus(data.jobId, {
+            jobId: data.jobId,
+            status: status.isComplete ? 'completed' : 'processing',
+            progress: Math.round(((status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0)) / (status.totalScenes * 3) * 100),
+            scenesCompleted: (status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0),
+            totalScenes: status.totalScenes || 0,
+            imagesCompleted: status.imagesCompleted || 0,
+            videosCompleted: status.videosCompleted || 0,
+            audioCompleted: status.audioCompleted || 0,
+            updatedAt: Date.now(),
+          });
+          
           if (status.isComplete) {
             await syncStoryToSupabase({
               jobId: data.jobId,
@@ -167,6 +226,25 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         }));
 
         const status = await updateRes.json() as any;
+        
+        // Determine new status
+        const newStatus = status.isComplete 
+          ? (data.videoConfig?.sceneReviewRequired ? 'awaiting_review' : 'completed')
+          : 'processing';
+        
+        // Update cache with latest status
+        await jobStatusCache.setJobStatus(data.jobId, {
+          jobId: data.jobId,
+          status: newStatus,
+          progress: Math.round(((status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0)) / (status.totalScenes * 3) * 100),
+          scenesCompleted: (status.imagesCompleted || 0) + (status.videosCompleted || 0) + (status.audioCompleted || 0),
+          totalScenes: status.totalScenes || 0,
+          imagesCompleted: status.imagesCompleted || 0,
+          videosCompleted: status.videosCompleted || 0,
+          audioCompleted: status.audioCompleted || 0,
+          updatedAt: Date.now(),
+        });
+        
         if (status.isComplete) {
           if (data.videoConfig?.sceneReviewRequired) {
             // Audio completed last in review mode - transition to awaiting_review

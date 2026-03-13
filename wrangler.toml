@@ -15,6 +15,14 @@ bindings = [
 tag = "v1"
 new_classes = ["StoryCoordinator"]
 
+# KV Namespace for job status caching
+# Create with: wrangler kv:namespace create "JOB_STATUS_CACHE"
+# Then copy the ID below
+[[kv_namespaces]]
+binding = "JOB_STATUS_CACHE"
+id = "87a23a992ccf4af188aac9c8f13df792"
+preview_id = "3a7a9647619a4c3980543c59581769f2"
+
 [env.staging]
 name = "create-story-worker-staging"
 workers_dev = true
@@ -25,6 +33,12 @@ preview_urls = true
 bindings = [
   { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
 ]
+
+# KV Namespace for staging (create with: wrangler kv:namespace create "JOB_STATUS_CACHE" --env staging)
+[[env.staging.kv_namespaces]]
+binding = "JOB_STATUS_CACHE"
+id = "fd96067160f045aaae3a1d46cbe1d7e6"
+preview_id = "25267f389b0b4d5f8a45f356c364f9ce"
 
 # R2 Bucket bindings for staging
 [[env.staging.r2_buckets]]
@@ -98,6 +112,7 @@ AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f6
 APP_URL = "https://artflicks.app"
 USE_DAG_ENGINE = "true"  # Enable DAG-based execution in staging
 GEN_PROVIDER = "real"
+ENABLE_KV_CACHE = "true"  # Enable KV cache in staging for testing
 
 [env.production]
 name = "create-story-worker-production"
@@ -109,6 +124,12 @@ preview_urls = true
 bindings = [
   { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
 ]
+
+# KV Namespace for production (create with: wrangler kv:namespace create "JOB_STATUS_CACHE" --env production)
+[[env.production.kv_namespaces]]
+binding = "JOB_STATUS_CACHE"
+id = "REPLACE_WITH_PRODUCTION_KV_NAMESPACE_ID"
+preview_id = "81ec9c0eba7741f5b20d276149d4ae19"
 
 # R2 Bucket bindings for production
 [[env.production.r2_buckets]]
@@ -182,6 +203,7 @@ AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f6
 APP_URL = "https://artflicks.app"
 USE_DAG_ENGINE = "false"  # Uncomment to enable DAG in production
 GEN_PROVIDER = "real"
+ENABLE_KV_CACHE = "false"  # Disable KV cache in production initially, enable after staging testing
 
 # Environment variables (set via wrangler secret put or dashboard)
 [vars]
@@ -201,6 +223,7 @@ TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
+ENABLE_KV_CACHE = "true"  # Enable KV cache in local development for testing
 
 # SUPABASE_URL
 # SUPABASE_ANON_KEY

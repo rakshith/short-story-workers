@@ -21,10 +21,11 @@ export async function handleHealthCheck(env: Env): Promise<Response> {
     checkReplicateAPI(env),
     checkElevenLabsAPI(env),
     checkDurableObjects(env),
+    checkKVCache(env),
   ]);
   
   const results: HealthCheckResult[] = checkResults.map((result, index) => {
-    const services = ['supabase', 'r2', 'queues', 'replicate', 'elevenlabs', 'durable_objects'];
+    const services = ['supabase', 'r2', 'queues', 'replicate', 'elevenlabs', 'durable_objects', 'kv_cache'];
     
     if (result.status === 'fulfilled') {
       return result.value;
@@ -257,6 +258,60 @@ async function checkDurableObjects(env: Env): Promise<HealthCheckResult> {
   } catch (error) {
     return {
       service: 'durable_objects',
+      status: 'error',
+      latencyMs: Date.now() - start,
+      message: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+async function checkKVCache(env: Env): Promise<HealthCheckResult> {
+  const start = Date.now();
+  
+  try {
+    // Check if KV cache is configured
+    const isEnabled = env.ENABLE_KV_CACHE === 'true';
+    const hasBinding = !!env.JOB_STATUS_CACHE;
+    
+    if (!isEnabled) {
+      return {
+        service: 'kv_cache',
+        status: 'ok',
+        latencyMs: Date.now() - start,
+        message: 'KV cache disabled (ENABLE_KV_CACHE not set to true)',
+      };
+    }
+    
+    if (!hasBinding) {
+      return {
+        service: 'kv_cache',
+        status: 'warning',
+        latencyMs: Date.now() - start,
+        message: 'KV cache enabled but JOB_STATUS_CACHE binding not found',
+      };
+    }
+    
+    // Try a test write/read to verify KV is working
+    const testKey = 'health-check-test';
+    const testValue = { timestamp: Date.now(), status: 'ok' };
+    
+    await env.JOB_STATUS_CACHE!.put(testKey, JSON.stringify(testValue), { expirationTtl: 60 });
+    const readValue = await env.JOB_STATUS_CACHE!.get(testKey, 'json');
+    await env.JOB_STATUS_CACHE!.delete(testKey);
+    
+    if (!readValue) {
+      throw new Error('KV read returned null after write');
+    }
+    
+    return {
+      service: 'kv_cache',
+      status: 'ok',
+      latencyMs: Date.now() - start,
+      message: 'KV cache enabled and operational',
+    };
+  } catch (error) {
+    return {
+      service: 'kv_cache',
       status: 'error',
       latencyMs: Date.now() - start,
       message: error instanceof Error ? error.message : 'Unknown error',

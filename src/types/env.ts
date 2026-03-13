@@ -1,6 +1,6 @@
 // Environment types for Cloudflare Workers
 
-import { R2Bucket, Queue, DurableObjectNamespace } from '@cloudflare/workers-types';
+import { R2Bucket, Queue, DurableObjectNamespace, KVNamespace } from '@cloudflare/workers-types';
 import { StoryTimeline, VideoConfig } from '.';
 
 // Forward declare QueueMessage to avoid circular dependency
@@ -71,5 +71,9 @@ export interface Env {
   // Feature Flags
   USE_DAG_ENGINE?: string;
   GEN_PROVIDER?: string;
+  
+  // KV Cache Configuration
+  JOB_STATUS_CACHE?: KVNamespace;  // KV namespace for job status caching
+  ENABLE_KV_CACHE?: string;  // Kill switch: 'true' to enable, 'false' or undefined to disable
 }
 

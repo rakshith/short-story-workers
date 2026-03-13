@@ -5,6 +5,7 @@ import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config
 import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { getPredictionTrackingService } from './prediction-tracking';
+import { createJobStatusCache } from './job-status-cache';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -175,6 +176,11 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         const status = await updateRes.json() as any;
 
         apiLogger.info(`Updated ${type} in DO, isComplete: ${status.isComplete}, videosCompleted: ${status.videosCompleted}/${status.totalScenes}, audioCompleted: ${status.audioCompleted}/${status.totalScenes}`, { storyId, sceneIndex });
+
+        // Invalidate cache to ensure fresh data on next status check
+        const jobStatusCache = createJobStatusCache(env, apiLogger);
+        await jobStatusCache.invalidateJobStatus(jobId);
+        apiLogger.debug(`Invalidated cache for job ${jobId}`, { storyId });
 
         // Handle two-step video generation: if sceneReviewRequired is true and images + audio complete
         if (type === 'image' && sceneReviewRequired && status.isImagesCompleteForReview) {
