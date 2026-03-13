@@ -242,7 +242,8 @@ export async function handleQueueDAG(batch: any, env: any): Promise<void> {
       (message as any).ack();
     } catch (error) {
       console.error('[handleQueueDAG] Error processing message:', error);
-      (message as any).ack();
+      // Retry on error to prevent data loss, with exponential backoff handled by queue
+      (message as any).retry();
     }
   }
 }

@@ -9,6 +9,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { VideoConfig } from '../types';
 import { attachImageInputs } from '../utils/replicate-model-config';
 import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { getPredictionTrackingService, PredictionTrackingService } from './prediction-tracking';
+import { Logger } from '../utils/logger';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -26,20 +28,51 @@ export interface ImageGenerationParams {
 export interface ImageGenerationResult {
   predictionId: string;
   status: string;
+  fromCache?: boolean;
+}
+
+export interface ImageGenerationOptions {
+  userId: string;
+  seriesId: string;
+  storyId: string;
+  sceneIndex: number;
+  replicateApiToken: string;
+  webhookUrl: string;
+  jobId: string;
+  supabaseUrl: string;
+  supabaseKey: string;
 }
 
 export async function triggerReplicateGeneration(
   params: ImageGenerationParams,
-  options: {
-    userId: string;
-    seriesId: string;
-    storyId: string;
-    sceneIndex: number;
-    replicateApiToken: string;
-    webhookUrl: string;
-  }
+  options: ImageGenerationOptions,
+  logger?: Logger
 ): Promise<ImageGenerationResult> {
-  const { replicateApiToken, webhookUrl } = options;
+  const { replicateApiToken, webhookUrl, jobId, storyId, sceneIndex, supabaseUrl, supabaseKey } = options;
+  const log = logger || new Logger('ImageGeneration');
+
+  // Initialize prediction tracking service
+  const trackingService = getPredictionTrackingService(supabaseUrl, supabaseKey, log);
+
+  // Check for existing prediction to prevent duplicates
+  const existingCheck = await trackingService.checkExistingPrediction(storyId, sceneIndex, 'image');
+  
+  if (existingCheck.exists && !existingCheck.shouldCreateNew) {
+    log.info('[IMAGE-GENERATION] Using existing prediction to prevent duplicate cost', {
+      storyId,
+      sceneIndex,
+      existingPredictionId: existingCheck.predictionId,
+      status: existingCheck.status,
+    });
+    return {
+      predictionId: existingCheck.predictionId!,
+      status: existingCheck.status || 'pending',
+      fromCache: true,
+    };
+  }
+
+  // Generate unique idempotency key
+  const idempotencyKey = trackingService.generateIdempotencyKey(storyId, sceneIndex, 'image');
 
   // Initialize Replicate client
   const replicate = new Replicate({
@@ -71,8 +104,8 @@ export async function triggerReplicateGeneration(
       params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
       params.videoConfig.templateId === 'skeleton-3d-shorts') {
     // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
-    console.log('[IMAGE-GEN] Template ID:', params.videoConfig.templateId);
-    console.log('[IMAGE-GEN] Character References:', params.videoConfig?.characterReferenceImages);
+    log.info('[IMAGE-GEN] Template ID:', { templateId: params.videoConfig.templateId });
+    log.info('[IMAGE-GEN] Character References:', { references: params.videoConfig?.characterReferenceImages });
     attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
   }
 
@@ -87,19 +120,26 @@ export async function triggerReplicateGeneration(
   }
 
   // Create prediction with webhook - This returns immediately without waiting
-  console.log(`[IMAGE-GENERATION] Creating prediction for image - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
+  log.info('[IMAGE-GENERATION] Creating prediction for image', {
+    storyId,
+    sceneIndex,
+    idempotencyKey,
+  });
 
   // Handle both versioned models (owner/name:version) and model names (owner/name)
   const hasVersion = params.model.includes(':');
 
-  // Append model to webhook for tracking
-  const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
+  // Append model and idempotency key to webhook for tracking
+  const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`;
 
   const predictionParams: any = {
     input,
     webhook: webhookWithModel,
     webhook_events_filter: ["completed"],
   };
+
+  // Add idempotency key to prevent duplicate predictions on Replicate's side
+  predictionParams.idempotency_key = idempotencyKey;
 
   if (hasVersion) {
     // If model includes version hash, use version parameter
@@ -109,13 +149,29 @@ export async function triggerReplicateGeneration(
     predictionParams.model = params.model;
   }
 
+  // Create the prediction
   const prediction = await replicate.predictions.create(predictionParams);
 
-  console.log(`[REPLICATE-ASYNC] Prediction created: ${prediction.id}`);
+  log.info('[REPLICATE-ASYNC] Prediction created', {
+    predictionId: prediction.id,
+    idempotencyKey,
+  });
+
+  // Record the prediction attempt immediately to prevent duplicates
+  await trackingService.recordPredictionAttempt({
+    job_id: jobId,
+    story_id: storyId,
+    scene_index: sceneIndex,
+    prediction_type: 'image',
+    prediction_id: prediction.id,
+    status: 'pending',
+    idempotency_key: idempotencyKey,
+  });
 
   return {
     predictionId: prediction.id,
     status: prediction.status,
+    fromCache: false,
   };
 }
 

@@ -6,6 +6,8 @@ import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
 import { ScriptTemplateIds } from '@artflicks/video-compiler';
 import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
+import { getPredictionTrackingService } from './prediction-tracking';
+import { Logger } from '../utils/logger';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -24,6 +26,19 @@ export interface VideoGenerationParams {
 export interface VideoGenerationResult {
     predictionId: string;
     status: string;
+    fromCache?: boolean;
+}
+
+export interface VideoGenerationOptions {
+    userId: string;
+    seriesId: string;
+    storyId: string;
+    sceneIndex: number;
+    replicateApiToken: string;
+    webhookUrl: string;
+    jobId: string;
+    supabaseUrl: string;
+    supabaseKey: string;
 }
 
 /**
@@ -31,16 +46,34 @@ export interface VideoGenerationResult {
  */
 export async function triggerVideoGeneration(
     params: VideoGenerationParams,
-    options: {
-        userId: string;
-        seriesId: string;
-        storyId: string;
-        sceneIndex: number;
-        replicateApiToken: string;
-        webhookUrl: string;
-    }
+    options: VideoGenerationOptions,
+    logger?: Logger
 ): Promise<VideoGenerationResult> {
-    const { replicateApiToken, webhookUrl } = options;
+    const { replicateApiToken, webhookUrl, jobId, storyId, sceneIndex, supabaseUrl, supabaseKey } = options;
+    const log = logger || new Logger('VideoGeneration');
+
+    // Initialize prediction tracking service
+    const trackingService = getPredictionTrackingService(supabaseUrl, supabaseKey, log);
+
+    // Check for existing prediction to prevent duplicates
+    const existingCheck = await trackingService.checkExistingPrediction(storyId, sceneIndex, 'video');
+    
+    if (existingCheck.exists && !existingCheck.shouldCreateNew) {
+        log.info('[VIDEO-GENERATION] Using existing prediction to prevent duplicate cost', {
+            storyId,
+            sceneIndex,
+            existingPredictionId: existingCheck.predictionId,
+            status: existingCheck.status,
+        });
+        return {
+            predictionId: existingCheck.predictionId!,
+            status: existingCheck.status || 'pending',
+            fromCache: true,
+        };
+    }
+
+    // Generate unique idempotency key
+    const idempotencyKey = trackingService.generateIdempotencyKey(storyId, sceneIndex, 'video');
 
     // Initialize Replicate client
     const replicate = new Replicate({
@@ -64,12 +97,12 @@ export async function triggerVideoGeneration(
 
     if (params.referenceImageUrl) {
         // Use the generated image as reference (image-to-video) - highest priority
-        console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
+        log.info('[VIDEO-GEN] Using generated image as reference:', { referenceImageUrl: params.referenceImageUrl });
         attachImageInputs(input, params.model, params.referenceImageUrl ? [params.referenceImageUrl] : undefined);
     } else if (isSpecialTemplate && params.videoConfig?.characterReferenceImages?.length) {
         // Fall back to character reference images for special templates
-        console.log('[VIDEO-GEN] Template ID:', params.videoConfig.templateId);
-        console.log('[VIDEO-GEN] Character References:', params.videoConfig?.characterReferenceImages);
+        log.info('[VIDEO-GEN] Template ID:', { templateId: params.videoConfig.templateId });
+        log.info('[VIDEO-GEN] Character References:', { references: params.videoConfig?.characterReferenceImages });
         attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
     }
 
@@ -85,13 +118,17 @@ export async function triggerVideoGeneration(
         input.seed = params.seed;
     }
 
-    console.log(`[VIDEO-GENERATION] Creating prediction for video - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
+    log.info('[VIDEO-GENERATION] Creating prediction for video', {
+        storyId,
+        sceneIndex,
+        idempotencyKey,
+    });
 
     // Handle both versioned models (owner/name:version) and model names (owner/name)
     const hasVersion = params.model.includes(':');
 
-    // Append model to webhook for tracking
-    const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
+    // Append model and idempotency key to webhook for tracking
+    const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}&idempotencyKey=${encodeURIComponent(idempotencyKey)}`;
 
     const predictionParams: any = {
         input,
@@ -99,19 +136,39 @@ export async function triggerVideoGeneration(
         webhook_events_filter: ["completed"],
     };
 
+    // Add idempotency key to prevent duplicate predictions on Replicate's side
+    predictionParams.idempotency_key = idempotencyKey;
+
     if (hasVersion) {
         predictionParams.version = params.model.split(':')[1];
     } else {
         predictionParams.model = params.model;
     }
-    console.log(`[VIDEO-GENERATION] Prediction params:`, predictionParams);
+    log.info('[VIDEO-GENERATION] Prediction params:', { params: predictionParams });
+    
+    // Create the prediction
     const prediction = await replicate.predictions.create(predictionParams);
 
-    console.log(`[VIDEO-GENERATION] Prediction created: ${prediction.id}`);
+    log.info('[VIDEO-GENERATION] Prediction created', {
+        predictionId: prediction.id,
+        idempotencyKey,
+    });
+
+    // Record the prediction attempt immediately to prevent duplicates
+    await trackingService.recordPredictionAttempt({
+        job_id: jobId,
+        story_id: storyId,
+        scene_index: sceneIndex,
+        prediction_type: 'video',
+        prediction_id: prediction.id,
+        status: 'pending',
+        idempotency_key: idempotencyKey,
+    });
 
     return {
         predictionId: prediction.id,
         status: prediction.status,
+        fromCache: false,
     };
 }
 

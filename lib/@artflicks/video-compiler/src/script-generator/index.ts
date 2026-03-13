@@ -72,7 +72,9 @@ export class ScriptGenerator {
                     if (typeof cause.format === 'function') {
                         try {
                             console.error('[ScriptGenerator] Zod format:', JSON.stringify(cause.format(), null, 2));
-                        } catch (_) {}
+                        } catch (formatError) {
+                            console.error('[ScriptGenerator] Failed to format Zod error:', formatError);
+                        }
                     }
                 }
                 // Log any extra details the SDK may attach

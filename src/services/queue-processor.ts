@@ -120,7 +120,11 @@ export async function processSceneImage(
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
         webhookUrl,
-      }
+        jobId: message.jobId,
+        supabaseUrl: env.SUPABASE_URL,
+        supabaseKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      },
+      processorLogger
     );
 
     processorLogger.info(`Replicate generation triggered`, {
@@ -234,7 +238,11 @@ export async function processSceneVideo(
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
         webhookUrl,
-      }
+        jobId: message.jobId,
+        supabaseUrl: env.SUPABASE_URL,
+        supabaseKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      },
+      processorLogger
     );
 
     processorLogger.info(`Video generation triggered`, {

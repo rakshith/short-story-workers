@@ -53,17 +53,33 @@ binding = "STORY_QUEUE"
 queue = "webhook-processing-staging"
 binding = "WEBHOOK_QUEUE"
 
+# Dead Letter Queue for staging - cost effective with 7 day retention (Cloudflare default)
+[[env.staging.queues.producers]]
+queue = "story-dlq-staging"
+binding = "STORY_DLQ"
+
 [[env.staging.queues.consumers]]
 queue = "story-processing-staging"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
+max_retries = 3               # Retry 3 times before sending to DLQ
+dead_letter_queue = "story-dlq-staging"
 
 [[env.staging.queues.consumers]]
 queue = "webhook-processing-staging"
 max_batch_size = 10
 max_batch_timeout = 5
 max_concurrency = 10
+max_retries = 3
+dead_letter_queue = "story-dlq-staging"
+
+# DLQ Consumer - processes permanently failed messages
+[[env.staging.queues.consumers]]
+queue = "story-dlq-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+max_concurrency = 5
 
 [env.staging.vars]
 TIER1_CONCURRENCY = 2
@@ -121,17 +137,33 @@ binding = "STORY_QUEUE"
 queue = "webhook-processing-production"
 binding = "WEBHOOK_QUEUE"
 
+# Dead Letter Queue for production - cost effective with 7 day retention (Cloudflare default)
+[[env.production.queues.producers]]
+queue = "story-dlq-production"
+binding = "STORY_DLQ"
+
 [[env.production.queues.consumers]]
 queue = "story-processing-production"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
+max_retries = 3               # Retry 3 times before sending to DLQ
+dead_letter_queue = "story-dlq-production"
 
 [[env.production.queues.consumers]]
 queue = "webhook-processing-production"
 max_batch_size = 10
 max_batch_timeout = 5
 max_concurrency = 10
+max_retries = 3
+dead_letter_queue = "story-dlq-production"
+
+# DLQ Consumer - processes permanently failed messages
+[[env.production.queues.consumers]]
+queue = "story-dlq-production"
+max_batch_size = 10
+max_batch_timeout = 30
+max_concurrency = 5
 
 [env.production.vars]
 TIER1_CONCURRENCY = 2

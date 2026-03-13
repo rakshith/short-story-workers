@@ -4,6 +4,7 @@ import { processFinishedPrediction } from './image-generation';
 import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
+import { getPredictionTrackingService } from './prediction-tracking';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -91,9 +92,21 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
 export async function processWebhookInBackground(prediction: any, metadata: WebhookMetadata, env: Env, origin?: string): Promise<void> {
     const { storyId, sceneIndex, type, userId, seriesId, jobId, model, sceneReviewRequired } = metadata;
 
+    // Initialize prediction tracking
+    const trackingService = getPredictionTrackingService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY, apiLogger);
+
     try {
         if (prediction.status !== 'succeeded') {
             console.error(`[WEBHOOK] Prediction failed: ${prediction.error}`);
+            
+            // Update prediction tracking status
+            await trackingService.updatePredictionStatus(
+                prediction.id,
+                'failed',
+                undefined,
+                prediction.error || 'Generation failed'
+            );
+            
             const id = env.STORY_COORDINATOR.idFromName(storyId);
             const coordinator = env.STORY_COORDINATOR.get(id);
             const body: any = { sceneIndex };
@@ -130,6 +143,13 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             });
         }
         const resultUrl = storageUrls[0];
+
+        // Update prediction tracking status on success
+        await trackingService.updatePredictionStatus(
+            prediction.id,
+            'succeeded',
+            resultUrl
+        );
 
         const predictTime = prediction.metrics?.predict_time || 0;
         await trackAIUsageInternal(env, {

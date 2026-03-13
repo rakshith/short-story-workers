@@ -85,12 +85,19 @@ export default {
       case isCancelRoute:
         return handleCancelJob(request, env);
 
+      // GET /health - Health check endpoint
+      case method === 'GET' && pathname === '/health':
+        const { handleHealthCheck } = await import('./routes/health-check');
+        return handleHealthCheck(env);
+
       // Root path - Show available endpoints
       case pathname === '/':
         return jsonResponse({
           error: 'Invalid endpoint',
           message: `The root path '/' is not a valid endpoint. Please use one of the available endpoints:`,
           availableEndpoints: {
+            // Health check
+            'GET /health': 'Health check endpoint - monitors all dependencies',
             // Legacy endpoints
             'POST /create-story': 'Create a new story (queued for async processing)',
             'POST /generate-and-create-story': 'Generate script and create story',

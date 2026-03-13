@@ -7,6 +7,7 @@ import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
+import { isRetryableError } from './utils/error-handling';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
@@ -207,10 +208,40 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         message.ack();
       }
     } catch (error) {
-      queueLogger.error('Error processing queue message', error);
-
       const data: QueueMessage = message.body;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+      // Determine if this is a retryable error (network issue) or permanent failure (model error)
+      const retryable = isRetryableError(error);
+      
+      if (retryable) {
+        // Network/timeout errors can be retried without cost
+        queueLogger.warn(
+          `Retryable error processing ${data.type}, will retry`,
+          {
+            jobId: data.jobId,
+            sceneIndex: data.sceneIndex,
+            type: data.type,
+            error: errorMessage,
+            retryable: true,
+          }
+        );
+        message.retry();
+        continue;
+      }
+
+      // Permanent failure (model error, validation error, etc.) - don't retry to avoid cost
+      queueLogger.error(
+        `Permanent error processing ${data.type}, marking as failed`,
+        error,
+        {
+          jobId: data.jobId,
+          sceneIndex: data.sceneIndex,
+          type: data.type,
+          error: errorMessage,
+          retryable: false,
+        }
+      );
 
       // Mark the scene as failed and continue - user can retry from UI
       await markSceneAsFailed(data, errorMessage, getCoordinator, env);
