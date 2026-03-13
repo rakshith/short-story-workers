@@ -1,20 +1,48 @@
-// Execution Worker - processes nodes from queue
+// Execution Worker - processes nodes from queue (supports both legacy and DAG modes)
+
+import { createDAGExecutor, DAGMessage } from '../workflow/dagExecutor';
 
 export interface ExecutionWorkerOptions {
   env: any;
   concurrencyService?: any;
+  useDAG?: boolean;
 }
 
 export class ExecutionWorker {
   private env: any;
   private concurrencyService?: any;
+  private useDAG: boolean;
 
   constructor(options: ExecutionWorkerOptions) {
     this.env = options.env;
     this.concurrencyService = options.concurrencyService;
+    this.useDAG = options.useDAG || false;
   }
 
   async processMessage(message: any): Promise<void> {
+    if (this.useDAG) {
+      return this.processWithDAG(message);
+    }
+    return this.processLegacy(message);
+  }
+
+  private async processWithDAG(message: DAGMessage): Promise<void> {
+    console.log('[ExecutionWorker] Processing with DAG:', message.jobId, message.type);
+
+    const executor = createDAGExecutor({
+      env: this.env,
+      message,
+    });
+
+    const result = await executor.run();
+
+    if (!result.success) {
+      console.error('[ExecutionWorker] DAG execution failed:', result.error);
+      await executor.onJobFailed(result.error || 'Unknown error');
+    }
+  }
+
+  private async processLegacy(message: any): Promise<void> {
     const { processSceneImage, processSceneAudio, processSceneVideo } = await import('../../services/queue-processor');
 
     const getCoordinator = (storyId: string) => {
@@ -77,4 +105,18 @@ export class ExecutionWorker {
 
 export function createExecutionWorker(options: ExecutionWorkerOptions): ExecutionWorker {
   return new ExecutionWorker(options);
+}
+
+export async function handleQueueDAG(batch: any, env: any): Promise<void> {
+  const worker = new ExecutionWorker({ env, useDAG: true });
+  
+  for (const message of batch.messages) {
+    try {
+      await worker.processMessage(message.body);
+      message.ack();
+    } catch (error) {
+      console.error('[handleQueueDAG] Error processing message:', error);
+      message.retry();
+    }
+  }
 }

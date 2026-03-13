@@ -187,6 +187,51 @@ export class CreateJobAPI {
       return { success: false, jobId: '', storyId: '', error: message };
     }
   }
+
+  async completeJob(jobId: string, storyId: string, userId: string, story: any, teamId?: string): Promise<{ success: boolean; storyUrl?: string; error?: string }> {
+    try {
+      const { createStorySyncService } = await import('../services/storySync');
+      const { createEmailNotificationService } = await import('../services/emailNotification');
+
+      const syncService = createStorySyncService(this.env);
+      const emailService = createEmailNotificationService(this.env);
+
+      const syncResult = await syncService.syncStoryComplete(
+        { jobId, storyId, userId, teamId },
+        story
+      );
+
+      if (!syncResult.success) {
+        return { success: false, error: syncResult.error };
+      }
+
+      await emailService.sendCompletionEmail({
+        userId,
+        storyId,
+        storyTitle: story.title || 'Your Story',
+        storyUrl: syncResult.storyUrl,
+      });
+
+      return { success: true, storyUrl: syncResult.storyUrl };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[CreateJob] CompleteJob Error:', message);
+      return { success: false, error: message };
+    }
+  }
+
+  async updateProgress(
+    jobId: string,
+    progress: number,
+    status: string,
+    imagesGenerated?: number,
+    videosGenerated?: number,
+    audioGenerated?: number
+  ): Promise<void> {
+    const { createStorySyncService } = await import('../services/storySync');
+    const syncService = createStorySyncService(this.env);
+    await syncService.updateJobProgress(jobId, progress, status, imagesGenerated, videosGenerated, audioGenerated);
+  }
 }
 
 export function createCreateJobAPI(env: any): CreateJobAPI {

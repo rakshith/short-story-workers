@@ -114,6 +114,16 @@ export default {
     if (batch.queue.includes('webhook-processing')) {
       return handleWebhookQueue(batch as MessageBatch<WebhookQueueMessage>, env);
     }
+
+    const useDAG = env.USE_DAG_ENGINE === 'true';
+    
+    if (useDAG) {
+      console.log('[Queue] Using DAG Engine for processing');
+      const { handleQueueDAG } = await import('./generation-engine/queue/executionWorker');
+      return handleQueueDAG(batch as MessageBatch<QueueMessage>, env);
+    }
+
+    console.log('[Queue] Using Legacy Queue Consumer');
     return handleQueue(batch as MessageBatch<QueueMessage>, env);
   },
 };

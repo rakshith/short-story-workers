@@ -67,5 +67,9 @@ export interface Env {
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
   APP_URL?: string;
+  
+  // Feature Flags
+  USE_DAG_ENGINE?: string;
+  GEN_PROVIDER?: string;
 }
 
