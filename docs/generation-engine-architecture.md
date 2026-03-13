@@ -75,7 +75,9 @@ Composable Pipeline Blocks
    ↓
 DAG Graph Builder
    ↓
-Job Durable Object Orchestrator
+5️⃣ State & Event Layer (Job Durable Object)
+   ↓
+6️⃣ Execution Control Layer
    ↓
 Execution Workers
    ↓
@@ -216,7 +218,87 @@ utils/
 
 ---
 
-# 7️⃣ Templates
+# 7️⃣ State & Event Layer
+
+**Job Durable Object** manages job state and events.
+
+Location: `src/generation-engine/state/jobDurableObject.ts`
+
+Implementation:
+- Event-driven state machine
+- Persistent state across requests
+- Atomic state transitions
+- Async event handlers
+- State change notifications
+
+Responsibilities:
+
+```id="x9k2lm"
+Track node states (pending, running, waiting_webhook, completed, failed, timeout)
+Manage dependency counters
+Aggregate fan-in results
+Handle retry logic and timeout detection
+Emit events on state changes
+Orchestrate DAG execution flow
+```
+
+Each pipeline job has one dedicated Durable Object instance.
+
+State persistence:
+- Node states
+- Dependency counters
+- Scheduled tasks
+- Asset references
+- Event history
+
+---
+
+# 8️⃣ Execution Control Layer
+
+**DAG Executor** controls workflow execution.
+
+Location: `src/generation-engine/workflow/dagExecutor.ts`
+
+Responsibilities:
+
+```id="b3n7qw"
+Initialize DAG with dependency counters
+Track execution progress
+Handle node completion events
+Trigger next nodes when dependencies satisfied
+Coordinate parallel execution
+Provide execution context to workers
+```
+
+**Dependency Engine** tracks node relationships.
+
+Location: `src/generation-engine/workflow/dependencyEngine.ts`
+
+Responsibilities:
+
+```id="m2v8xp"
+Calculate dependency counters
+Track parent-child relationships
+Handle conditional dependencies
+Support dynamic dependency injection
+```
+
+**Node Executor** handles individual node execution.
+
+Location: `src/generation-engine/workflow/nodeExecutor.ts`
+
+Responsibilities:
+
+```id="k4j6yt"
+Resolve node type to capability
+Route to appropriate service
+Handle execution errors
+Return execution results
+```
+
+---
+
+# 9️⃣ Templates
 
 Templates represent creator pipelines.
 
@@ -244,7 +326,7 @@ templates/registry.ts
 
 ---
 
-# 8️⃣ Profiles
+# 10️⃣ Profiles
 
 Profiles define pipeline structure.
 
@@ -268,7 +350,7 @@ Profiles must be composed from **pipeline blocks**.
 
 ---
 
-# 9️⃣ Blocks
+# 11️⃣ Blocks
 
 Blocks are reusable pipeline components.
 
@@ -289,7 +371,7 @@ Blocks define nodes and dependencies.
 
 ---
 
-# 🔟 Graph Builder
+# 12️⃣ Graph Builder
 
 Graph builder must:
 
@@ -309,7 +391,7 @@ capability
 
 ---
 
-# 11️⃣ DAG Execution
+# 13️⃣ DAG Execution
 
 Execution must use **dependency counters**.
 
@@ -324,9 +406,11 @@ No polling scheduler allowed.
 
 Execution must be event driven.
 
+> Note: This is orchestrated by the Execution Control Layer (8️⃣).
+
 ---
 
-# 12️⃣ Job Durable Object
+# 14️⃣ Job Durable Object
 
 Create:
 
@@ -358,9 +442,11 @@ failed
 timeout
 ```
 
+> Note: This is the concrete implementation of the State & Event Layer (7️⃣).
+
 ---
 
-# 13️⃣ Execution Workers
+# 15️⃣ Execution Workers
 
 Queue workers execute nodes.
 
@@ -386,7 +472,7 @@ Job Durable Object
 
 ---
 
-# 14️⃣ Services
+# 16️⃣ Services
 
 Services implement generation logic.
 
@@ -406,7 +492,7 @@ Services must reuse existing generation logic.
 
 ---
 
-# 15️⃣ Providers
+# 17️⃣ Providers
 
 Providers interact with models.
 
@@ -421,7 +507,7 @@ All model calls must pass through **Cloudflare AI Gateway**.
 
 ---
 
-# 16️⃣ Model Router
+# 18️⃣ Model Router
 
 Router chooses providers.
 
@@ -441,7 +527,7 @@ availability
 
 ---
 
-# 17️⃣ Circuit Breaker
+# 19️⃣ Circuit Breaker
 
 Circuit breaker prevents failing providers from being used repeatedly.
 
@@ -455,7 +541,7 @@ retry after cooldown
 
 ---
 
-# 18️⃣ Webhooks
+# 20️⃣ Webhooks
 
 Some models return async responses.
 
@@ -473,7 +559,7 @@ resume pipeline
 
 ---
 
-# 19️⃣ Storage
+# 21️⃣ Storage
 
 Generated assets stored in **R2**.
 
@@ -499,7 +585,7 @@ job_costs
 
 ---
 
-# 20️⃣ Parallel Execution
+# 22️⃣ Parallel Execution
 
 Support fan-out pipelines.
 
@@ -517,7 +603,7 @@ Use **Cloudflare Queues** for parallel execution.
 
 ---
 
-# 21️⃣ Development Mode
+# 23️⃣ Development Mode
 
 Support mock providers.
 
@@ -531,7 +617,7 @@ Mock providers return placeholder outputs.
 
 ---
 
-# 22️⃣ Migration Strategy
+# 24️⃣ Migration Strategy
 
 The agent must not break existing functionality.
 
@@ -549,7 +635,7 @@ Legacy pipelines should continue working during migration.
 
 ---
 
-# 23️⃣ Expected Result
+# 25️⃣ Expected Result
 
 The final engine must support:
 
@@ -575,7 +661,7 @@ AI Gateway
 
 ---
 
-# 24️⃣ Implementation Rules for the Agent
+# 26️⃣ Implementation Rules for the Agent
 
 The agent must:
 

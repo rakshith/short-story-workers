@@ -7,9 +7,6 @@ export default defineConfig({
       main: './src/index.ts',
     }),
     include: ['src/**/*.spec.ts'],
-    exclude: [
-      'src/generation-engine/__tests__/integration.spec.ts',
-    ],
     globals: true,
   },
 });

@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Cloudflare Workers service for creating short stories with AI-generated images and audio",
   "main": "src/index.ts",
+  "workspaces": [
+    "lib/@artflicks/*"
+  ],
   "scripts": {
     "dev": "wrangler dev",
     "dev:staging": "wrangler dev --env staging",
@@ -28,7 +31,7 @@
     "test:blocks": "vitest run src/generation-engine/__tests__/blocks/",
     "test:workflow": "vitest run src/generation-engine/__tests__/workflow/",
     "test:e2e": "vitest run src/generation-engine/__tests__/e2e/",
-    "test:integration": "tsx src/generation-engine/__tests__/integration.spec.ts"
+    "test:integration": "vitest run src/generation-engine/__tests__/integration.spec.ts"
   },
   "keywords": [
     "cloudflare-workers",
@@ -48,6 +51,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.1",
+    "@artflicks/video-compiler": "1.0.0",
     "@supabase/supabase-js": "^2.39.3",
     "ai": "^6.0.3",
     "replicate": "^1.4.0",

@@ -81,6 +81,7 @@ TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
 USE_DAG_ENGINE = "true"  # Enable DAG-based execution in staging
+GEN_PROVIDER = "real"
 
 [env.production]
 name = "create-story-worker-production"
@@ -147,7 +148,8 @@ TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
-# USE_DAG_ENGINE = "true"  # Uncomment to enable DAG in production
+USE_DAG_ENGINE = "false"  # Uncomment to enable DAG in production
+GEN_PROVIDER = "real"
 
 # Environment variables (set via wrangler secret put or dashboard)
 [vars]
