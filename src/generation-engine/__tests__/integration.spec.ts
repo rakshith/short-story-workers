@@ -2,7 +2,7 @@
  * Integration Tests for Generation Engine
  * Tests full flow with mock mode - no external API calls
  * 
- * Run: node src/generation-engine/__tests__/integration.spec.ts
+ * Run: npm run test:integration
  */
 
 import { createMockEnv } from '../index';

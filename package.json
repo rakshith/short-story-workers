@@ -1,6 +1,7 @@
 {
   "name": "cloudflare-workers-create-story",
   "version": "1.0.0",
+  "type": "module",
   "description": "Cloudflare Workers service for creating short stories with AI-generated images and audio",
   "main": "src/index.ts",
   "scripts": {
@@ -18,6 +19,15 @@
     "monitor:prod": "npx wrangler tail --env production --format pretty",
     "type-check": "npx tsc --noEmit",
     "unused": "knip",
+    "test": "vitest",
+    "test:run": "vitest run",
+    "test:ui": "vitest --ui",
+    "test:templates": "vitest run src/generation-engine/__tests__/templates/",
+    "test:services": "vitest run src/generation-engine/__tests__/services/",
+    "test:providers": "vitest run src/generation-engine/__tests__/providers/",
+    "test:blocks": "vitest run src/generation-engine/__tests__/blocks/",
+    "test:workflow": "vitest run src/generation-engine/__tests__/workflow/",
+    "test:e2e": "vitest run src/generation-engine/__tests__/e2e/",
     "test:integration": "tsx src/generation-engine/__tests__/integration.spec.ts"
   },
   "keywords": [
@@ -28,10 +38,12 @@
   "author": "Rakshith Raj S",
   "license": "MIT",
   "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.13.0",
     "@cloudflare/workers-types": "^4.20241106.0",
     "knip": "^5.78.0",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",
+    "vitest": "^4.1.0",
     "wrangler": "^4.51.0"
   },
   "dependencies": {

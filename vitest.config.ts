@@ -1,0 +1,15 @@
+import { defineConfig } from 'vitest/config';
+import { cloudflarePool } from '@cloudflare/vitest-pool-workers';
+
+export default defineConfig({
+  test: {
+    pool: cloudflarePool({
+      main: './src/index.ts',
+    }),
+    include: ['src/**/*.spec.ts'],
+    exclude: [
+      'src/generation-engine/__tests__/integration.spec.ts',
+    ],
+    globals: true,
+  },
+});
