@@ -39,7 +39,11 @@ export class ImageProvider {
     const { webhookUrl } = options;
 
     const isSkeletonTemplate = input.videoConfig.templateId === 'skeleton-3d-shorts';
-    const defaultImageModel = isSkeletonTemplate ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
+    const skeletonDefault = input.videoConfig.mediaType === 'image' && (input.videoConfig.model || input.videoConfig.imageModel)
+        ? (input.videoConfig.imageModel || input.videoConfig.model)
+        : 'xai/grok-imagine-image';
+        
+    const defaultImageModel = isSkeletonTemplate ? skeletonDefault : 'black-forest-labs/flux-schnell';
     const imageModel = input.model || input.videoConfig.imageModel || defaultImageModel;
 
     const { getModelImageConfig, attachImageInputs } = await import('../../utils/replicate-model-config');

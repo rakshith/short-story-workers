@@ -23,7 +23,7 @@ export class ImageBlock implements Block {
 
   async execute(input: ImageBlockInput): Promise<ImageBlockOutput> {
     const { scene, sceneIndex, totalScenes } = input.data;
-    const { storyId, userId, env, videoConfig } = input.context as any;
+    const { storyId, userId, env, videoConfig } = input.context;
 
     try {
       const { createImageProvider } = await import('../providers/imageProvider');

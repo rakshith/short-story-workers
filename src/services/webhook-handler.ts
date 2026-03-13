@@ -156,61 +156,6 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
 
         apiLogger.info(`Updated ${type} in DO, isComplete: ${status.isComplete}, videosCompleted: ${status.videosCompleted}/${status.totalScenes}, audioCompleted: ${status.audioCompleted}/${status.totalScenes}`, { storyId, sceneIndex });
 
-        // Handle auto video generation (sceneReviewRequired=false): queue video after each image completes
-        if (type === 'image' && !sceneReviewRequired && resultUrl) {
-            apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
-            
-            // Fetch story to get videoConfig and job info
-            const { createClient } = await import('@supabase/supabase-js');
-            const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-            
-            const { data: storyData } = await supabase
-                .from('stories')
-                .select('story, video_config, status')
-                .eq('id', storyId)
-                .single();
-
-            const { data: jobData } = await supabase
-                .from('story_jobs')
-                .select('job_id, user_id, team_id')
-                .eq('story_id', storyId)
-                .in('status', ['processing', 'awaiting_review'])
-                .single();
-
-            if (storyData?.video_config && jobData?.job_id) {
-                const videoConfig = storyData.video_config;
-                const jobId = jobData.job_id;
-                
-                // Queue video with generated image URL as reference - use dynamic origin
-                const queueMessage = {
-                    jobId,
-                    userId: jobData.user_id,
-                    seriesId: videoConfig.seriesId,
-                    storyId,
-                    title: storyData.story?.title || '',
-                    storyData: storyData.story,
-                    videoConfig,
-                    sceneIndex,
-                    type: 'video' as const,
-                    baseUrl: origin || 'https://create-story-worker-staging.matrixrak.workers.dev',
-                    teamId: jobData.team_id,
-                    userTier: videoConfig.userTier,
-                    priority: 3, // Default priority
-                    generatedImageUrl: resultUrl, // Use the generated image!
-                };
-                
-                await env.STORY_QUEUE.send(queueMessage);
-                apiLogger.info(`Queued video generation for scene ${sceneIndex} with reference image`, { storyId, imageUrl: resultUrl });
-
-                // Incrementally sync image to DB so it's not lost if job fails before videos complete
-                const { syncPartialStory } = await import('../queue-consumer');
-                await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
-
-                // Return early - don't mark complete yet, let video webhooks handle final completion
-                return;
-            }
-        }
-
         // Handle two-step video generation: if sceneReviewRequired is true and images + audio complete
         if (type === 'image' && sceneReviewRequired && status.isImagesCompleteForReview) {
             apiLogger.info(`Images complete for review, setting status to awaiting_review`, { storyId });
@@ -230,6 +175,13 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             // Sync story to DB and update job status - syncStoryForReview handles story_jobs update
             await syncStoryForReview({ jobId, storyId, userId }, coordinator, env);
             return;
+        }
+
+        // Auto mode: DO will queue video after image completes
+        // We still sync partial progress so images aren't lost if job fails
+        if (type === 'image' && resultUrl) {
+            const { syncPartialStory } = await import('../queue-consumer');
+            await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
         }
 
         // Normal flow: finalize when all complete

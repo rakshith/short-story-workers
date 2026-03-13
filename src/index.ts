@@ -43,8 +43,13 @@ export default {
         return handleCancelStory(request, env);
 
       // POST /webhooks/replicate - Replicate callback webhook (fire-and-forget when ctx provided)
-      case method === 'POST' && pathname === '/webhooks/replicate':
+      case method === 'POST' && pathname === '/webhooks/replicate': {
+        if (env.USE_DAG_ENGINE === 'true') {
+          const { handleWebhookDAG } = await import('./generation-engine/queue/webhookWorker');
+          return handleWebhookDAG(request, env, ctx);
+        }
         return handleReplicateWebhook(request, env, ctx);
+      }
 
       // POST /webhooks/replicate/recover - Recover missed webhook by prediction ID (fetch from Replicate, then process)
       case method === 'POST' && pathname === '/webhooks/replicate/recover':
@@ -112,6 +117,11 @@ export default {
    */
   async queue(batch: MessageBatch<QueueMessage | WebhookQueueMessage>, env: Env): Promise<void> {
     if (batch.queue.includes('webhook-processing')) {
+      if (env.USE_DAG_ENGINE === 'true') {
+        console.log('[Queue] Using DAG Engine for webhook processing');
+        const { handleWebhookQueueDAG } = await import('./generation-engine/queue/webhookWorker');
+        return handleWebhookQueueDAG(batch as MessageBatch<WebhookQueueMessage>, env);
+      }
       return handleWebhookQueue(batch as MessageBatch<WebhookQueueMessage>, env);
     }
 

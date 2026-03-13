@@ -5,6 +5,7 @@ export interface SyncOptions {
   storyId: string;
   userId: string;
   teamId?: string;
+  timeline?: unknown;
 }
 
 export interface SyncResult {
@@ -81,21 +82,49 @@ export class StorySyncService {
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY);
 
-      const totalDuration = story.scenes?.reduce((sum: number, scene: any) => {
+      // Read-merge-write: read current story from DB, merge scene data, write back
+      // This preserves fields like imagePrompt, narration, etc. from the original script
+      const { data: currentStory } = await supabase
+        .from('stories')
+        .select('story')
+        .eq('id', options.storyId)
+        .single();
+
+      let updatedStory = story;
+
+      if (currentStory?.story && story.scenes) {
+        updatedStory = { ...currentStory.story };
+        story.scenes.forEach((scene: any, idx: number) => {
+          if (updatedStory.scenes[idx]) {
+            updatedStory.scenes[idx] = {
+              ...updatedStory.scenes[idx],
+              ...scene,
+            };
+          }
+        });
+      }
+
+      const totalDuration = updatedStory.scenes?.reduce((sum: number, scene: any) => {
         return sum + (scene.audioDuration || scene.duration || 0);
       }, 0) || 0;
 
-      const finalVideoUrl = story.scenes?.[0]?.generatedVideoUrl || null;
+      const finalVideoUrl = updatedStory.scenes?.[0]?.generatedVideoUrl || null;
+
+      const storyUpdate: Record<string, unknown> = {
+        story: updatedStory,
+        status: 'draft',
+        final_video_url: finalVideoUrl,
+        total_duration: totalDuration,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (options.timeline !== undefined) {
+        storyUpdate.timeline = options.timeline;
+      }
 
       await supabase
         .from('stories')
-        .update({
-          story: story,
-          status: 'completed',
-          final_video_url: finalVideoUrl,
-          total_duration: totalDuration,
-          updated_at: new Date().toISOString(),
-        })
+        .update(storyUpdate)
         .eq('id', options.storyId);
 
       await supabase
@@ -103,9 +132,9 @@ export class StorySyncService {
         .update({
           status: 'completed',
           progress: 100,
-          images_generated: story.scenes?.filter((s: any) => s.generatedImageUrl).length || 0,
-          videos_generated: story.scenes?.filter((s: any) => s.generatedVideoUrl).length || 0,
-          audio_generated: story.scenes?.filter((s: any) => s.audioUrl).length || 0,
+          images_generated: updatedStory.scenes?.filter((s: any) => s.generatedImageUrl).length || 0,
+          videos_generated: updatedStory.scenes?.filter((s: any) => s.generatedVideoUrl).length || 0,
+          audio_generated: updatedStory.scenes?.filter((s: any) => s.audioUrl).length || 0,
           updated_at: new Date().toISOString(),
         })
         .eq('job_id', options.jobId);

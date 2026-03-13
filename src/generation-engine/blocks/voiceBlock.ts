@@ -24,7 +24,7 @@ export class VoiceBlock implements Block {
 
   async execute(input: VoiceBlockInput): Promise<VoiceBlockOutput> {
     const { scene, sceneIndex } = input.data;
-    const { userId, env, videoConfig } = input.context as any;
+    const { userId, env, videoConfig } = input.context;
 
     const narration = scene.narration?.trim();
     if (!narration) {

@@ -18,6 +18,7 @@ export const youtubeShortTemplate: Template = {
       enableCaptions: true,
       imageModel: 'black-forest-labs/flux-schnell',
       videoModel: 'wan-video/wan-2.5-t2v-fast',
+      sceneReviewRequired: false,
     },
   },
 };

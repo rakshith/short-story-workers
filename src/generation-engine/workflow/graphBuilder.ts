@@ -1,4 +1,4 @@
-// Graph Builder - builds DAG from profile blocks
+// Graph Builder - builds DAG from profile blocks with per-scene fan-out
 
 import { WorkflowGraph, WorkflowNode, DependencyCounter, Profile, BlockDefinition } from '../types';
 import { generateUUID } from '../../utils/storage';
@@ -22,7 +22,8 @@ export class GraphBuilder {
     const rootNodes: string[] = [];
     const sceneCount = context.sceneCount || 1;
 
-    const sequentialBlocks = profile.blocks.filter(b => 
+    // Separate blocks into sequential (script, scene) vs. fan-out (image, voice, video)
+    const sequentialBlocks = profile.blocks.filter(b =>
       b.capability !== 'image-generation' && b.capability !== 'video-generation' && b.capability !== 'voice-generation'
     );
 
@@ -30,6 +31,7 @@ export class GraphBuilder {
     const voiceBlocks = profile.blocks.filter(b => b.capability === 'voice-generation');
     const videoBlocks = profile.blocks.filter(b => b.capability === 'video-generation');
 
+    // --- Sequential chain: script → scene ---
     let previousNodeId: string | null = null;
 
     for (const block of sequentialBlocks) {
@@ -60,66 +62,84 @@ export class GraphBuilder {
       previousNodeId = nodeId;
     }
 
-    if (imageBlocks.length > 0 && previousNodeId) {
-      const imageNodeId = `image-gen-batch-${generateUUID().slice(0, 8)}`;
-      const imageNode: WorkflowNode = {
-        nodeId: imageNodeId,
+    // --- Fan-out: create per-scene nodes for parallel execution ---
+
+    const lastSequentialNodeId = previousNodeId;
+    let imageCollectorId: string | null = null;
+    let voiceCollectorId: string | null = null;
+
+    // Image generation: one node per scene, all depend on the last sequential node
+    if (imageBlocks.length > 0 && lastSequentialNodeId) {
+      const imageNodeIds = this.createPerSceneNodes(
+        'image-generation', [lastSequentialNodeId], sceneCount, nodes, counters
+      );
+      // Collector: a node that depends on all image nodes completing
+      const collectorId = `image-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
         capability: 'image-generation',
-        dependencies: [previousNodeId],
+        dependencies: imageNodeIds,
         childNodes: [],
-        input: { sceneCount },
+        input: { isCollector: true, sceneCount },
         status: 'pending',
       };
-      nodes.set(imageNodeId, imageNode);
-
-      const parentNode = nodes.get(previousNodeId);
-      if (parentNode) {
-        parentNode.childNodes.push(imageNodeId);
+      nodes.set(collectorId, collector);
+      counters[collectorId] = imageNodeIds.length;
+      // Register collector as child of each image node
+      for (const id of imageNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
       }
-
-      counters[imageNodeId] = 1;
-      previousNodeId = imageNodeId;
+      imageCollectorId = collectorId;
     }
 
-    if (voiceBlocks.length > 0 && previousNodeId) {
-      const voiceNodeId = `voice-gen-batch-${generateUUID().slice(0, 8)}`;
-      const voiceNode: WorkflowNode = {
-        nodeId: voiceNodeId,
+    // Voice generation: one node per scene, depends on last sequential node
+    if (voiceBlocks.length > 0 && lastSequentialNodeId) {
+      const voiceNodeIds = this.createPerSceneNodes(
+        'voice-generation', [lastSequentialNodeId], sceneCount, nodes, counters
+      );
+      const collectorId = `voice-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
         capability: 'voice-generation',
-        dependencies: [previousNodeId],
+        dependencies: voiceNodeIds,
         childNodes: [],
-        input: { sceneCount },
+        input: { isCollector: true, sceneCount },
         status: 'pending',
       };
-      nodes.set(voiceNodeId, voiceNode);
-
-      const parentNode = nodes.get(previousNodeId);
-      if (parentNode) {
-        parentNode.childNodes.push(voiceNodeId);
+      nodes.set(collectorId, collector);
+      counters[collectorId] = voiceNodeIds.length;
+      for (const id of voiceNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
       }
-
-      counters[voiceNodeId] = 1;
-      previousNodeId = voiceNodeId;
+      voiceCollectorId = collectorId;
     }
 
-    if (videoBlocks.length > 0 && previousNodeId) {
-      const videoNodeId = `video-gen-batch-${generateUUID().slice(0, 8)}`;
-      const videoNode: WorkflowNode = {
-        nodeId: videoNodeId,
+    // Video generation: one node per scene, depends on both image and voice collectors (if they exist), or last sequential
+    const videoDependencies: string[] = [];
+    if (imageCollectorId) videoDependencies.push(imageCollectorId);
+    if (voiceCollectorId) videoDependencies.push(voiceCollectorId);
+    if (videoDependencies.length === 0 && lastSequentialNodeId) {
+      videoDependencies.push(lastSequentialNodeId);
+    }
+
+    if (videoBlocks.length > 0 && videoDependencies.length > 0) {
+      const videoNodeIds = this.createPerSceneNodes(
+        'video-generation', videoDependencies, sceneCount, nodes, counters
+      );
+      const collectorId = `video-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
         capability: 'video-generation',
-        dependencies: [previousNodeId],
+        dependencies: videoNodeIds,
         childNodes: [],
-        input: { sceneCount },
+        input: { isCollector: true, sceneCount },
         status: 'pending',
       };
-      nodes.set(videoNodeId, videoNode);
-
-      const parentNode = nodes.get(previousNodeId);
-      if (parentNode) {
-        parentNode.childNodes.push(videoNodeId);
+      nodes.set(collectorId, collector);
+      counters[collectorId] = videoNodeIds.length;
+      for (const id of videoNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
       }
-
-      counters[videoNodeId] = 1;
     }
 
     const graph: WorkflowGraph = {
@@ -129,6 +149,48 @@ export class GraphBuilder {
     };
 
     return { graph, counters };
+  }
+
+  /**
+   * Create individual nodes for each scene, all depending on the same parent node.
+   * Returns the array of created node IDs.
+   */
+  private createPerSceneNodes(
+    capability: WorkflowNode['capability'],
+    parentDependencies: string[],
+    sceneCount: number,
+    nodes: Map<string, WorkflowNode>,
+    counters: DependencyCounter,
+  ): string[] {
+    const nodeIds: string[] = [];
+    const capShort = capability.split('-')[0]; // 'image', 'voice', 'video'
+
+    for (let i = 0; i < sceneCount; i++) {
+      const nodeId = `${capShort}-scene-${i}-${generateUUID().slice(0, 8)}`;
+      const node: WorkflowNode = {
+        nodeId,
+        capability,
+        dependencies: [...parentDependencies],
+        childNodes: [],
+        input: { sceneIndex: i, sceneCount },
+        status: 'pending',
+      };
+
+      nodes.set(nodeId, node);
+      counters[nodeId] = parentDependencies.length; // depends on parents
+
+      // Register as child of parents
+      for (const parentId of parentDependencies) {
+        const parentNode = nodes.get(parentId);
+        if (parentNode) {
+          parentNode.childNodes.push(nodeId);
+        }
+      }
+
+      nodeIds.push(nodeId);
+    }
+
+    return nodeIds;
   }
 }
 

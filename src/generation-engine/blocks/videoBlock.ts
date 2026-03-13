@@ -23,7 +23,7 @@ export class VideoBlock implements Block {
 
   async execute(input: VideoBlockInput): Promise<VideoBlockOutput> {
     const { scene, sceneIndex, generatedImageUrl } = input.data;
-    const { storyId, userId, env, videoConfig } = input.context as any;
+    const { storyId, userId, env, videoConfig } = input.context;
 
     try {
       const { createVideoProvider } = await import('../providers/videoProvider');

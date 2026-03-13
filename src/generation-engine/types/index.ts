@@ -2,12 +2,13 @@
 
 export type NodeStatus = 'pending' | 'running' | 'waiting_webhook' | 'completed' | 'failed' | 'timeout';
 
-export type NodeCapability = 
+export type NodeCapability =
   | 'script-generation'
   | 'scene-parsing'
   | 'image-generation'
   | 'video-generation'
   | 'voice-generation'
+  | 'avatar-generation'
   | 'transcription'
   | 'summary';
 
@@ -55,7 +56,7 @@ export interface Template {
 }
 
 export interface TemplateConfig {
-  videoConfig?: Record<string, unknown>;
+  videoConfig?: Partial<VideoConfigContext>;
   generationOptions?: GenerationOptions;
 }
 
@@ -116,7 +117,7 @@ export interface ExecutionContext {
   sceneIndex?: number;
   sceneCount?: number;
   videoConfig: VideoConfigContext;
-  env: unknown;
+  env: any;
 }
 
 export interface VideoConfigContext {
@@ -126,10 +127,21 @@ export interface VideoConfigContext {
   voice?: string;
   imageModel?: string;
   videoModel?: string;
+  audioModel?: string;
+  outputFormat?: string;
+  duration?: number;
   characterReferenceImages?: string[];
   enableVoiceOver?: boolean;
   enableCaptions?: boolean;
   sceneReviewRequired?: boolean;
+  seriesId?: string;
+  teamId?: string;
+  userTier?: string;
+  preset?: {
+    seed?: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
 }
 
 export interface QueueMessage {

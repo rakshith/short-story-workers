@@ -83,11 +83,8 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
 
         const storyId = createResult.id;
 
-        // Initialize Durable Object for this story
-        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
-
-        // Queue generation jobs with tier-based priority
-        await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
+        // Initialize Durable Object for this story (DO will queue initial tasks)
+        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, jobId, url.origin, userTier, priority, body.seriesId, body.teamId, env);
 
         // Return job ID immediately
         return jsonResponse({
@@ -183,12 +180,19 @@ async function createInitialStory(
 
 /**
  * Initializes the Durable Object coordinator for a story
+ * DO will queue initial tasks after initialization
  */
 async function initializeCoordinator(
     storyId: string,
     userId: string,
     storyData: StoryTimeline,
     videoConfig: VideoConfig,
+    jobId: string,
+    baseUrl: string,
+    userTier: string,
+    priority: number,
+    seriesId: string | undefined,
+    teamId: string | undefined,
     env: Env
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
@@ -202,74 +206,19 @@ async function initializeCoordinator(
             totalScenes: storyData.scenes.length,
             videoConfig,
             sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
-        }),
-    }));
-    console.log(`[Create Story] Durable Object initialized for story ${storyId}`);
-}
-
-/**
- * Queues visual and audio generation jobs for all scenes with tier-based priority
- */
-async function queueGenerationJobs(
-    jobId: string,
-    body: CreateStoryRequest,
-    storyId: string,
-    storyData: StoryTimeline,
-    baseUrl: string,
-    userTier: string,
-    priority: number,
-    env: Env
-): Promise<void> {
-    const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
-
-    // Queue visual generation jobs with tier and priority
-    const visualPromises = storyData.scenes.map((scene, index) => {
-        const message: QueueMessage = {
-            jobId,
-            userId: body.userId,
-            seriesId: body.seriesId,
-            storyId,
-            title: storyData.title,
-            storyData,
-            videoConfig: body.videoConfig!,
-            sceneIndex: index,
-            type: mediaType,
-            baseUrl,
-            teamId: body.teamId,
-            userTier,
-            priority,
-        };
-        return env.STORY_QUEUE.send(message);
-    });
-    await Promise.all(visualPromises);
-    console.log(`[Create Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs (Priority: ${priority})`);
-
-    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
-    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
-    
-    if (enableVoiceOver) {
-        const audioPromises = storyData.scenes.map((scene, index) => {
-            const message: QueueMessage = {
+            jobMetadata: {
                 jobId,
-                userId: body.userId,
-                seriesId: body.seriesId,
+                userId,
+                seriesId: seriesId || '',
                 storyId,
                 title: storyData.title,
                 storyData,
-                videoConfig: body.videoConfig!,
-                sceneIndex: index,
-                type: 'audio',
                 baseUrl,
-                teamId: body.teamId,
                 userTier,
                 priority,
-            };
-            return env.STORY_QUEUE.send(message);
-        });
-        await Promise.all(audioPromises);
-        console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
-    } else {
-        console.log(`[Create Story] Audio generation skipped (enableVoiceOver=false)`);
-    }
-
+                teamId,
+            },
+        }),
+    }));
+    console.log(`[Create Story] Durable Object initialized for story ${storyId}`);
 }

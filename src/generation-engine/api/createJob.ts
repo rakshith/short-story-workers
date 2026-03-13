@@ -4,23 +4,14 @@ import { generateUUID } from '../../utils/storage';
 import { getMockDatabase } from '../storage/mockDatabase';
 import { getMockStoryQueue, clearAllMockQueues } from '../queue/mockQueue';
 
+import { VideoConfigContext } from '../types';
+
 export interface CreateJobRequest {
   userId: string;
   templateId: string;
   profileId?: string;
   prompt: string;
-  videoConfig?: {
-    aspectRatio?: string;
-    resolution?: string;
-    voice?: string;
-    imageModel?: string;
-    videoModel?: string;
-    characterReferenceImages?: string[];
-    seriesId?: string;
-    teamId?: string;
-    userTier?: string;
-    enableSceneReview?: boolean;
-  };
+  videoConfig?: Partial<VideoConfigContext>;
 }
 
 export interface CreateJobResponse {
@@ -188,7 +179,7 @@ export class CreateJobAPI {
     }
   }
 
-  async completeJob(jobId: string, storyId: string, userId: string, story: any, teamId?: string): Promise<{ success: boolean; storyUrl?: string; error?: string }> {
+  async completeJob(jobId: string, storyId: string, userId: string, story: any, teamId?: string, timeline?: unknown): Promise<{ success: boolean; storyUrl?: string; error?: string }> {
     try {
       const { createStorySyncService } = await import('../services/storySync');
       const { createEmailNotificationService } = await import('../services/emailNotification');
@@ -197,7 +188,7 @@ export class CreateJobAPI {
       const emailService = createEmailNotificationService(this.env);
 
       const syncResult = await syncService.syncStoryComplete(
-        { jobId, storyId, userId, teamId },
+        { jobId, storyId, userId, teamId, timeline },
         story
       );
 
@@ -205,11 +196,20 @@ export class CreateJobAPI {
         return { success: false, error: syncResult.error };
       }
 
+      let thumbnailUrl: string | undefined;
+      if (story.scenes?.length > 0) {
+        const firstWithImage = story.scenes.find((s: any) => s.generatedImageUrl);
+        if (firstWithImage) {
+          thumbnailUrl = firstWithImage.generatedImageUrl;
+        }
+      }
+
       await emailService.sendCompletionEmail({
         userId,
         storyId,
         storyTitle: story.title || 'Your Story',
         storyUrl: syncResult.storyUrl,
+        thumbnailUrl,
       });
 
       return { success: true, storyUrl: syncResult.storyUrl };

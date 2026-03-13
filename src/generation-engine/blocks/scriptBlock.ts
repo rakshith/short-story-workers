@@ -23,7 +23,7 @@ export class ScriptBlock implements Block {
 
   async execute(input: ScriptBlockInput): Promise<ScriptBlockOutput> {
     const { prompt, templateId, duration } = input.data;
-    const { videoConfig, env } = input.context as any;
+    const { videoConfig, env } = input.context;
 
     try {
       const { createScriptService } = await import('../services/scriptService');

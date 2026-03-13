@@ -6,6 +6,7 @@ export interface DependencyEngineState {
   counters: DependencyCounter;
   completedNodes: Set<string>;
   failedNodes: Set<string>;
+  waitingWebhookNodes: Set<string>;
 }
 
 export class DependencyEngine {
@@ -16,6 +17,7 @@ export class DependencyEngine {
       counters: { ...counters },
       completedNodes: new Set(),
       failedNodes: new Set(),
+      waitingWebhookNodes: new Set(),
     };
   }
 
@@ -23,7 +25,12 @@ export class DependencyEngine {
     const ready: string[] = [];
 
     for (const [nodeId, counter] of Object.entries(this.state.counters)) {
-      if (counter === 0 && !this.state.completedNodes.has(nodeId) && !this.state.failedNodes.has(nodeId)) {
+      if (
+        counter === 0 &&
+        !this.state.completedNodes.has(nodeId) &&
+        !this.state.failedNodes.has(nodeId) &&
+        !this.state.waitingWebhookNodes.has(nodeId)
+      ) {
         const node = graph.nodes.get(nodeId);
         if (node && node.status === 'pending') {
           ready.push(nodeId);
@@ -61,9 +68,28 @@ export class DependencyEngine {
   }
 
   isNodeReady(nodeId: string): boolean {
-    return this.state.counters[nodeId] === 0 && 
-           !this.state.completedNodes.has(nodeId) && 
-           !this.state.failedNodes.has(nodeId);
+    return this.state.counters[nodeId] === 0 &&
+      !this.state.completedNodes.has(nodeId) &&
+      !this.state.failedNodes.has(nodeId) &&
+      !this.state.waitingWebhookNodes.has(nodeId);
+  }
+
+  /**
+   * Mark a node as waiting for an external webhook (e.g. Replicate prediction callback).
+   * The node will not be considered 'ready' or 'complete' until resumed.
+   */
+  markNodeWaitingWebhook(nodeId: string): void {
+    this.state.waitingWebhookNodes.add(nodeId);
+    this.state.counters[nodeId] = -1; // prevent re-scheduling
+  }
+
+  /**
+   * Resume a node that was waiting for a webhook. Marks it completed and
+   * decrements child dependency counters.
+   */
+  resumeFromWebhook(nodeId: string, graph: WorkflowGraph): void {
+    this.state.waitingWebhookNodes.delete(nodeId);
+    this.markNodeCompleted(nodeId, graph);
   }
 
   isComplete(): boolean {
@@ -75,12 +101,14 @@ export class DependencyEngine {
       ...this.state,
       completedNodes: new Set(this.state.completedNodes),
       failedNodes: new Set(this.state.failedNodes),
+      waitingWebhookNodes: new Set(this.state.waitingWebhookNodes),
     };
   }
 
   reset(): void {
     this.state.completedNodes.clear();
     this.state.failedNodes.clear();
+    this.state.waitingWebhookNodes.clear();
   }
 }
 

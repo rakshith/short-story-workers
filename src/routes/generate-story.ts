@@ -151,11 +151,8 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             });
         }
 
-        // Initialize Durable Object for this story
-        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
-
-        // Queue generation jobs with tier-based priority
-        await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
+        // Initialize Durable Object for this story (DO will queue initial tasks)
+        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, jobId, url.origin, userTier, priority, body.seriesId, body.teamId, env);
 
         return jsonResponse({
             success: true,
@@ -353,16 +350,33 @@ async function createStoryRecord(
 
 /**
  * Initializes the Durable Object coordinator for a story
+ * DO will queue initial tasks after initialization
  */
 async function initializeCoordinator(
     storyId: string,
     userId: string,
     storyData: StoryTimeline,
     videoConfig: VideoConfig,
+    jobId: string,
+    baseUrl: string,
+    userTier: string,
+    priority: number,
+    seriesId: string | undefined,
+    teamId: string | undefined,
     env: Env
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
     const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
+    
+    const effectiveReferences = (videoConfig?.templateId === 'skeleton-3d-shorts' && (!videoConfig?.characterReferenceImages || videoConfig.characterReferenceImages.length === 0))
+        ? DEFAULT_SKELETON_REFERENCES
+        : videoConfig?.characterReferenceImages;
+
+    const updatedVideoConfig = {
+        ...videoConfig,
+        characterReferenceImages: effectiveReferences
+    };
+    
     await coordinator.fetch(new Request('http://do/init', {
         method: 'POST',
         body: JSON.stringify({
@@ -370,103 +384,23 @@ async function initializeCoordinator(
             userId,
             scenes: storyData.scenes,
             totalScenes: storyData.scenes.length,
-            videoConfig,
+            videoConfig: updatedVideoConfig,
             sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
+            jobMetadata: {
+                jobId,
+                userId,
+                seriesId: seriesId || '',
+                storyId,
+                title: storyData.title || videoConfig?.title || '',
+                storyData,
+                baseUrl,
+                userTier,
+                priority,
+                teamId,
+            },
         }),
     }));
     console.log(`[Generate Story] Durable Object initialized for story ${storyId}`);
-}
-
-/**
- * Queues visual and audio generation jobs for all scenes with tier-based priority
- */
-async function queueGenerationJobs(
-    jobId: string,
-    body: GenerateStoryRequest,
-    storyId: string,
-    storyData: StoryTimeline,
-    baseUrl: string,
-    userTier: string,
-    priority: number,
-    env: Env
-): Promise<void> {
-    const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
-    const sceneReviewRequired = body.videoConfig?.sceneReviewRequired === true;
-    
-    // For video mediaType: always queue images first
-    // - sceneReviewRequired=false → videos queued after image completes (in webhook)
-    // - sceneReviewRequired=true → videos queued after user triggers with storyId
-    // Videos are NEVER queued immediately - only for image mediaType
-    const shouldQueueVideos = mediaType === 'image';
-    
-    // Use default skeleton references if template is skeleton-3d-shorts and no references provided
-    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
-        ? DEFAULT_SKELETON_REFERENCES
-        : body.videoConfig?.characterReferenceImages;
-
-    // Create updated videoConfig with effective references
-    const updatedVideoConfig = {
-        ...body.videoConfig,
-        characterReferenceImages: effectiveReferences
-    };
-
-    // Queue visual generation jobs (images or videos based on shouldQueueVideos)
-    const visualPromises = storyData.scenes.map((scene, index) => {
-        const message: QueueMessage = {
-            jobId,
-            userId: body.userId,
-            seriesId: body.seriesId,
-            storyId,
-            title: storyData.title || body.title || '',
-            storyData,
-            videoConfig: updatedVideoConfig,
-            sceneIndex: index,
-            type: shouldQueueVideos ? mediaType : 'image', // If not queuing videos, queue images only
-            baseUrl,
-            teamId: body.teamId,
-            userTier,
-            priority,
-        };
-        return env.STORY_QUEUE.send(message);
-    });
-    await Promise.all(visualPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : 'image'} generation jobs (Priority: ${priority})`);
-
-    // Queue videos only for image mediaType (never for video - handled via webhook or user trigger)
-    if (!sceneReviewRequired && mediaType === 'video') {
-        console.log(`[Generate Story] Videos will be queued after image completion (sceneReviewRequired=false)`);
-    } else if (sceneReviewRequired && mediaType === 'video') {
-        console.log(`[Generate Story] Videos will be queued after user triggers with storyId (sceneReviewRequired=true)`);
-    }
-
-    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
-    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
-    
-    if (enableVoiceOver) {
-        const audioPromises = storyData.scenes.map((scene, index) => {
-            const message: QueueMessage = {
-                jobId,
-                userId: body.userId,
-                seriesId: body.seriesId,
-                storyId,
-                title: storyData.title || body.title || '',
-                storyData,
-                videoConfig: updatedVideoConfig,
-                sceneIndex: index,
-                type: 'audio',
-                baseUrl,
-                teamId: body.teamId,
-                userTier,
-                priority,
-            };
-            return env.STORY_QUEUE.send(message);
-        });
-        await Promise.all(audioPromises);
-        console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
-    } else {
-        console.log(`[Generate Story] Audio generation skipped (enableVoiceOver=false)`);
-    }
-
 }
 
 /**

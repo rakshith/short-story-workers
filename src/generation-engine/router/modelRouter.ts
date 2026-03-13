@@ -1,5 +1,7 @@
 // Model Router - selects providers based on availability, latency, cost
 
+import { CircuitBreaker } from './circuitBreaker';
+
 export type ModelCapability = 'image' | 'video' | 'voice' | 'script';
 
 export interface ModelConfig {
@@ -67,7 +69,7 @@ export class ModelRouter {
 
     const available = models.filter(m => {
       const cb = this.circuitBreakers.get(m.id);
-      return !cb || cb.isClosed();
+      return !cb || cb.isAvailable();
     });
 
     if (available.length === 0) {
@@ -91,7 +93,7 @@ export class ModelRouter {
     }
     return models.slice(index + 1).filter(m => {
       const cb = this.circuitBreakers.get(m.id);
-      return !cb || cb.isClosed();
+      return !cb || cb.isAvailable();
     }).map(m => m.id);
   }
 
@@ -116,59 +118,6 @@ export class ModelRouter {
 
   getModels(capability: ModelCapability): ModelConfig[] {
     return this.models.get(capability) || [];
-  }
-}
-
-class CircuitBreaker {
-  private state: 'closed' | 'open' | 'half-open' = 'closed';
-  private failureCount = 0;
-  private successCount = 0;
-  private lastFailureTime = 0;
-
-  constructor(
-    private modelId: string,
-    private failureThreshold = 5,
-    private successThreshold = 2,
-    private timeoutMs = 60000
-  ) {}
-
-  recordSuccess(): void {
-    if (this.state === 'half-open') {
-      this.successCount++;
-      if (this.successCount >= this.successThreshold) {
-        this.state = 'closed';
-        this.failureCount = 0;
-        this.successCount = 0;
-      }
-    } else {
-      this.failureCount = 0;
-    }
-  }
-
-  recordFailure(): void {
-    this.failureCount++;
-    this.lastFailureTime = Date.now();
-
-    if (this.state === 'closed' && this.failureCount >= this.failureThreshold) {
-      this.state = 'open';
-    } else if (this.state === 'half-open') {
-      this.state = 'open';
-    }
-  }
-
-  isClosed(): boolean {
-    if (this.state === 'open' && Date.now() - this.lastFailureTime > this.timeoutMs) {
-      this.state = 'half-open';
-      this.successCount = 0;
-    }
-    return this.state === 'closed';
-  }
-
-  getState(): 'closed' | 'open' | 'half-open' {
-    if (this.state === 'open' && Date.now() - this.lastFailureTime > this.timeoutMs) {
-      return 'half-open';
-    }
-    return this.state;
   }
 }
 

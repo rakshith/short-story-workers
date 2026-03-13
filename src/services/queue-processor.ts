@@ -36,11 +36,13 @@ export async function processSceneImage(
   }
 
   try {
-    // Determine image model: use imageModel if provided, otherwise use model
-    // For skeleton templates: default to xai/grok-imagine-image
-    const isSkeletonTemplate = videoConfig.templateId === 'skeleton-3d-shorts' || 
-                              videoConfig.templateId === 'skeleton-3d-shorts';
-    const defaultImageModel = isSkeletonTemplate ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
+    // For skeleton templates: default to xai/grok-imagine-image, but respect user config if mediaType is 'image'
+    const isSkeletonTemplate = videoConfig.templateId === 'skeleton-3d-shorts';
+    const skeletonDefault = videoConfig.mediaType === 'image' && (videoConfig.model || videoConfig.imageModel) 
+        ? (videoConfig.imageModel || videoConfig.model) 
+        : 'xai/grok-imagine-image';
+        
+    const defaultImageModel = isSkeletonTemplate ? skeletonDefault : 'black-forest-labs/flux-schnell';
     const imageModel = videoConfig.imageModel || videoConfig.model || defaultImageModel;
 
     processorLogger.debug(`Image generation starting`, {
