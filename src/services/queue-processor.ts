@@ -35,6 +35,17 @@ export async function processSceneImage(
     return { sceneIndex, imageUrl: null, success: false, error: 'Scene not found' };
   }
 
+  const useMock = env.GEN_PROVIDER === 'mock';
+  
+  if (useMock) {
+    processorLogger.debug(`[Mock] Generating image for scene ${sceneIndex}`);
+    return { 
+      sceneIndex, 
+      imageUrl: 'https://via.placeholder.com/1024x576.png?text=Mock+Image', 
+      success: true 
+    };
+  }
+
   try {
     // For skeleton templates: default to xai/grok-imagine-image, but respect user config if mediaType is 'image'
     const isSkeletonTemplate = videoConfig.templateId === 'skeleton-3d-shorts';
@@ -168,6 +179,17 @@ export async function processSceneVideo(
     return { sceneIndex, videoUrl: null, success: false, error: 'Scene not found' };
   }
 
+  const useMock = env.GEN_PROVIDER === 'mock';
+  
+  if (useMock) {
+    processorLogger.debug(`[Mock] Generating video for scene ${sceneIndex}`);
+    return { 
+      sceneIndex, 
+      videoUrl: 'https://via.placeholder.com/1024x576.png?text=Mock+Video', 
+      success: true 
+    };
+  }
+
   try {
     const modelToUse = scene.model || videoConfig.model;
     const selectedModel = getModelForTier(modelToUse);
@@ -272,6 +294,19 @@ export async function processSceneAudio(
       captions: [],
       success: false,
       error: 'Scene not found',
+    };
+  }
+
+  const useMock = env.GEN_PROVIDER === 'mock';
+  
+  if (useMock) {
+    processorLogger.debug(`[Mock] Generating audio for scene ${sceneIndex}`);
+    return { 
+      sceneIndex, 
+      audioUrl: 'https://example.com/mock-audio.mp3', 
+      audioDuration: scene.duration || 5,
+      captions: [{ text: scene.narration?.substring(0, 50), startTime: 0, endTime: scene.duration || 5 }],
+      success: true 
     };
   }
 

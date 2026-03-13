@@ -23,15 +23,21 @@ export class ImageBlock implements Block {
 
   async execute(input: ImageBlockInput): Promise<ImageBlockOutput> {
     const { scene, sceneIndex, totalScenes } = input.data;
-    const { storyId, userId, env, videoConfig } = input.context;
+    const { storyId, userId, env, videoConfig, providers, jobId } = input.context as any;
 
     try {
-      const { createImageProvider } = await import('../providers/imageProvider');
-      const imageProvider = createImageProvider(env.REPLICATE_API_TOKEN);
+      let imageProvider;
+      
+      if (providers?.imageProvider) {
+        imageProvider = providers.imageProvider;
+      } else {
+        const { createImageProvider } = await import('../providers/imageProvider');
+        imageProvider = createImageProvider(env.REPLICATE_API_TOKEN);
+      }
 
       const baseUrl = env.APP_URL || 'https://create-story-worker.artflicks.workers.dev';
       const sceneReviewParam = videoConfig.sceneReviewRequired ? '&sceneReviewRequired=true' : '';
-      const webhookUrl = `${baseUrl}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}&jobId=${input.context.jobId}${sceneReviewParam}`;
+      const webhookUrl = `${baseUrl}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}&jobId=${jobId}${sceneReviewParam}`;
 
       const result = await imageProvider.generate(
         {

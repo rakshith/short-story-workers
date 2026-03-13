@@ -1,5 +1,9 @@
 // Core types for the Generation Engine DAG-based pipeline
 
+import type { ImageProvider } from '../providers/imageProvider';
+import type { VideoProvider } from '../providers/videoProvider';
+import type { VoiceProvider } from '../providers/voiceProvider';
+
 export type NodeStatus = 'pending' | 'running' | 'waiting_webhook' | 'completed' | 'failed' | 'timeout';
 
 export type NodeCapability =
@@ -118,6 +122,11 @@ export interface ExecutionContext {
   sceneCount?: number;
   videoConfig: VideoConfigContext;
   env: any;
+  providers?: {
+    imageProvider?: ImageProvider;
+    videoProvider?: VideoProvider;
+    voiceProvider?: VoiceProvider;
+  };
 }
 
 export interface VideoConfigContext {

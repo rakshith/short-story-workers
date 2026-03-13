@@ -23,14 +23,20 @@ export class VideoBlock implements Block {
 
   async execute(input: VideoBlockInput): Promise<VideoBlockOutput> {
     const { scene, sceneIndex, generatedImageUrl } = input.data;
-    const { storyId, userId, env, videoConfig } = input.context;
+    const { storyId, userId, env, videoConfig, providers, jobId } = input.context as any;
 
     try {
-      const { createVideoProvider } = await import('../providers/videoProvider');
-      const videoProvider = createVideoProvider(env.REPLICATE_API_TOKEN);
+      let videoProvider;
+      
+      if (providers?.videoProvider) {
+        videoProvider = providers.videoProvider;
+      } else {
+        const { createVideoProvider } = await import('../providers/videoProvider');
+        videoProvider = createVideoProvider(env.REPLICATE_API_TOKEN);
+      }
 
       const baseUrl = env.APP_URL || 'https://create-story-worker.artflicks.workers.dev';
-      const webhookUrl = `${baseUrl}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}&jobId=${input.context.jobId}`;
+      const webhookUrl = `${baseUrl}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}&jobId=${jobId}`;
 
       const result = await videoProvider.generate(
         {

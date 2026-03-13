@@ -3,6 +3,18 @@
 export { ScriptService, createScriptService } from './scriptService';
 export type { ScriptGenerationInput, ScriptGenerationResult } from './scriptService';
 
+export { ImageService, createImageService } from './imageService';
+export type { ImageGenerationInput, ImageServiceResult, ImageServiceOptions } from './imageService';
+
+export { AudioService, createAudioService } from './audioService';
+export type { AudioGenerationInput, AudioServiceResult, AudioServiceOptions } from './audioService';
+
+export { VideoService, createVideoService } from './videoService';
+export type { VideoGenerationInput, VideoServiceResult, VideoServiceOptions } from './videoService';
+
+export { TranscriptService, createTranscriptService } from './transcriptService';
+export type { TranscriptInput, TranscriptResult, TranscriptServiceOptions } from './transcriptService';
+
 export { ConcurrencyService, createConcurrencyService } from './concurrencyService';
 export type { ConcurrencyCheckResult } from './concurrencyService';
 

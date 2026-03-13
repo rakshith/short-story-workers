@@ -24,7 +24,7 @@ export class VoiceBlock implements Block {
 
   async execute(input: VoiceBlockInput): Promise<VoiceBlockOutput> {
     const { scene, sceneIndex } = input.data;
-    const { userId, env, videoConfig } = input.context;
+    const { userId, env, videoConfig, providers } = input.context as any;
 
     const narration = scene.narration?.trim();
     if (!narration) {
@@ -40,12 +40,18 @@ export class VoiceBlock implements Block {
     }
 
     try {
-      const { createVoiceProvider } = await import('../providers/voiceProvider');
-      const voiceProvider = createVoiceProvider({
-        elevenLabsApiKey: env.ELEVENLABS_API_KEY,
-        openAiApiKey: env.OPENAI_API_KEY,
-        defaultVoiceId: env.ELEVENLABS_DEFAULT_VOICE_ID,
-      });
+      let voiceProvider;
+      
+      if (providers?.voiceProvider) {
+        voiceProvider = providers.voiceProvider;
+      } else {
+        const { createVoiceProvider } = await import('../providers/voiceProvider');
+        voiceProvider = createVoiceProvider({
+          elevenLabsApiKey: env.ELEVENLABS_API_KEY,
+          openAiApiKey: env.OPENAI_API_KEY,
+          defaultVoiceId: env.ELEVENLABS_DEFAULT_VOICE_ID,
+        });
+      }
 
       const result = await voiceProvider.generate(
         {
