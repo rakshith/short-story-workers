@@ -1,7 +1,7 @@
   // ROOT BUCKET NAME
   export const ROOT_BUCKET_NAME: 'images' = 'images';
-  export const ROOT_BUCKET_NAME_VIDEOS: 'videos' = 'videos';
-  export const ROOT_BUCKET_NAME_AUDIO: 'audio' = 'audio';
+  const ROOT_BUCKET_NAME_VIDEOS: 'videos' = 'videos';
+  const ROOT_BUCKET_NAME_AUDIO: 'audio' = 'audio';
   export const video_output_format: 'mp4' = 'mp4';
   export const audio_output_format: 'mp3' = 'mp3';
   
@@ -50,7 +50,7 @@
   export type StorageBucketType = typeof FOLDER_NAMES[keyof typeof FOLDER_NAMES];
   
   // Bucket metadata configuration
-  export const FOLDER_CONFIG = {
+  const FOLDER_CONFIG = {
      [FOLDER_NAMES.USER_UPLOADS]: {
       name: 'user-uploads',
       description: 'User uploaded images and files',
@@ -135,27 +135,27 @@
   } as const;
   
   // Helper functions for bucket operations
-  export const getFolderConfig = (bucketName: StorageBucketType) => {
+  const getFolderConfig = (bucketName: StorageBucketType) => {
     return FOLDER_CONFIG[bucketName];
   };
   
-  export const isBucketPublic = (bucketName: StorageBucketType): boolean => {
+  const isBucketPublic = (bucketName: StorageBucketType): boolean => {
     return FOLDER_CONFIG[bucketName]?.public || false;
   };
   
-  export const getBucketMaxFileSize = (bucketName: StorageBucketType): number => {
+  const getBucketMaxFileSize = (bucketName: StorageBucketType): number => {
     return FOLDER_CONFIG[bucketName]?.maxFileSize || 10 * 1024 * 1024; // Default 10MB
   };
   
-  export const getBucketAllowedMimeTypes = (bucketName: StorageBucketType): readonly string[] => {
+  const getBucketAllowedMimeTypes = (bucketName: StorageBucketType): readonly string[] => {
     return FOLDER_CONFIG[bucketName]?.allowedMimeTypes || ['image/jpeg', 'image/png'];
   };
   
   // Bucket names array for easy iteration
-  export const BUCKET_NAMES = Object.values(FOLDER_NAMES);
+  const BUCKET_NAMES = Object.values(FOLDER_NAMES);
   
   // Generic function to extract storage path from Supabase storage URL
-  export const extractStoragePath = (imageUrl: string, folderPrefix?: string): string => {
+  const extractStoragePath = (imageUrl: string, folderPrefix?: string): string => {
     let storagePath = '';
   
     // Pattern 1: /storage/v1/object/public/images/{folderPrefix}/

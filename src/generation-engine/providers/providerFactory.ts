@@ -96,7 +96,7 @@ export class ProviderFactory {
   }
 }
 
-export function createProviderFactory(config: ProviderConfig): ProviderFactory {
+function createProviderFactory(config: ProviderConfig): ProviderFactory {
   return new ProviderFactory(config);
 }
 
@@ -146,7 +146,7 @@ class MockVoiceProvider {
   }
 }
 
-export { ImageProvider, VideoProvider, VoiceProvider };
+;
 export type { ProviderResult } from './imageProvider';
 export type { ProviderResult as VideoProviderResult } from './videoProvider';
 export type { VoiceGenerationInput, VoiceGenerationResult } from './voiceProvider';

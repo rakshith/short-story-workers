@@ -21,17 +21,20 @@
     "monitor:stg": "npx wrangler tail --env staging --format pretty",
     "monitor:prod": "npx wrangler tail --env production --format pretty",
     "type-check": "npx tsc --noEmit",
-    "unused": "knip",
+    "unused": "npx knip --fix --fix-type exports",
     "test": "vitest",
     "test:run": "vitest run",
     "test:ui": "vitest --ui",
     "test:templates": "vitest run src/generation-engine/__tests__/templates/",
     "test:services": "vitest run src/generation-engine/__tests__/services/",
     "test:providers": "vitest run src/generation-engine/__tests__/providers/",
+    "test:coverage": "vitest run --config vitest.coverage.config.ts --coverage --coverage.reporter=text --coverage.reporter=html --coverage.reportsDirectory=coverage",
+    "test:coverage:open": "vitest run --config vitest.coverage.config.ts --coverage --coverage.reporter=text --coverage.reporter=html --coverage.reportsDirectory=coverage && open coverage/index.html",
     "test:blocks": "vitest run src/generation-engine/__tests__/blocks/",
     "test:workflow": "vitest run src/generation-engine/__tests__/workflow/",
     "test:e2e": "vitest run src/generation-engine/__tests__/e2e/",
-    "test:integration": "vitest run src/generation-engine/__tests__/integration.spec.ts"
+    "test:integration": "vitest run src/generation-engine/__tests__/integration.spec.ts",
+    "formatte": "npm run unused && npm run type-check"
   },
   "keywords": [
     "cloudflare-workers",
@@ -43,6 +46,7 @@
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.13.0",
     "@cloudflare/workers-types": "^4.20241106.0",
+    "@vitest/coverage-v8": "^4.1.0",
     "knip": "^5.78.0",
     "tsx": "^4.21.0",
     "typescript": "^5.3.3",

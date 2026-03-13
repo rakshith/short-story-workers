@@ -119,6 +119,6 @@ export class NodeExecutor {
   }
 }
 
-export function createNodeExecutor(options: NodeExecutorOptions): NodeExecutor {
+function createNodeExecutor(options: NodeExecutorOptions): NodeExecutor {
   return new NodeExecutor(options);
 }

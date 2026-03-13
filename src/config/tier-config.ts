@@ -10,7 +10,7 @@ export interface TierConfig {
 }
 
 // Default values - Used if not overridden in wrangler.toml
-export const TIER_CONFIGS: Record<UserTier, TierConfig> = {
+const TIER_CONFIGS: Record<UserTier, TierConfig> = {
   tier1: {
     maxConcurrentJobs: 2,
     maxBatchSize: 3,
@@ -36,7 +36,7 @@ export const TIER_CONFIGS: Record<UserTier, TierConfig> = {
 /**
  * Get merged tier configuration (Wrangler Env > Hardcoded Defaults)
  */
-export function getTierConfig(tier: UserTier, env?: any): TierConfig {
+function getTierConfig(tier: UserTier, env?: any): TierConfig {
   const defaults = TIER_CONFIGS[tier];
   if (!env) return defaults;
 
@@ -51,7 +51,7 @@ export function getTierConfig(tier: UserTier, env?: any): TierConfig {
 /**
  * Validate if a tier exists
  */
-export function isValidTier(tier: string): tier is UserTier {
+function isValidTier(tier: string): tier is UserTier {
   return tier in TIER_CONFIGS;
 }
 
@@ -68,7 +68,7 @@ export function parseTier(tier: string | undefined): UserTier {
 /**
  * Helper: Get batch size for tier
  */
-export function getBatchSizeForTier(tier: UserTier, env?: any): number {
+function getBatchSizeForTier(tier: UserTier, env?: any): number {
   return getTierConfig(tier, env).maxBatchSize;
 }
 

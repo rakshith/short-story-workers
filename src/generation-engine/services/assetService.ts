@@ -100,7 +100,7 @@ export class AssetService {
   }
 }
 
-export function createAssetService(
+function createAssetService(
   imagesBucket: any,
   videoBucket: any,
   audioBucket: any

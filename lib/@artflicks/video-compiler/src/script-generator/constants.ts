@@ -120,7 +120,7 @@ export const VIDEO_SCENE_COUNT_GUIDE: Record<number, { min: number; target: numb
 };
 
 // Legacy export kept for backward compatibility
-export const SCENE_WORD_LIMITS = {
+const SCENE_WORD_LIMITS = {
     SCENE_5S: {
         min: 10,
         target: 13,

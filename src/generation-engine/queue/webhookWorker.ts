@@ -89,7 +89,7 @@ export async function handleWebhookDAG(
  * 3. Partial sync via DAGExecutor.onNodeComplete()
  * 4. Final sync via DAGExecutor.onJobComplete() with timeline
  */
-export async function processWebhookDAG(
+async function processWebhookDAG(
   prediction: any,
   metadata: WebhookMetadata,
   env: any,

@@ -636,6 +636,6 @@ export class JobDurableObject {
   }
 }
 
-export function createJobDurableObject(state: DurableObjectState, env: any): JobDurableObject {
+function createJobDurableObject(state: DurableObjectState, env: any): JobDurableObject {
   return new JobDurableObject(state, env);
 }

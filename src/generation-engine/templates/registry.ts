@@ -27,7 +27,7 @@ class TemplateRegistry {
 
 export const templateRegistry = new TemplateRegistry();
 
-export function registerTemplate(template: Template): void {
+function registerTemplate(template: Template): void {
   templateRegistry.register(template);
 }
 

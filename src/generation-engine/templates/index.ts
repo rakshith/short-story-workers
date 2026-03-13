@@ -11,10 +11,10 @@ templateRegistry.register(youtubeShortTemplate);
 templateRegistry.register(skeleton3dShortsTemplate);
 templateRegistry.register(avatarVideoTemplate);
 
-export { templateRegistry, getTemplate, getAllTemplates } from './registry';
-export { characterStoryTemplate } from './characterStory';
-export { youtubeShortTemplate } from './youtubeShort';
-export { skeleton3dShortsTemplate } from './skeleton3dShorts';
-export { avatarVideoTemplate } from './avatarVideo';
+export {  getTemplate, getAllTemplates } from './registry';
+;
+;
+;
+;
 export { TEMPLATE_IDS } from './registry';
 export type { Template } from '../types/index';

@@ -121,6 +121,6 @@ export class ModelRouter {
   }
 }
 
-export function createModelRouter(): ModelRouter {
+function createModelRouter(): ModelRouter {
   return new ModelRouter();
 }

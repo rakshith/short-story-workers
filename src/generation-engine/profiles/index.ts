@@ -36,5 +36,5 @@ profileRegistry.register(youtubeShortProfile);
 profileRegistry.register(skeleton3dProfile);
 profileRegistry.register(avatarPipelineProfile);
 
-export { profileRegistry as default };
+;
 export type { Profile } from '../types/index';

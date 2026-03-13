@@ -12,7 +12,7 @@ export const DEFAULT_NARRATION_STYLE = 'neutral';
  * - target: ideal word count for smooth pacing
  * - max: upper limit (too long = rushed delivery)
  */
-export const SCENE_WORD_LIMITS = {
+const SCENE_WORD_LIMITS = {
     SCENE_5S: {
         min: 11,    // ~2.0 wps - min for flow
         target: 14, // ~2.6 wps - snappy pace
@@ -29,7 +29,7 @@ export const SCENE_WORD_LIMITS = {
  * Duration tolerance ranges for video lengths
  * Tighter ranges for better TTS accuracy
  */
-export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
+const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
     15: { min: 14, max: 16 },  // ±1s
     30: { min: 28, max: 32 },  // ±2s
     60: { min: 57, max: 63 },  // ±3s
@@ -102,7 +102,7 @@ export type NarrationStyle = keyof typeof NARRATION_STYLES;
 /**
  * Get configuration for a narration style
  */
-export function getNarrationStyleConfig(style: NarrationStyle): NarrationStyleConfig {
+function getNarrationStyleConfig(style: NarrationStyle): NarrationStyleConfig {
     return NARRATION_STYLES[style];
 }
 
@@ -111,6 +111,6 @@ export function getNarrationStyleConfig(style: NarrationStyle): NarrationStyleCo
  * @param sceneDuration - Duration of the scene in seconds (5 or 10)
  * @returns Word limit configuration { min, target, max }
  */
-export function getWordLimitsForDuration(sceneDuration: 5 | 10) {
+function getWordLimitsForDuration(sceneDuration: 5 | 10) {
     return sceneDuration === 5 ? SCENE_WORD_LIMITS.SCENE_5S : SCENE_WORD_LIMITS.SCENE_10S;
 }

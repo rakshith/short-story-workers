@@ -77,7 +77,7 @@ export function getMockStoryQueue(): MockQueue {
   return mockQueueManager.getQueue('story-processing');
 }
 
-export function getMockWebhookQueue(): MockQueue {
+function getMockWebhookQueue(): MockQueue {
   return mockQueueManager.getQueue('webhook-processing');
 }
 
@@ -85,6 +85,6 @@ export function clearAllMockQueues(): void {
   mockQueueManager.clearAll();
 }
 
-export function getTotalMockMessages(): number {
+function getTotalMockMessages(): number {
   return mockQueueManager.totalMessages;
 }

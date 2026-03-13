@@ -13,7 +13,7 @@ export const DEFAULT_SKELETON_REFERENCES = [
 ];
 
 // Character DNA - defines the visual characteristics (flexible for different characters/templates)
-export const SKELETON_CHARACTER_DNA = `CHARACTER DNA
+const SKELETON_CHARACTER_DNA = `CHARACTER DNA
 transparent humanoid body shell
 visible ivory skeleton
 large round cartoon eyes
@@ -21,7 +21,7 @@ smooth skull shape
 wide surprised expression`;
 
 // Consistency line to ensure same character across scenes
-export const SKELETON_CONSISTENCY_LINE = 'same character as the reference image, same skull shape, same eyes, same proportions';
+const SKELETON_CONSISTENCY_LINE = 'same character as the reference image, same skull shape, same eyes, same proportions';
 
 
 

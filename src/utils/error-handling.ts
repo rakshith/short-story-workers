@@ -48,7 +48,10 @@ export function isRetryableError(error: unknown): boolean {
     
     // Check for HTTP status codes in error message
     for (const statusCode of retryableStatusCodes) {
-      if (errorMessage.includes(` ${statusCode} `) || errorMessage.includes(`status ${statusCode}`)) {
+      if (errorMessage.includes(` ${statusCode} `) || 
+          errorMessage.includes(`status ${statusCode}`) ||
+          errorMessage.includes(`http ${statusCode}`) ||
+          errorMessage.includes(`${statusCode}:`)) {
         return true;
       }
     }
@@ -108,11 +111,11 @@ export async function withRetry<T>(
   throw lastError!;
 }
 
-export function sleep(ms: number): Promise<void> {
+function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-export function safeJsonParse<T>(json: string, defaultValue: T): T {
+function safeJsonParse<T>(json: string, defaultValue: T): T {
   try {
     return JSON.parse(json) as T;
   } catch {

@@ -28,7 +28,7 @@ export interface ImageUploadResult {
  * @param supabaseClient - Supabase client instance (server or client)
  * @returns Promise<ImageUploadResult>
  */
-export async function uploadImageToStorage(
+async function uploadImageToStorage(
   imageUrl: string, 
   userId: string, 
   options: ImageUploadOptions,
@@ -145,7 +145,7 @@ export async function uploadToDefaultBucket(
  * @param supabaseClient - Supabase client instance (server or client)
  * @returns Promise<ImageUploadResult[]>
  */
-export async function uploadMultipleImages(
+async function uploadMultipleImages(
   imageUrls: string[],
   userId: string,
   options: ImageUploadOptions,
@@ -170,7 +170,7 @@ export async function uploadMultipleImages(
  * @param options - Configuration options for the upload
  * @returns Promise<ImageUploadResult>
  */
-export async function uploadBufferToStorage(
+async function uploadBufferToStorage(
   buffer: ArrayBuffer,
   userId: string,
   options: ImageUploadOptions,
@@ -255,7 +255,7 @@ export async function uploadBufferToStorage(
  * @param contentType - Optional content type (default: 'image/png')
  * @returns Promise<ImageUploadResult>
  */
-export async function uploadBufferToDefaultBucket(
+async function uploadBufferToDefaultBucket(
   buffer: ArrayBuffer,
   userId: string,
   supabaseClient: SupabaseClient,

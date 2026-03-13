@@ -176,6 +176,6 @@ export class AssetStore {
   }
 }
 
-export function createAssetStore(options: AssetStoreOptions): AssetStore {
+function createAssetStore(options: AssetStoreOptions): AssetStore {
   return new AssetStore(options);
 }

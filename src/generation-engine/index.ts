@@ -22,7 +22,7 @@ export * from './providers/index';
 export * from './services/index';
 
 // State
-export { JobDurableObject, createJobDurableObject } from './state/jobDurableObject';
+;
 
 // Queue
 export * from './queue/index';
@@ -37,7 +37,7 @@ export * from './storage/index';
 export * from './api/index';
 
 // Configuration
-export function isMockMode(env?: { GEN_PROVIDER?: string }): boolean {
+function isMockMode(env?: { GEN_PROVIDER?: string }): boolean {
   return env?.GEN_PROVIDER === 'mock';
 }
 

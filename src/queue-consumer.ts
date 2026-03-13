@@ -8,7 +8,7 @@ import { sortMessagesByPriority, canProcessJob } from './services/concurrency-ma
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 import { isRetryableError } from './utils/error-handling';
-import { createJobStatusCache, JobStatusCache } from './services/job-status-cache';
+import { createJobStatusCache } from './services/job-status-cache';
 
 /**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates

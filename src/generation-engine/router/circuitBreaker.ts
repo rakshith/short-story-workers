@@ -119,12 +119,20 @@ export class CircuitBreakerRegistry {
   list(): string[] {
     return Array.from(this.breakers.keys());
   }
+
+  getAllStatus(): Array<{ name: string; state: 'closed' | 'open' | 'half-open'; failureCount: number }> {
+    return Array.from(this.breakers.entries()).map(([name, breaker]) => ({
+      name,
+      state: breaker.getState(),
+      failureCount: breaker.getFailureCount()
+    }));
+  }
 }
 
-export function createCircuitBreaker(name: string, options?: CircuitBreakerOptions): CircuitBreaker {
+function createCircuitBreaker(name: string, options?: CircuitBreakerOptions): CircuitBreaker {
   return new CircuitBreaker(name, options?.failureThreshold, options?.successThreshold, options?.timeoutMs);
 }
 
-export function createCircuitBreakerRegistry(): CircuitBreakerRegistry {
+function createCircuitBreakerRegistry(): CircuitBreakerRegistry {
   return new CircuitBreakerRegistry();
 }

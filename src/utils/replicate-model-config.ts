@@ -31,7 +31,7 @@ export interface ModelImageConfig {
  * 3. Specify multiField for multiple image inputs
  * 4. Set setSingleFromFirst: true if model needs both fields
  */
-export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
+const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     // Flux Redux/reference models
     'flux-redux-schnell': { singleField: 'redux_image' },
     'flux-redux': { multiField: 'reference_images' },
@@ -143,7 +143,7 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
 /**
  * Allowed duration values per video model (seconds). If set, requested duration is snapped to nearest.
  */
-export const MODEL_DURATION_OPTIONS: Record<string, number[]> = {
+const MODEL_DURATION_OPTIONS: Record<string, number[]> = {
     'veo': [4, 6, 8],
 };
 

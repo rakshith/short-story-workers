@@ -184,7 +184,7 @@ export class ExecutionWorker {
   }
 }
 
-export function createExecutionWorker(options: ExecutionWorkerOptions): ExecutionWorker {
+function createExecutionWorker(options: ExecutionWorkerOptions): ExecutionWorker {
   return new ExecutionWorker(options);
 }
 

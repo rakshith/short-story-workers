@@ -1,6 +1,6 @@
 import { ScriptTemplate } from './types';
 
-export class TemplateRegistry {
+class TemplateRegistry {
     private templates: Map<string, ScriptTemplate> = new Map();
 
     /**
