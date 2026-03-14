@@ -157,10 +157,8 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         apiLogger.info(`Updated ${type} in DO, isComplete: ${status.isComplete}, videosCompleted: ${status.videosCompleted}/${status.totalScenes}, audioCompleted: ${status.audioCompleted}/${status.totalScenes}`, { storyId, sceneIndex });
 
         // Handle auto video generation (sceneReviewRequired=false): queue video after each image completes
+        // Only trigger when mediaType is 'video' — skip for image-only stories
         if (type === 'image' && !sceneReviewRequired && resultUrl) {
-            apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
-            
-            // Fetch story to get videoConfig and job info
             const { createClient } = await import('@supabase/supabase-js');
             const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
             
@@ -177,7 +175,9 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 .in('status', ['processing', 'awaiting_review'])
                 .single();
 
-            if (storyData?.video_config && jobData?.job_id) {
+            const mediaType = storyData?.video_config?.mediaType;
+            if (mediaType === 'video' && storyData?.video_config && jobData?.job_id) {
+                apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
                 const videoConfig = storyData.video_config;
                 const jobId = jobData.job_id;
                 

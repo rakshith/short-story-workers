@@ -15,6 +15,15 @@ bindings = [
 tag = "v1"
 new_classes = ["StoryCoordinator"]
 
+[[migrations]]
+tag = "v2"
+renamed_classes = []
+deleted_classes = []
+
+[[migrations]]
+tag = "v3"
+deleted_classes = ["JobDurableObject"]
+
 [env.staging]
 name = "create-story-worker-staging"
 workers_dev = true
@@ -42,6 +51,12 @@ binding = "VIDEO_BUCKET"
 bucket_name = "videos"
 preview_bucket_name = "videos"
 
+# KV Namespace for staging (create with: wrangler kv:namespace create "JOB_STATUS_CACHE" --env staging)
+[[env.staging.kv_namespaces]]
+binding = "JOB_STATUS_CACHE"
+id = "fd96067160f045aaae3a1d46cbe1d7e6"
+preview_id = "25267f389b0b4d5f8a45f356c364f9ce"
+
 # Queue for async processing in staging
 # Note: Tier-based concurrency is managed in code via concurrency-manager.ts
 # These settings are baseline - actual concurrency per user is controlled by tier
@@ -50,11 +65,16 @@ queue = "story-processing-staging"
 binding = "STORY_QUEUE"
 
 [[env.staging.queues.producers]]
+queue = "story-dlq-staging"
+binding = "STORY_DLQ"
+
+[[env.staging.queues.producers]]
 queue = "webhook-processing-staging"
 binding = "WEBHOOK_QUEUE"
 
 [[env.staging.queues.consumers]]
 queue = "story-processing-staging"
+dead_letter_queue = "story-dlq-staging"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
@@ -64,6 +84,12 @@ queue = "webhook-processing-staging"
 max_batch_size = 10
 max_batch_timeout = 5
 max_concurrency = 10
+
+[[env.staging.queues.consumers]]
+queue = "story-dlq-staging"
+max_batch_size = 10
+max_batch_timeout = 30
+max_concurrency = 1
 
 [env.staging.vars]
 TIER1_CONCURRENCY = 2
@@ -108,6 +134,13 @@ binding = "VIDEO_BUCKET"
 bucket_name = "videos"
 preview_bucket_name = "videos"
 
+# KV namespace for job status cache (production)
+# Create with: wrangler kv:namespace create "JOB_STATUS_CACHE" (and --preview for preview_id)
+[[env.production.kv_namespaces]]
+binding = "JOB_STATUS_CACHE"
+id = "REPLACE_WITH_PRODUCTION_KV_ID"
+preview_id = "REPLACE_WITH_PRODUCTION_KV_PREVIEW_ID"
+
 # Queue for async processing in production
 # Note: Tier-based concurrency is managed in code via concurrency-manager.ts
 # These settings are baseline - actual concurrency per user is controlled by tier
@@ -116,11 +149,16 @@ queue = "story-processing-production"
 binding = "STORY_QUEUE"
 
 [[env.production.queues.producers]]
+queue = "story-dlq-production"
+binding = "STORY_DLQ"
+
+[[env.production.queues.producers]]
 queue = "webhook-processing-production"
 binding = "WEBHOOK_QUEUE"
 
 [[env.production.queues.consumers]]
 queue = "story-processing-production"
+dead_letter_queue = "story-dlq-production"
 max_batch_size = 15           # Supports up to tier4 batch size
 max_batch_timeout = 20        # Process every 20 seconds or when batch fills
 max_concurrency = 20          # Overall worker concurrency (tier limits applied in code)
@@ -130,6 +168,12 @@ queue = "webhook-processing-production"
 max_batch_size = 10
 max_batch_timeout = 5
 max_concurrency = 10
+
+[[env.production.queues.consumers]]
+queue = "story-dlq-production"
+max_batch_size = 10
+max_batch_timeout = 30
+max_concurrency = 1
 
 [env.production.vars]
 TIER1_CONCURRENCY = 2

@@ -161,13 +161,13 @@ export class StoryCoordinator {
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isImageOnlyStory = this.storyState.videoConfig?.mediaType !== 'video';
 
-    // review mode: complete when images + audio done
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    // auto mode: complete when videos + audio done (never on image update alone)
-    const allDone = videosAllDone && audioAllDone;
+    const allDone = isImageOnlyStory
+      ? (imagesAllDone && audioAllDone)
+      : (videosAllDone && audioAllDone);
 
-    // Only signal complete for review mode here - auto mode waits for videos
     const isComplete = this.storyState.sceneReviewRequired
       ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
       : (allDone && !this.storyState.completionSignaled);
@@ -176,7 +176,6 @@ export class StoryCoordinator {
       this.storyState.completionSignaled = true;
     }
 
-    // Persist
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
@@ -318,13 +317,13 @@ export class StoryCoordinator {
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+    const isImageOnlyStory = this.storyState.videoConfig?.mediaType !== 'video';
 
-    // review mode: complete when images + audio done
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    // auto mode: complete when videos + audio done (never on audio update alone)
-    const allDone = videosAllDone && audioAllDone;
+    const allDone = isImageOnlyStory
+      ? (imagesAllDone && audioAllDone)
+      : (videosAllDone && audioAllDone);
 
-    // Only signal complete for review mode here - auto mode waits for videos
     const isComplete = this.storyState.sceneReviewRequired
       ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
       : (allDone && !this.storyState.completionSignaled);

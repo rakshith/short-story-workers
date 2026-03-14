@@ -46,6 +46,7 @@ export interface Env {
 
   // Queues
   STORY_QUEUE: Queue<QueueMessage>;
+  STORY_DLQ?: Queue<QueueMessage>;
   WEBHOOK_QUEUE?: Queue<WebhookQueueMessage>;
 
   // Durable Objects

@@ -9,10 +9,30 @@ import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 
 /**
+ * Dead-letter queue handler - Logs and acks messages that exhausted retries or were sent for audit.
+ * Extend here to alert, update job status, or re-enqueue to main queue.
+ */
+export async function handleDlqQueue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
+  for (const message of batch.messages) {
+    const data: QueueMessage = message.body;
+    queueLogger.info('[DLQ] Processing dead-letter message', {
+      jobId: data.jobId,
+      storyId: data.storyId,
+      type: data.type,
+      sceneIndex: data.sceneIndex,
+      userId: data.userId,
+    });
+    message.ack();
+  }
+}
+
+/**
  * Queue consumer handler - Uses Durable Objects for race-condition-free updates
  * Implements tier-based concurrency control and priority processing
  */
 export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): Promise<void> {
+  queueLogger.info(`[Queue] Batch received from ${batch.queue}`, { messageCount: batch.messages.length });
+
   // Helper to get Durable Object stub for a story
   const getCoordinator = (storyId: string) => {
     const id = env.STORY_COORDINATOR.idFromName(storyId);
@@ -212,7 +232,14 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
       const data: QueueMessage = message.body;
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-      // Mark the scene as failed and continue - user can retry from UI
+      if (env.STORY_DLQ) {
+        try {
+          await env.STORY_DLQ.send(data);
+        } catch (dlqErr) {
+          queueLogger.error('[Queue] Failed to send to DLQ', dlqErr, { jobId: data.jobId });
+        }
+      }
+
       await markSceneAsFailed(data, errorMessage, getCoordinator, env);
 
       message.ack();

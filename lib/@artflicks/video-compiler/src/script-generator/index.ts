@@ -24,19 +24,17 @@ export class ScriptGenerator {
         }
 
         const systemPrompt = template.getSystemPrompt(context);
-        const schema = template.getSchema(context);
+        const schema: any = template.getSchema(context);
 
         const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
         try {
-            const { output, usage } = await generateText({
+            const { output, usage } = await (generateText as any)({
                 model: this.model,
                 system: systemPrompt,
                 prompt: context.prompt,
                 temperature,
-                output: Output.object({
-                    schema,
-                }),
-            });
+                output: Output.object({ schema }),
+            }) as Awaited<ReturnType<typeof generateText>>;
 
             return {
                 success: true,
