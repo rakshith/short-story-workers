@@ -12,8 +12,9 @@ import { jsonResponse, corsResponse, notFoundResponse } from './utils/response';
 // Generation Engine imports
 import { createCreateJobAPI, createJobStatusAPI, createApproveStepAPI } from './generation-engine/api';
 
-// Export Durable Object class
+// Export Durable Object classes
 export { StoryCoordinator } from './durable-objects/story-coordinator';
+export { JobDurableObject } from './generation-engine/state/jobDurableObject';
 
 export default {
   /**
@@ -151,20 +152,21 @@ async function handleCreateJob(request: Request, env: Env): Promise<Response> {
   try {
     const body = await request.json() as any;
     
-    if (!body.userId || !body.templateId || !body.prompt) {
+    if (!body.model || !body.userId || !body.videoConfig || !body.videoConfig.prompt) {
       return jsonResponse({ 
         error: 'Missing required fields',
-        required: ['userId', 'templateId', 'prompt']
+        required: ['model', 'userId', 'videoConfig', 'prompt']
       }, 400);
     }
 
-    const api = createCreateJobAPI(env);
+    const api = createCreateJobAPI(env, request.url);
     const result = await api.execute({
       userId: body.userId,
-      templateId: body.templateId,
+      templateId: body.videoConfig.templateId,
       profileId: body.profileId,
-      prompt: body.prompt,
+      prompt: body.videoConfig.prompt,
       videoConfig: body.videoConfig,
+      textModel: body.model,
     });
 
     if (!result.success) {
@@ -221,7 +223,7 @@ async function handleApproveStep(request: Request, env: Env): Promise<Response> 
       }, 400);
     }
 
-    const api = createApproveStepAPI(env);
+    const api = createApproveStepAPI(env, request.url);
     const result = await api.execute({
       jobId,
       storyId: body.storyId,

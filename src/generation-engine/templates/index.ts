@@ -12,9 +12,5 @@ templateRegistry.register(skeleton3dShortsTemplate);
 templateRegistry.register(avatarVideoTemplate);
 
 export {  getTemplate, getAllTemplates } from './registry';
-;
-;
-;
-;
 export { TEMPLATE_IDS } from './registry';
 export type { Template } from '../types/index';

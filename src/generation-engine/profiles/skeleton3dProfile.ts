@@ -18,9 +18,9 @@ export const skeleton3dProfile: Profile = {
   },
   blocks: [
     { id: 'script-gen', capability: 'script-generation' },
-    { id: 'scene-parse', capability: 'scene-parsing' },
     { id: 'image-gen', capability: 'image-generation' },
     { id: 'voice-gen', capability: 'voice-generation' },
+    { id: 'review_required', capability: 'review_required'},
     { id: 'video-gen', capability: 'video-generation' },
   ],
 };

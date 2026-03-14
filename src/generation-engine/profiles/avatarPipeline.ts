@@ -18,7 +18,6 @@ export const avatarPipelineProfile: Profile = {
   },
   blocks: [
     { id: 'script-gen', capability: 'script-generation' },
-    { id: 'scene-parse', capability: 'scene-parsing' },
     { id: 'avatar-gen', capability: 'image-generation' },
     { id: 'voice-gen', capability: 'voice-generation' },
     { id: 'video-gen', capability: 'video-generation' },

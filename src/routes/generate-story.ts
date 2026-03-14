@@ -290,7 +290,7 @@ async function createStoryRecord(
         const createdStory = await storyService.createStory({
             userId: body.userId,
             seriesId: body.seriesId,
-            title: storyData.title,
+            title: storyData.title || 'Untitled Story',
             videoType: body.videoConfig?.videoType || 'faceless-video',
             story: storyData,
             status: ProjectStatus.PROCESSING,

@@ -79,6 +79,9 @@ export class StorySyncService {
     }
 
     try {
+      console.log('[StorySync] syncStoryComplete - timeline received:', options.timeline !== undefined ? 'yes' : 'no');
+      console.log('[StorySync] syncStoryComplete - story title:', story?.title);
+      
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY);
 
@@ -104,28 +107,32 @@ export class StorySyncService {
         });
       }
 
-      const totalDuration = updatedStory.scenes?.reduce((sum: number, scene: any) => {
-        return sum + (scene.audioDuration || scene.duration || 0);
-      }, 0) || 0;
-
-      const finalVideoUrl = updatedStory.scenes?.[0]?.generatedVideoUrl || null;
-
       const storyUpdate: Record<string, unknown> = {
         story: updatedStory,
         status: 'draft',
-        final_video_url: finalVideoUrl,
-        total_duration: totalDuration,
         updated_at: new Date().toISOString(),
       };
 
       if (options.timeline !== undefined) {
+        console.log('[StorySync] Saving timeline to DB, size:', JSON.stringify(options.timeline).length, 'chars');
         storyUpdate.timeline = options.timeline;
+      } else {
+        console.log('[StorySync] NOT saving timeline - timeline is undefined');
       }
 
-      await supabase
+      console.log('[StorySync] Updating stories table with:', Object.keys(storyUpdate));
+      
+      const { data: updateData, error: updateError } = await supabase
         .from('stories')
         .update(storyUpdate)
-        .eq('id', options.storyId);
+        .eq('id', options.storyId)
+        .select();
+
+      if (updateError) {
+        console.error('[StorySync] Failed to update stories table:', updateError);
+      } else {
+        console.log('[StorySync] Successfully updated stories table');
+      }
 
       await supabase
         .from('story_jobs')

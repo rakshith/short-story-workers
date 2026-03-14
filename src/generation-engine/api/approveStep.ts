@@ -23,10 +23,19 @@ export interface ApproveStepResponse {
 export class ApproveStepAPI {
   private env: any;
   private useMock: boolean;
+  private requestUrl?: string;
 
-  constructor(env: any) {
+  constructor(env: any, requestUrl?: string) {
     this.env = env;
+    this.requestUrl = requestUrl;
     this.useMock = env.GEN_PROVIDER === 'mock';
+  }
+
+  private getBaseUrl(): string {
+    if (this.requestUrl) {
+      return new URL(this.requestUrl).origin;
+    }
+    return 'https://create-story-worker.artflicks.workers.dev';
   }
 
   async execute(request: ApproveStepRequest): Promise<ApproveStepResponse> {
@@ -135,7 +144,7 @@ export class ApproveStepAPI {
           videoConfig: story.video_config,
           sceneIndex,
           type: 'video' as const,
-          baseUrl: this.env.APP_URL || 'https://create-story-worker.artflicks.workers.dev',
+          baseUrl: this.getBaseUrl(),
           teamId: story.video_config?.teamId,
           userTier: story.video_config?.userTier || 'tier1',
           priority: 2,
@@ -172,8 +181,47 @@ export class ApproveStepAPI {
       return { success: false, jobId: request.jobId, storyId: request.storyId, error: message };
     }
   }
+
+  /**
+   * Approve review to resume job from AWAITING_REVIEW phase
+   */
+  async approveReview(jobId: string, storyId: string): Promise<ApproveStepResponse> {
+    try {
+      const storyCoordinator = this.env.STORY_COORDINATOR as { idFromName: (name: string) => any; get: (id: any) => any };
+      const coordinatorId = storyCoordinator.idFromName(storyId);
+      const coordinator = storyCoordinator.get(coordinatorId);
+
+      // Call DO handler to approve review
+      const approveRes = await coordinator.fetch(new Request('http://do/approveReview', {
+        method: 'POST',
+      }));
+
+      const approveData = await approveRes.json() as any;
+
+      if (!approveData.success) {
+        return { 
+          success: false, 
+          jobId, 
+          storyId, 
+          error: approveData.error || 'Failed to approve review' 
+        };
+      }
+
+      console.log(`[ApproveStep] Review approved for job ${jobId}, phase: ${approveData.phase}`);
+
+      return {
+        success: true,
+        jobId,
+        storyId,
+      };
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      console.error('[ApproveStep] Error approving review:', message);
+      return { success: false, jobId, storyId, error: message };
+    }
+  }
 }
 
-export function createApproveStepAPI(env: any): ApproveStepAPI {
-  return new ApproveStepAPI(env);
+export function createApproveStepAPI(env: any, requestUrl?: string): ApproveStepAPI {
+  return new ApproveStepAPI(env, requestUrl);
 }

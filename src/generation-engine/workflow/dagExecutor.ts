@@ -2,7 +2,7 @@
 // This executor builds the DAG and schedules ready nodes via Cloudflare Queues.
 // It does NOT run nodes inline — the JobDurableObject handles event-driven orchestration.
 
-import { getTemplate } from '../templates/registry';
+import { getTemplate } from '../templates/index';
 import { profileRegistry } from '../profiles/index';
 import { createGraphBuilder, createDependencyEngine } from '../workflow';
 import { createConcurrencyService } from '../services/concurrencyService';
@@ -64,9 +64,18 @@ export class DAGExecutor {
         supabaseUrl: this.env.SUPABASE_URL as string,
         supabaseServiceKey: this.env.SUPABASE_SERVICE_ROLE_KEY as string,
       });
+      console.log('[DAGExecutor] EventLogger initialized');
     } else {
       this.eventLogger = null;
+      console.log('[DAGExecutor] EventLogger NOT initialized - missing SUPABASE_URL or SERVICE_KEY');
     }
+  }
+
+  /**
+   * Update message with new data (e.g., storyData after script generation)
+   */
+  updateMessage(updates: Partial<DAGMessage>): void {
+    this.message = { ...this.message, ...updates };
   }
 
   /**
@@ -105,15 +114,29 @@ export class DAGExecutor {
         return { success: false, jobId, storyId, error: `Unknown profile: ${template.profileId}` };
       }
 
-      // 3. Build DAG
+      // 3. Filter blocks based on client input (sceneReviewRequired)
+      const reviewRequired = (videoConfig as Record<string, unknown>)?.sceneReviewRequired as boolean || false;
+      let blocksToUse = profile.blocks;
+      
+      if (!reviewRequired) {
+        // Exclude review_required block if client doesn't need review
+        blocksToUse = profile.blocks.filter(b => (b.capability as string) !== 'review_required');
+        console.log(`[DAGExecutor] Excluding review_required block (reviewRequired: ${reviewRequired})`);
+      } else {
+        console.log(`[DAGExecutor] Including review_required block (reviewRequired: ${reviewRequired})`);
+      }
+      
+      // 4. Build DAG with filtered blocks
       const graphBuilder = createGraphBuilder();
       const sceneCount = (storyData?.scenes as unknown[] | undefined)?.length || 1;
+      const filteredProfile = { ...profile, blocks: blocksToUse };
+      
       const { graph, counters } = graphBuilder.build({
-        profile,
+        profile: filteredProfile,
         context: { jobId, storyId, userId, sceneCount },
       });
 
-      // 4. Find ready nodes (dependency count === 0)
+      // 5. Find ready nodes (dependency count === 0)
       const dependencyEngine = createDependencyEngine(counters);
       const readyNodes = dependencyEngine.getReadyNodes(graph);
 
@@ -122,7 +145,30 @@ export class DAGExecutor {
         return { success: false, jobId, storyId, error: 'No ready nodes in DAG' };
       }
 
-      // 5. Schedule ready nodes via Cloudflare Queue (event-driven, non-blocking)
+      // 6. Store DAG in DO for persistence (cache it, never rebuild)
+      const storyCoordinator = this.env.STORY_COORDINATOR as { idFromName: (name: string) => any; get: (id: any) => any };
+      const coordinatorId = storyCoordinator.idFromName(storyId as string);
+      const coordinator = storyCoordinator.get(coordinatorId);
+      
+      await coordinator.fetch(new Request('http://do/storeDag', {
+        method: 'POST',
+        body: JSON.stringify({
+          graph,
+          counters,
+          metadata: {
+            sceneCount,
+            templateId,
+            profileId: profile.id,
+            blocks: blocksToUse,
+            reviewRequired,
+            builtAt: new Date().toISOString(),
+          }
+        }),
+      }));
+      
+      console.log(`[DAGExecutor] DAG stored in DO (sceneCount: ${sceneCount}, reviewRequired: ${reviewRequired})`);
+
+      // 7. Schedule ready nodes via Cloudflare Queue (event-driven, non-blocking)
       const nodesScheduled = await this.scheduleNodes(readyNodes, graph);
 
       console.log(`[DAGExecutor] Scheduled ${nodesScheduled} initial nodes for job ${jobId}`);
@@ -151,7 +197,7 @@ export class DAGExecutor {
       const node = graph.nodes.get(nodeId);
       if (!node) continue;
 
-      const queueMessage = this.buildQueueMessage(node);
+      const queueMessage = await this.buildQueueMessage(node);
       try {
         await queue.send(queueMessage);
         scheduled++;
@@ -166,8 +212,9 @@ export class DAGExecutor {
   /**
    * Build a queue message from a workflow node.
    * Maps DAG node capabilities to the queue message format the execution worker expects.
+   * Includes generatedImageUrl for video nodes (skeleton3d 2-step process).
    */
-  private buildQueueMessage(node: WorkflowNode): Record<string, unknown> {
+  private async buildQueueMessage(node: WorkflowNode): Promise<Record<string, unknown>> {
     const { jobId, storyId, userId, videoConfig, storyData, seriesId, title, baseUrl, teamId, userTier, priority } = this.message;
 
     // Map DAG capability to queue message type
@@ -177,7 +224,9 @@ export class DAGExecutor {
       'voice-generation': 'audio',
     };
 
-    return {
+    const sceneIndex = (node.input as Record<string, unknown>).sceneIndex ?? 0;
+
+    const message: Record<string, unknown> = {
       jobId,
       storyId,
       userId,
@@ -185,7 +234,7 @@ export class DAGExecutor {
       title,
       storyData,
       videoConfig,
-      sceneIndex: (node.input as Record<string, unknown>).sceneIndex ?? 0,
+      sceneIndex,
       type: capabilityToType[node.capability] || node.capability,
       baseUrl,
       teamId,
@@ -195,6 +244,27 @@ export class DAGExecutor {
       dagNodeId: node.nodeId,
       dagCapability: node.capability,
     };
+
+    // For video generation (skeleton3d 2-step process), include generatedImageUrl
+    if (node.capability === 'video-generation' && storyId) {
+      try {
+        const storyCoordinator = this.env.STORY_COORDINATOR as { idFromName: (name: string) => any; get: (id: any) => any };
+        const coordinatorId = storyCoordinator.idFromName(storyId as string);
+        const coordinator = storyCoordinator.get(coordinatorId);
+        const stateRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
+        const stateData = await stateRes.json() as any;
+        const idx = sceneIndex as number;
+        const scene = stateData?.scenes?.[idx];
+        if (scene?.generatedImageUrl) {
+          message.generatedImageUrl = scene.generatedImageUrl;
+          console.log(`[DAGExecutor] Including generatedImageUrl for video scene ${idx}`);
+        }
+      } catch (error) {
+        console.error('[DAGExecutor] Failed to get generatedImageUrl:', error);
+      }
+    }
+
+    return message;
   }
 
   private logNodeScheduled(node: WorkflowNode): void {
@@ -218,6 +288,9 @@ export class DAGExecutor {
    */
   async onJobComplete(story: { title?: string; scenes?: any[] }, timeline?: unknown): Promise<void> {
     const { jobId, storyId, userId, videoConfig } = this.message;
+
+    console.log('[DAGExecutor] onJobComplete received timeline:', timeline ? 'exists' : 'undefined');
+    console.log('[DAGExecutor] onJobComplete received story title:', story?.title);
 
     const syncResult = await this.storySyncService.syncStoryComplete(
       {
@@ -249,22 +322,22 @@ export class DAGExecutor {
     }
 
     this.eventLogger?.logJobCompleted(jobId, storyId, userId, { title: story.title });
-    this.eventLogger?.stop();
+    await this.eventLogger?.stop();
   }
 
   /**
    * Called after each scene-level node completes (image/audio/video).
-   * Incrementally syncs partial results to DB so data isn't lost if the job fails.
+   * Syncs progress to DB and schedules next ready nodes in the DAG.
    */
-  async onNodeComplete(scenes: any[], progress: { imagesCompleted: number; audioCompleted: number; videosCompleted: number; totalScenes: number }): Promise<void> {
-    const { jobId, storyId, userId } = this.message;
+  async onNodeComplete(scenes: any[], progress: { imagesCompleted: number; audioCompleted: number; videosCompleted: number; totalScenes: number }, nodeType?: string): Promise<void> {
+    const { jobId, storyId, userId, templateId, videoConfig, seriesId, title, baseUrl, teamId, userTier, priority } = this.message;
 
     await this.storySyncService.syncPartialStory(
       { jobId, storyId, userId },
       scenes
     );
 
-    const voiceOverEnabled = (this.message.videoConfig as Record<string, unknown>)?.enableVoiceOver !== false;
+    const voiceOverEnabled = (videoConfig as Record<string, unknown>)?.enableVoiceOver !== false;
     const denominator = voiceOverEnabled ? progress.totalScenes * 2 : progress.totalScenes;
     const numerator = progress.imagesCompleted + (voiceOverEnabled ? progress.audioCompleted : 0);
     const progressPercent = Math.min(Math.round((numerator / denominator) * 75), 75);
@@ -277,6 +350,124 @@ export class DAGExecutor {
       progress.videosCompleted,
       progress.audioCompleted
     );
+
+    // Schedule next ready nodes via DAG
+    await this.scheduleNextNodes(scenes, nodeType || 'script-generation');
+  }
+
+  /**
+   * Schedule next ready nodes based on current progress.
+   * Uses scenes directly from memory to avoid DO race condition.
+   * nodeType: the capability that just completed (e.g., 'script-generation')
+   */
+  private async scheduleNextNodes(scenes: any[] = [], nodeType: string = ''): Promise<void> {
+    try {
+      const { jobId, templateId } = this.message;
+      const storyId = this.message.storyId as string;
+      
+      // Get current state from DO (only for progress counters, not scenes)
+      const storyCoordinator = this.env.STORY_COORDINATOR as { idFromName: (name: string) => any; get: (id: any) => any };
+      const coordinatorId = storyCoordinator.idFromName(storyId);
+      const coordinator = storyCoordinator.get(coordinatorId);
+      const stateRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
+      const stateData = await stateRes.json() as any;
+
+      if (!stateData) {
+        console.log('[DAGExecutor] No state data, skipping scheduling');
+        return;
+      }
+
+      // Use scenes from memory (passed from onNodeComplete), fallback to DO only if empty
+      const scenesArray = scenes.length > 0 ? scenes : (stateData.scenes || []);
+      const sceneCount = scenesArray.length || 1;
+      console.log(`[DAGExecutor] scheduleNextNodes: scenes from ${scenes.length > 0 ? 'memory' : 'DO fallback'}, count=${sceneCount}`);
+
+      // Get template and profile to rebuild DAG
+      const { getTemplate } = await import('../templates/registry');
+      const { profileRegistry } = await import('../profiles/index');
+      const template = getTemplate(templateId);
+      if (!template) {
+        console.error('[DAGExecutor] Template not found:', templateId);
+        return;
+      }
+      
+      const profile = profileRegistry.get(template.profileId);
+      if (!profile) {
+        console.error('[DAGExecutor] Profile not found:', template.profileId);
+        return;
+      }
+
+      // Build DAG
+      const { createGraphBuilder, createDependencyEngine } = await import('../workflow');
+      const graphBuilder = createGraphBuilder();
+      console.log(`[DAGExecutor] Building DAG with sceneCount=${sceneCount}, scenes array length=${scenesArray.length}`);
+      
+      const { graph, counters } = graphBuilder.build({
+        profile,
+        context: { jobId, storyId, userId: this.message.userId, sceneCount }
+      });
+
+      // Find ready nodes (dependencies satisfied)
+      const dependencyEngine = createDependencyEngine(counters);
+      
+      // If script just completed, mark it as completed in dependency engine
+      // This allows image/voice nodes to become ready
+      if (nodeType === 'script-generation') {
+        const scriptNodes = Array.from(graph.nodes.values()).filter(n => n.capability === 'script-generation');
+        for (const scriptNode of scriptNodes) {
+          console.log(`[DAGExecutor] Marking script node ${scriptNode.nodeId} as completed`);
+          dependencyEngine.markNodeCompleted(scriptNode.nodeId, graph);
+        }
+      }
+      
+      let readyNodes = dependencyEngine.getReadyNodes(graph);
+      
+      console.log(`[DAGExecutor] Ready nodes from DAG: ${readyNodes.join(', ')}`);
+
+      // Filter out already scheduled/completed based on state
+      const imageScenesDone = stateData.imagesCompleted || 0;
+      const videoScenesDone = stateData.videosCompleted || 0;
+      const audioScenesDone = stateData.audioCompleted || 0;
+      
+      console.log(`[DAGExecutor] Filtering nodes: imageScenesDone=${imageScenesDone}, videoScenesDone=${videoScenesDone}, audioScenesDone=${audioScenesDone}`);
+
+      const trulyReadyNodes = readyNodes.filter(nodeId => {
+        const node = graph.nodes.get(nodeId);
+        if (!node) return false;
+        
+        const capability = node.capability;
+        const sceneIndex = (node.input as Record<string, number>)?.sceneIndex ?? 0;
+        
+        // Skip script-generation - already completed
+        if (capability === 'script-generation') {
+          console.log(`[DAGExecutor] Filtering out script node ${nodeId} - already completed`);
+          return false;
+        }
+        
+        if (capability === 'image-generation') {
+          return sceneIndex >= imageScenesDone;
+        }
+        if (capability === 'video-generation') {
+          return sceneIndex >= videoScenesDone;
+        }
+        if (capability === 'voice-generation') {
+          return sceneIndex >= audioScenesDone;
+        }
+        
+        // Default: don't schedule unknown node types
+        console.log(`[DAGExecutor] Filtering out unknown node ${nodeId} with capability ${capability}`);
+        return false;
+      });
+
+      if (trulyReadyNodes.length > 0) {
+        const nodesScheduled = await this.scheduleNodes(trulyReadyNodes, graph);
+        console.log(`[DAGExecutor] Scheduled ${nodesScheduled} next nodes`);
+      } else {
+        console.log('[DAGExecutor] No new ready nodes to schedule');
+      }
+    } catch (error) {
+      console.error('[DAGExecutor] Error scheduling next nodes:', error);
+    }
   }
 
   /**
@@ -286,7 +477,7 @@ export class DAGExecutor {
     const { jobId, storyId, userId } = this.message;
     await this.storySyncService.updateJobProgress(jobId, 0, 'failed');
     this.eventLogger?.logJobFailed(jobId, storyId, userId, error);
-    this.eventLogger?.stop();
+    await this.eventLogger?.stop();
   }
 }
 

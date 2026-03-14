@@ -138,8 +138,8 @@ export async function triggerReplicateGeneration(
     webhook_events_filter: ["completed"],
   };
 
-  // Add idempotency key to prevent duplicate predictions on Replicate's side
-  predictionParams.idempotency_key = idempotencyKey;
+  // Idempotency is handled by PredictionTrackingService on our side
+  // Replicate-side idempotency_key is not needed
 
   if (hasVersion) {
     // If model includes version hash, use version parameter

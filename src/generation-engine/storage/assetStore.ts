@@ -16,7 +16,7 @@ export interface AssetStoreOptions {
   audioBucket: any;
 }
 
-export class AssetStore {
+class AssetStore {
   private imagesBucket: any;
   private videoBucket: any;
   private audioBucket: any;

@@ -15,35 +15,3 @@ export interface SceneBlockOutput extends BlockOutput {
   };
 }
 
-export class SceneBlock implements Block {
-  readonly id = 'scene-parse';
-  readonly capability = 'scene-parsing';
-
-  async execute(input: SceneBlockInput): Promise<SceneBlockOutput> {
-    const { story } = input.data;
-
-    try {
-      const scenes = story?.scenes || [];
-      
-      if (!Array.isArray(scenes) || scenes.length === 0) {
-        return {
-          success: false,
-          error: 'No scenes found in story',
-        };
-      }
-
-      return {
-        success: true,
-        data: {
-          scenes,
-          sceneCount: scenes.length,
-        },
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error instanceof Error ? error.message : 'Scene parsing failed',
-      };
-    }
-  }
-}

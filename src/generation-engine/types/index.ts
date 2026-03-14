@@ -8,7 +8,7 @@ export type NodeStatus = 'pending' | 'running' | 'waiting_webhook' | 'completed'
 
 export type NodeCapability =
   | 'script-generation'
-  | 'scene-parsing'
+  | 'review_required'
   | 'image-generation'
   | 'video-generation'
   | 'voice-generation'

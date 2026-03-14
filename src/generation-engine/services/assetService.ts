@@ -7,7 +7,7 @@ export interface AssetUploadResult {
   key: string;
 }
 
-export class AssetService {
+class AssetService {
   constructor(
     private imagesBucket: any,
     private videoBucket: any,

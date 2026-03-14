@@ -36,8 +36,6 @@ export class EventLogger {
   private supabaseUrl: string;
   private supabaseServiceKey: string;
   private buffer: JobEvent[] = [];
-  private flushInterval: number | null = null;
-  private readonly FLUSH_INTERVAL_MS = 5000;
   private readonly MAX_BUFFER_SIZE = 100;
 
   constructor(options: EventLoggerOptions) {
@@ -116,10 +114,21 @@ export class EventLogger {
     const events = [...this.buffer];
     this.buffer = [];
 
+    console.log('[EventLogger] Flushing', events.length, 'events to DB');
+
+    if (events.length === 0) {
+      console.log('[EventLogger] No events to flush');
+      return;
+    }
+
     try {
+      console.log('[EventLogger] Preparing to upsert events to job_events table');
+      
       const { createClient } = await import('@supabase/supabase-js');
       const supabase = createClient(this.supabaseUrl, this.supabaseServiceKey);
 
+      console.log('[EventLogger] Calling Supabase upsert for job_events...');
+      
       const { error } = await supabase
         .from('job_events')
         .upsert(events.map(e => ({
@@ -132,12 +141,14 @@ export class EventLogger {
           data: e.data,
           timestamp: e.timestamp,
         })), {
-          onConflict: 'job_id, event_type, timestamp',
+          onConflict: 'job_id, event_type, node_id',
         });
 
       if (error) {
         console.error('[EventLogger] Failed to flush events:', error);
         this.buffer.unshift(...events);
+      } else {
+        console.log('[EventLogger] Successfully flushed', events.length, 'events to DB');
       }
     } catch (error) {
       console.error('[EventLogger] Error flushing events:', error);
@@ -145,8 +156,8 @@ export class EventLogger {
     }
   }
 
-  stop(): void {
-    this.flush();
+  async stop(): Promise<void> {
+    await this.flush();
   }
 }
 

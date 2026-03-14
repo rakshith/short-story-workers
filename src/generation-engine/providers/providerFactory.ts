@@ -17,7 +17,7 @@ export interface ProviderConfig {
   modelRouter?: ModelRouter;
 }
 
-export class ProviderFactory {
+class ProviderFactory {
   private config: ProviderConfig;
   private router?: ModelRouter;
 

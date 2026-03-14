@@ -130,7 +130,7 @@ async function createInitialStory(
         const createdStory = await storyService.createStory({
             userId: body.userId,
             seriesId: body.seriesId,
-            title: storyData.title,
+            title: storyData.title || 'Untitled Story',
             videoType: body.videoConfig?.videoType || 'faceless-video',
             story: storyData,
             status: ProjectStatus.PROCESSING,
@@ -211,7 +211,7 @@ async function initializeCoordinator(
                 userId,
                 seriesId: seriesId || '',
                 storyId,
-                title: storyData.title,
+            title: storyData.title || '',
                 storyData,
                 baseUrl,
                 userTier,

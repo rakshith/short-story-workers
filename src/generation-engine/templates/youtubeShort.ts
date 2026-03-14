@@ -16,6 +16,7 @@ export const youtubeShortTemplate: Template = {
       resolution: '720p',
       enableVoiceOver: true,
       enableCaptions: true,
+      textModel: 'gpt-5.2', // Default text model for script generation
       imageModel: 'black-forest-labs/flux-schnell',
       videoModel: 'wan-video/wan-2.5-t2v-fast',
       sceneReviewRequired: false,

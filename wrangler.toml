@@ -5,6 +5,11 @@ compatibility_flags = ["nodejs_compat"]
 workers_dev = true
 preview_urls = true
 
+# Observability - disable default logs, enable invocation logs only
+[observability]
+logs.enabled = false
+logs.invocation_logs = true
+
 # Durable Objects
 [durable_objects]
 bindings = [
@@ -14,6 +19,10 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_classes = ["StoryCoordinator"]
+
+[[migrations]]
+tag = "v2"
+new_classes = ["JobDurableObject"]
 
 # KV Namespace for job status caching
 # Create with: wrangler kv:namespace create "JOB_STATUS_CACHE"
@@ -28,10 +37,15 @@ name = "create-story-worker-staging"
 workers_dev = true
 preview_urls = true
 
+# Observability - disable default logs, enable invocation logs only
+[env.staging.observability]
+logs.enabled = false
+logs.invocation_logs = false
+
 # Durable Objects for staging
 [env.staging.durable_objects]
 bindings = [
-  { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
+  { name = "STORY_COORDINATOR", class_name = "JobDurableObject" }
 ]
 
 # KV Namespace for staging (create with: wrangler kv:namespace create "JOB_STATUS_CACHE" --env staging)
@@ -118,6 +132,11 @@ ENABLE_KV_CACHE = "true"  # Enable KV cache in staging for testing
 name = "create-story-worker-production"
 workers_dev = true
 preview_urls = true
+
+# Observability - disable default logs, enable invocation logs only
+[env.production.observability]
+logs.enabled = false
+logs.invocation_logs = false
 
 # Durable Objects for production
 [env.production.durable_objects]

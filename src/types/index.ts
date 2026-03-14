@@ -133,7 +133,7 @@ export interface Scene {
 
 export interface StoryTimeline {
   id: string;
-  title: string;
+  title?: string;
   totalDuration: number;
   scenes: Scene[];
 }

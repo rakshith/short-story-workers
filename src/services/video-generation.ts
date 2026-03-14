@@ -136,8 +136,8 @@ export async function triggerVideoGeneration(
         webhook_events_filter: ["completed"],
     };
 
-    // Add idempotency key to prevent duplicate predictions on Replicate's side
-    predictionParams.idempotency_key = idempotencyKey;
+    // Idempotency is handled by PredictionTrackingService on our side
+    // Replicate-side idempotency_key is not needed
 
     if (hasVersion) {
         predictionParams.version = params.model.split(':')[1];

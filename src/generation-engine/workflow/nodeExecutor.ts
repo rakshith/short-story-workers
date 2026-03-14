@@ -16,7 +16,7 @@ const DEFAULT_MAX_RETRIES = 3;
 const DEFAULT_RETRY_DELAY_MS = 1000;
 const DEFAULT_TIMEOUT_MS = 300_000; // 5 minutes
 
-export class NodeExecutor {
+class NodeExecutor {
   private context: ExecutionContext;
   private maxRetries: number;
   private retryDelayMs: number;

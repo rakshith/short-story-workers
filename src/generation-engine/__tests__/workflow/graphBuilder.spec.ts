@@ -43,10 +43,7 @@ describe('Graph Builder Layer - Node Creation & Dependencies', () => {
       expect(capability).toBe('script-generation');
     });
 
-    it('should have scene-parsing capability', () => {
-      const capability = 'scene-parsing';
-      expect(capability).toBe('scene-parsing');
-    });
+
 
     it('should have image-generation capability', () => {
       const capability = 'image-generation';
@@ -65,24 +62,6 @@ describe('Graph Builder Layer - Node Creation & Dependencies', () => {
   });
 
   describe('Dependency Ordering', () => {
-    it('should create script node before scene-parsing', () => {
-      const scriptNode = { nodeId: 'script', dependencies: [] };
-      const sceneNode = { nodeId: 'scenes', dependencies: ['script'] };
-
-      const order = [scriptNode, sceneNode];
-      expect(order[0].nodeId).toBe('script');
-      expect(order[1].dependencies[0]).toBe('script');
-    });
-
-    it('should create image nodes after scene-parsing', () => {
-      const sceneNode = { nodeId: 'scenes', dependencies: ['script'] };
-      const imageNode0 = { nodeId: 'image-0', dependencies: ['scenes'] };
-      const imageNode1 = { nodeId: 'image-1', dependencies: ['scenes'] };
-
-      expect(imageNode0.dependencies[0]).toBe('scenes');
-      expect(imageNode1.dependencies[0]).toBe('scenes');
-    });
-
     it('should create voice nodes after corresponding image nodes', () => {
       const imageNode = { nodeId: 'image-0', dependencies: ['scenes'] };
       const voiceNode = { nodeId: 'voice-0', dependencies: ['image-0'] };
@@ -211,7 +190,6 @@ describe('Graph Builder Layer - Node Creation & Dependencies', () => {
     it('should map youtube-short profile to correct blocks', () => {
       const profileBlocks = [
         { capability: 'script-generation' },
-        { capability: 'scene-parsing' },
         { capability: 'image-generation' },
         { capability: 'voice-generation' },
         { capability: 'video-generation' },
@@ -219,13 +197,11 @@ describe('Graph Builder Layer - Node Creation & Dependencies', () => {
 
       expect(profileBlocks).toHaveLength(5);
       expect(profileBlocks[0].capability).toBe('script-generation');
-      expect(profileBlocks[1].capability).toBe('scene-parsing');
     });
 
     it('should map avatar pipeline to correct blocks', () => {
       const avatarBlocks = [
         { capability: 'script-generation' },
-        { capability: 'scene-parsing' },
         { capability: 'image-generation' },
         { capability: 'avatar-generation' },
         { capability: 'voice-generation' },
@@ -266,18 +242,6 @@ describe('Graph Builder Layer - Node Creation & Dependencies', () => {
       };
 
       expect(nodeInput.scene.imagePrompt).toBe('Scene 1');
-    });
-
-    it('should pass script data to scene-parsing node', () => {
-      const scriptData = {
-        script: 'Once upon a time...',
-      };
-
-      const nodeInput = {
-        script: scriptData.script,
-      };
-
-      expect(nodeInput.script).toBe('Once upon a time...');
     });
   });
 });
