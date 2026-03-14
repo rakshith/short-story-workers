@@ -126,34 +126,31 @@ export class ApproveStepAPI {
         };
       }
 
-      const scenes = story.story?.scenes || [];
-      const scenesToApprove = request.approvedScenes || scenes.map((_: any, i: number) => i);
-      let videosQueued = 0;
+      const approveRes = await this.approveReview(request.jobId, request.storyId);
+      if (!approveRes.success) {
+        return { success: false, jobId: request.jobId, storyId: request.storyId, error: approveRes.error };
+      }
 
-      for (const sceneIndex of scenesToApprove) {
-        const scene = scenes[sceneIndex];
-        if (!scene || !scene.generatedImageUrl) continue;
-
-        const queueMessage = {
+      const { createDAGExecutor } = await import('../workflow/dagExecutor');
+      const dagExecutor = createDAGExecutor({
+        env: this.env,
+        message: {
           jobId: request.jobId,
-          userId: request.userId,
-          seriesId: story.video_config?.seriesId || '',
           storyId: request.storyId,
-          title: story.story?.title || '',
-          storyData: story.story,
+          userId: request.userId,
+          templateId: (story.video_config?.templateId as string) || '',
           videoConfig: story.video_config,
-          sceneIndex,
-          type: 'video' as const,
+          storyData: story.story,
+          seriesId: (story.video_config?.seriesId as string) || '',
+          title: story.story?.title || '',
           baseUrl: this.getBaseUrl(),
           teamId: story.video_config?.teamId,
-          userTier: story.video_config?.userTier || 'tier1',
+          userTier: (story.video_config?.userTier as string) || 'tier1',
           priority: 2,
-          generatedImageUrl: scene.generatedImageUrl,
-        };
+        },
+      });
 
-        await this.env.STORY_QUEUE.send(queueMessage);
-        videosQueued++;
-      }
+      await dagExecutor.resumeScheduling();
 
       await supabase
         .from('stories')
@@ -173,7 +170,6 @@ export class ApproveStepAPI {
         success: true,
         jobId: request.jobId,
         storyId: request.storyId,
-        videosQueued,
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';

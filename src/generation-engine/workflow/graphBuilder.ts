@@ -11,27 +11,34 @@ export interface GraphBuilderOptions {
     userId: string;
     sceneCount?: number;
   };
+  /** When true, build only scene-level nodes (image/voice/video) as roots — no script or review nodes. Use for scheduleNextNodes. */
+  sceneOnly?: boolean;
 }
 
 export class GraphBuilder {
   build(options: GraphBuilderOptions): { graph: WorkflowGraph; counters: DependencyCounter } {
-    const { profile, context } = options;
+    const { profile, context, sceneOnly } = options;
     const nodes = new Map<string, WorkflowNode>();
     const counters: DependencyCounter = {};
 
     const rootNodes: string[] = [];
     const sceneCount = context.sceneCount || 1;
 
-    // Separate blocks into sequential (script, scene) vs. fan-out (image, voice, video)
-    const sequentialBlocks = profile.blocks.filter(b =>
-      b.capability !== 'image-generation' && b.capability !== 'video-generation' && b.capability !== 'voice-generation'
-    );
-
     const imageBlocks = profile.blocks.filter(b => b.capability === 'image-generation');
     const voiceBlocks = profile.blocks.filter(b => b.capability === 'voice-generation');
     const videoBlocks = profile.blocks.filter(b => b.capability === 'video-generation');
 
-    // --- Sequential chain: script → scene ---
+    if (sceneOnly) {
+      return this.buildSceneOnlyGraph(nodes, counters, rootNodes, imageBlocks, voiceBlocks, videoBlocks, sceneCount);
+    }
+
+    const sequentialBlocks = profile.blocks.filter(b =>
+      b.capability !== 'image-generation' &&
+      b.capability !== 'video-generation' &&
+      b.capability !== 'voice-generation' &&
+      b.capability !== 'review_required'
+    );
+
     let previousNodeId: string | null = null;
 
     for (const block of sequentialBlocks) {
@@ -114,12 +121,34 @@ export class GraphBuilder {
       voiceCollectorId = collectorId;
     }
 
-    // Video generation: one node per scene, depends on both image and voice collectors (if they exist), or last sequential
-    const videoDependencies: string[] = [];
-    if (imageCollectorId) videoDependencies.push(imageCollectorId);
-    if (voiceCollectorId) videoDependencies.push(voiceCollectorId);
-    if (videoDependencies.length === 0 && lastSequentialNodeId) {
-      videoDependencies.push(lastSequentialNodeId);
+    const hasReviewGate = profile.blocks.some(b => b.capability === 'review_required');
+    let videoDependencies: string[] = [];
+
+    if (hasReviewGate && (imageCollectorId || voiceCollectorId)) {
+      const gateId = `review-gate-${generateUUID().slice(0, 8)}`;
+      const gateDeps: string[] = [];
+      if (imageCollectorId) gateDeps.push(imageCollectorId);
+      if (voiceCollectorId) gateDeps.push(voiceCollectorId);
+      const gateNode: WorkflowNode = {
+        nodeId: gateId,
+        capability: 'review_required',
+        dependencies: gateDeps,
+        childNodes: [],
+        input: { isGate: true },
+        status: 'pending',
+      };
+      nodes.set(gateId, gateNode);
+      counters[gateId] = gateDeps.length;
+      for (const id of gateDeps) {
+        nodes.get(id)?.childNodes.push(gateId);
+      }
+      videoDependencies = [gateId];
+    } else {
+      if (imageCollectorId) videoDependencies.push(imageCollectorId);
+      if (voiceCollectorId) videoDependencies.push(voiceCollectorId);
+      if (videoDependencies.length === 0 && lastSequentialNodeId) {
+        videoDependencies.push(lastSequentialNodeId);
+      }
     }
 
     if (videoBlocks.length > 0 && videoDependencies.length > 0) {
@@ -148,6 +177,94 @@ export class GraphBuilder {
       nodeCount: nodes.size,
     };
 
+    return { graph, counters };
+  }
+
+  private buildSceneOnlyGraph(
+    nodes: Map<string, WorkflowNode>,
+    counters: DependencyCounter,
+    rootNodes: string[],
+    imageBlocks: BlockDefinition[],
+    voiceBlocks: BlockDefinition[],
+    videoBlocks: BlockDefinition[],
+    sceneCount: number,
+  ): { graph: WorkflowGraph; counters: DependencyCounter } {
+    let imageCollectorId: string | null = null;
+    let voiceCollectorId: string | null = null;
+
+    if (imageBlocks.length > 0) {
+      const imageNodeIds = this.createPerSceneNodes(
+        'image-generation', [], sceneCount, nodes, counters
+      );
+      for (const id of imageNodeIds) rootNodes.push(id);
+      const collectorId = `image-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
+        capability: 'image-generation',
+        dependencies: imageNodeIds,
+        childNodes: [],
+        input: { isCollector: true, sceneCount },
+        status: 'pending',
+      };
+      nodes.set(collectorId, collector);
+      counters[collectorId] = imageNodeIds.length;
+      for (const id of imageNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
+      }
+      imageCollectorId = collectorId;
+    }
+
+    if (voiceBlocks.length > 0) {
+      const voiceNodeIds = this.createPerSceneNodes(
+        'voice-generation', [], sceneCount, nodes, counters
+      );
+      for (const id of voiceNodeIds) rootNodes.push(id);
+      const collectorId = `voice-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
+        capability: 'voice-generation',
+        dependencies: voiceNodeIds,
+        childNodes: [],
+        input: { isCollector: true, sceneCount },
+        status: 'pending',
+      };
+      nodes.set(collectorId, collector);
+      counters[collectorId] = voiceNodeIds.length;
+      for (const id of voiceNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
+      }
+      voiceCollectorId = collectorId;
+    }
+
+    const videoDependencies: string[] = [];
+    if (imageCollectorId) videoDependencies.push(imageCollectorId);
+    if (voiceCollectorId) videoDependencies.push(voiceCollectorId);
+
+    if (videoBlocks.length > 0 && videoDependencies.length > 0) {
+      const videoNodeIds = this.createPerSceneNodes(
+        'video-generation', videoDependencies, sceneCount, nodes, counters
+      );
+      const collectorId = `video-collector-${generateUUID().slice(0, 8)}`;
+      const collector: WorkflowNode = {
+        nodeId: collectorId,
+        capability: 'video-generation',
+        dependencies: videoNodeIds,
+        childNodes: [],
+        input: { isCollector: true, sceneCount },
+        status: 'pending',
+      };
+      nodes.set(collectorId, collector);
+      counters[collectorId] = videoNodeIds.length;
+      for (const id of videoNodeIds) {
+        nodes.get(id)?.childNodes.push(collectorId);
+      }
+    }
+
+    const graph: WorkflowGraph = {
+      nodes,
+      rootNodes,
+      nodeCount: nodes.size,
+    };
     return { graph, counters };
   }
 

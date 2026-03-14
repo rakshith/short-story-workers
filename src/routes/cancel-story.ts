@@ -44,12 +44,12 @@ export async function handleCancelStory(request: Request, env: Env): Promise<Res
         }
 
         // 2. Update job status in database to 'failed' with cancelled message
-        // Using 'failed' to be compatible with existing DB check constraints
         const { error: updateError } = await supabase
             .from('story_jobs')
             .update({
                 status: 'failed',
                 error: 'Cancelled by user',
+                queue_status: 'failed',
                 updated_at: new Date().toISOString(),
             })
             .eq('job_id', body.jobId);

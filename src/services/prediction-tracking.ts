@@ -92,9 +92,7 @@ export class PredictionTrackingService {
         };
       }
 
-      // If failed or succeeded, or pending too long, allow retry
       const shouldCreateNew = data.status === 'failed' || 
-                             data.status === 'succeeded' || 
                              (data.status === 'pending' && ageMinutes >= 10);
 
       return {
@@ -293,6 +291,27 @@ export class PredictionTrackingService {
     const random = Math.random().toString(36).substring(2, 8);
     return `${storyId.slice(-8)}-${sceneIndex}-${predictionType}-${timestamp}-${random}`;
   }
+}
+
+export interface PendingPredictionSnapshotItem {
+  prediction_id: string;
+  prediction_type: 'image' | 'video' | 'audio';
+  scene_index: number;
+  status: string;
+}
+
+export async function getJobPredictionsSnapshot(
+  supabase: SupabaseClient,
+  jobId: string
+): Promise<PendingPredictionSnapshotItem[]> {
+  const { data, error } = await supabase
+    .from('prediction_attempts')
+    .select('prediction_id, prediction_type, scene_index, status')
+    .eq('job_id', jobId)
+    .order('created_at', { ascending: true });
+
+  if (error || !data) return [];
+  return data as PendingPredictionSnapshotItem[];
 }
 
 // Singleton instance cache

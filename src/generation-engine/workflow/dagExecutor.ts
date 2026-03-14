@@ -192,6 +192,16 @@ export class DAGExecutor {
       return 0;
     }
 
+    const capabilityToType: Record<string, string> = {
+      'image-generation': 'image',
+      'video-generation': 'video',
+      'voice-generation': 'audio',
+    };
+    const storyId = this.message.storyId as string;
+    const storyCoordinator = this.env.STORY_COORDINATOR as { idFromName: (name: string) => any; get: (id: any) => any };
+    const coordinatorId = storyCoordinator.idFromName(storyId);
+    const coordinator = storyCoordinator.get(coordinatorId);
+
     let scheduled = 0;
     for (const nodeId of nodeIds) {
       const node = graph.nodes.get(nodeId);
@@ -202,6 +212,14 @@ export class DAGExecutor {
         await queue.send(queueMessage);
         scheduled++;
         this.logNodeScheduled(node);
+        const type = capabilityToType[node.capability];
+        if (type) {
+          const sceneIndex = (node.input as Record<string, number>)?.sceneIndex ?? 0;
+          await coordinator.fetch(new Request('http://do/recordScheduled', {
+            method: 'POST',
+            body: JSON.stringify({ type, sceneIndex }),
+          }));
+        }
       } catch (error) {
         console.error(`[DAGExecutor] Failed to schedule node ${nodeId}:`, error);
       }
@@ -280,6 +298,14 @@ export class DAGExecutor {
     } else if (capability === 'video-generation') {
       this.eventLogger?.logVideoStarted(jobId, storyId, userId, node.nodeId, (node.input as Record<string, number>).sceneIndex || 0);
     }
+  }
+
+  /**
+   * Trigger DAG scheduling from an external caller (e.g. after review approval).
+   * Reads current progress from the DO and schedules any newly-ready nodes.
+   */
+  async resumeScheduling(): Promise<void> {
+    await this.scheduleNextNodes();
   }
 
   /**
@@ -397,65 +423,66 @@ export class DAGExecutor {
         return;
       }
 
-      // Build DAG
+      const reviewRequired = stateData.sceneReviewRequired === true;
+      const blocksToUse = reviewRequired
+        ? profile.blocks
+        : profile.blocks.filter((b: { capability: string }) => b.capability !== 'review_required');
+      const filteredProfile = { ...profile, blocks: blocksToUse };
+
       const { createGraphBuilder, createDependencyEngine } = await import('../workflow');
       const graphBuilder = createGraphBuilder();
-      console.log(`[DAGExecutor] Building DAG with sceneCount=${sceneCount}, scenes array length=${scenesArray.length}`);
-      
       const { graph, counters } = graphBuilder.build({
-        profile,
-        context: { jobId, storyId, userId: this.message.userId, sceneCount }
+        profile: filteredProfile,
+        context: { jobId, storyId, userId: this.message.userId, sceneCount },
+        sceneOnly: true,
       });
 
-      // Find ready nodes (dependencies satisfied)
       const dependencyEngine = createDependencyEngine(counters);
-      
-      // If script just completed, mark it as completed in dependency engine
-      // This allows image/voice nodes to become ready
-      if (nodeType === 'script-generation') {
-        const scriptNodes = Array.from(graph.nodes.values()).filter(n => n.capability === 'script-generation');
-        for (const scriptNode of scriptNodes) {
-          console.log(`[DAGExecutor] Marking script node ${scriptNode.nodeId} as completed`);
-          dependencyEngine.markNodeCompleted(scriptNode.nodeId, graph);
+      const imageScenesDone: number[] = stateData.imageScenesDone || [];
+      const videoScenesDone: number[] = stateData.videoScenesDone || [];
+      const audioScenesDone: number[] = stateData.audioScenesDone || [];
+      const scheduledTasks = stateData.scheduledTasks || { image: [], video: [], audio: [] };
+      const jobPhase = stateData.jobPhase || 'PENDING';
+
+      for (const n of graph.nodes.values()) {
+        if ((n.input as Record<string, unknown>)?.isCollector) continue;
+        const cap = n.capability;
+        const sceneIndex = (n.input as Record<string, number>)?.sceneIndex ?? 0;
+        if (cap === 'image-generation' && imageScenesDone.includes(sceneIndex)) dependencyEngine.markNodeCompleted(n.nodeId, graph);
+        if (cap === 'voice-generation' && audioScenesDone.includes(sceneIndex)) dependencyEngine.markNodeCompleted(n.nodeId, graph);
+        if (cap === 'video-generation' && videoScenesDone.includes(sceneIndex)) dependencyEngine.markNodeCompleted(n.nodeId, graph);
+      }
+
+      // Propagate completion through collector nodes whose dependencies are all met.
+      // Without this, video nodes (which depend on collectors) would never become ready.
+      for (const n of graph.nodes.values()) {
+        if (!(n.input as Record<string, unknown>)?.isCollector) continue;
+        if (dependencyEngine.isNodeReady(n.nodeId)) {
+          dependencyEngine.markNodeCompleted(n.nodeId, graph);
         }
       }
-      
-      let readyNodes = dependencyEngine.getReadyNodes(graph);
-      
-      console.log(`[DAGExecutor] Ready nodes from DAG: ${readyNodes.join(', ')}`);
 
-      // Filter out already scheduled/completed based on state
-      const imageScenesDone = stateData.imagesCompleted || 0;
-      const videoScenesDone = stateData.videosCompleted || 0;
-      const audioScenesDone = stateData.audioCompleted || 0;
-      
-      console.log(`[DAGExecutor] Filtering nodes: imageScenesDone=${imageScenesDone}, videoScenesDone=${videoScenesDone}, audioScenesDone=${audioScenesDone}`);
+      let readyNodes = dependencyEngine.getReadyNodes(graph);
+      console.log(`[DAGExecutor] Ready nodes from DAG: ${readyNodes.join(', ')}`);
 
       const trulyReadyNodes = readyNodes.filter(nodeId => {
         const node = graph.nodes.get(nodeId);
         if (!node) return false;
-        
-        const capability = node.capability;
+        if ((node.input as Record<string, unknown>)?.isCollector) return false;
         const sceneIndex = (node.input as Record<string, number>)?.sceneIndex ?? 0;
-        
-        // Skip script-generation - already completed
-        if (capability === 'script-generation') {
-          console.log(`[DAGExecutor] Filtering out script node ${nodeId} - already completed`);
-          return false;
+        if (node.capability === 'image-generation') {
+          if (scheduledTasks.image?.includes(sceneIndex)) return false;
+          return true;
         }
-        
-        if (capability === 'image-generation') {
-          return sceneIndex >= imageScenesDone;
+        if (node.capability === 'voice-generation') {
+          if (scheduledTasks.audio?.includes(sceneIndex)) return false;
+          return true;
         }
-        if (capability === 'video-generation') {
-          return sceneIndex >= videoScenesDone;
+        if (node.capability === 'video-generation') {
+          if (jobPhase === 'AWAITING_REVIEW') return false;
+          if (scheduledTasks.video?.includes(sceneIndex)) return false;
+          return true;
         }
-        if (capability === 'voice-generation') {
-          return sceneIndex >= audioScenesDone;
-        }
-        
-        // Default: don't schedule unknown node types
-        console.log(`[DAGExecutor] Filtering out unknown node ${nodeId} with capability ${capability}`);
         return false;
       });
 
@@ -475,7 +502,7 @@ export class DAGExecutor {
    */
   async onJobFailed(error: string): Promise<void> {
     const { jobId, storyId, userId } = this.message;
-    await this.storySyncService.updateJobProgress(jobId, 0, 'failed');
+    await this.storySyncService.updateJobFailed(jobId, error);
     this.eventLogger?.logJobFailed(jobId, storyId, userId, error);
     await this.eventLogger?.stop();
   }

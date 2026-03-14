@@ -72,7 +72,7 @@ interface StoryState {
   scheduledTasks?: ScheduledTasks;
   dag?: StoredDAG;
   sceneCompletion: Map<number, SceneCompletion>;
-  jobPhase: 'PENDING' | 'SCRIPT_RUNNING' | 'GENERATION_RUNNING' | 'AWAITING_REVIEW' | 'FINALIZED';
+  jobPhase: 'PENDING' | 'SCRIPT_RUNNING' | 'GENERATION_RUNNING' | 'AWAITING_REVIEW' | 'FINALIZED' | 'FAILED';
   reviewApproved: boolean;
 }
 
@@ -120,6 +120,8 @@ export class JobDurableObject {
              return this.handleBlockComplete(request);
            case 'approveReview':
              return this.handleApproveReview();
+           case 'recordScheduled':
+             return this.handleRecordScheduled(request);
            default:
              return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 });
         }
@@ -391,6 +393,7 @@ export class JobDurableObject {
         totalScenes: state.totalScenes,
         isComplete,
         isImagesCompleteForReview,
+        videoConfig: state.videoConfig,
       };
     });
 
@@ -468,6 +471,7 @@ export class JobDurableObject {
         audioCompleted: state.audioCompleted,
         totalScenes: state.totalScenes,
         isComplete,
+        videoConfig: state.videoConfig,
       };
     });
 
@@ -591,8 +595,29 @@ export class JobDurableObject {
         completionSignaled: state.completionSignaled || false,
         sceneReviewRequired: state.sceneReviewRequired || false,
         scenes: state.scenes || [],
+        scheduledTasks: state.scheduledTasks || { image: [], video: [], audio: [] },
+        jobPhase: state.jobPhase || 'PENDING',
+        imageScenesDone: state.imageScenesDone || [],
+        videoScenesDone: state.videoScenesDone || [],
+        audioScenesDone: state.audioScenesDone || [],
       }));
    }
+
+  private async handleRecordScheduled(request: Request): Promise<Response> {
+    const { type, sceneIndex } = await request.json() as { type: 'image' | 'video' | 'audio'; sceneIndex: number };
+
+    await this.loadState();
+    if (!this.storyState?.scheduledTasks) {
+      return new Response(JSON.stringify({ error: 'State not initialized' }), { status: 400 });
+    }
+
+    const arr = this.storyState.scheduledTasks[type];
+    if (!arr.includes(sceneIndex)) {
+      arr.push(sceneIndex);
+      await this.state.storage.put('storyState', this.storyState);
+    }
+    return new Response(JSON.stringify({ success: true }));
+  }
 
    private async handleGetState(): Promise<Response> {
      const state = await this.loadState();
@@ -705,11 +730,7 @@ export class JobDurableObject {
       this.storyState = null;
     });
 
-    // Clean up durable storage after finalization
-    await this.state.storage.deleteAll();
-    this.storyState = null;
-
-    console.log(`[JobDurableObject] Finalized and cleaned up with compiled timeline`);
+    console.log(`[JobDurableObject] Finalized with compiled timeline`);
 
     return new Response(JSON.stringify(result));
   }
@@ -747,83 +768,205 @@ export class JobDurableObject {
   }
 
   /**
-   * Track scene completion when a block completes
+   * Track scene completion when a block completes.
+   * Optional scene outputs (imageUrl, videoUrl, audioUrl, etc.) update state.scenes and counters so DAG path stays in sync.
    */
   private async handleBlockComplete(request: Request): Promise<Response> {
-    const { sceneIndex, capability, success, error: blockError } = await request.json() as any;
+    const payload = await request.json() as any;
+    const {
+      sceneIndex,
+      capability,
+      success,
+      error: blockError,
+      imageUrl,
+      imageError,
+      videoUrl,
+      videoError,
+      audioUrl,
+      audioDuration,
+      captions,
+      audioError,
+    } = payload;
 
-    await this.loadState();
+    let result: any;
 
-    if (!this.storyState) {
-      return new Response(JSON.stringify({ error: 'State not initialized' }), { status: 400 });
+    await this.state.storage.transaction(async (txn) => {
+      const state = await txn.get('storyState') as StoryState;
+
+      if (!state) {
+        result = { error: 'State not initialized', status: 400 };
+        return;
+      }
+
+      if (!state.sceneCompletion.has(sceneIndex)) {
+        state.sceneCompletion.set(sceneIndex, {
+          completedCapabilities: new Set(),
+          failed: false,
+        });
+      }
+
+      const sceneCompletion = state.sceneCompletion.get(sceneIndex)!;
+
+      if (!success) {
+        sceneCompletion.failed = true;
+        sceneCompletion.failureReason = blockError;
+        state.jobPhase = 'FAILED';
+        console.log(`[JobDurableObject] Scene ${sceneIndex} failed: ${blockError}, job marked FAILED`);
+        await txn.put('storyState', state);
+        this.storyState = state;
+        result = {
+          jobComplete: false,
+          sceneFailed: true,
+          jobFailed: true,
+          failureReason: blockError,
+          imagesCompleted: state.imagesCompleted,
+          videosCompleted: state.videosCompleted,
+          audioCompleted: state.audioCompleted,
+          totalScenes: state.totalScenes,
+        };
+        return;
+      }
+
+      sceneCompletion.completedCapabilities.add(capability);
+
+      if (capability === 'image-generation' && (imageUrl || imageError) && state.scenes[sceneIndex]) {
+        state.scenes[sceneIndex] = {
+          ...state.scenes[sceneIndex],
+          generatedImageUrl: imageUrl,
+          ...(imageError ? { generationError: imageError } : {}),
+        };
+        if (!state.imageScenesDone.includes(sceneIndex)) {
+          state.imageScenesDone.push(sceneIndex);
+          state.imagesCompleted++;
+        }
+      }
+
+      if (capability === 'video-generation' && (videoUrl || videoError) && state.scenes[sceneIndex]) {
+        state.scenes[sceneIndex] = {
+          ...state.scenes[sceneIndex],
+          generatedVideoUrl: videoUrl,
+          ...(videoError ? { videoGenerationError: videoError } : {}),
+        };
+        if (!state.videoScenesDone.includes(sceneIndex)) {
+          state.videoScenesDone.push(sceneIndex);
+          state.videosCompleted++;
+        }
+      }
+
+      if (capability === 'voice-generation' && state.scenes[sceneIndex]) {
+        const sceneUpdate: any = { ...state.scenes[sceneIndex] };
+        if (audioUrl) {
+          sceneUpdate.audioUrl = audioUrl;
+          sceneUpdate.audioDuration = audioDuration;
+          sceneUpdate.captions = captions || [];
+        }
+        if (audioError) sceneUpdate.audioGenerationError = audioError;
+        state.scenes[sceneIndex] = sceneUpdate;
+        if (!state.audioScenesDone.includes(sceneIndex)) {
+          state.audioScenesDone.push(sceneIndex);
+          state.audioCompleted++;
+        }
+      }
+
+      await txn.put('storyState', state);
+      this.storyState = state;
+
+      console.log(`[JobDurableObject] Scene ${sceneIndex} capability '${capability}' completed`);
+
+      if (this.isJobComplete()) {
+        state.jobPhase = 'FINALIZED';
+        await txn.put('storyState', state);
+        this.storyState = state;
+        console.log(`[JobDurableObject] Job marked FINALIZED - all scenes complete`);
+        result = {
+          jobComplete: true,
+          phase: 'FINALIZED',
+          imagesCompleted: state.imagesCompleted,
+          videosCompleted: state.videosCompleted,
+          audioCompleted: state.audioCompleted,
+          totalScenes: state.totalScenes,
+        };
+        return;
+      }
+
+      if (this.shouldPauseForReview()) {
+        state.jobPhase = 'AWAITING_REVIEW';
+        await txn.put('storyState', state);
+        this.storyState = state;
+        console.log(`[JobDurableObject] Job paused at AWAITING_REVIEW phase`);
+        result = {
+          jobComplete: false,
+          phase: 'AWAITING_REVIEW',
+          imagesCompleted: state.imagesCompleted,
+          videosCompleted: state.videosCompleted,
+          audioCompleted: state.audioCompleted,
+          totalScenes: state.totalScenes,
+        };
+        return;
+      }
+
+      result = {
+        jobComplete: false,
+        phase: 'GENERATION_RUNNING',
+        imagesCompleted: state.imagesCompleted,
+        videosCompleted: state.videosCompleted,
+        audioCompleted: state.audioCompleted,
+        totalScenes: state.totalScenes,
+      };
+    });
+
+    if (result.error) {
+      return new Response(JSON.stringify(result), { status: result.status });
     }
-
-    // Initialize scene completion if not exists
-    if (!this.storyState.sceneCompletion.has(sceneIndex)) {
-      this.storyState.sceneCompletion.set(sceneIndex, {
-        completedCapabilities: new Set(),
-        failed: false,
-      });
-    }
-
-    const sceneCompletion = this.storyState.sceneCompletion.get(sceneIndex)!;
-
-    if (!success) {
-      sceneCompletion.failed = true;
-      sceneCompletion.failureReason = blockError;
-      console.log(`[JobDurableObject] Scene ${sceneIndex} failed: ${blockError}`);
-      await this.state.storage.put('storyState', this.storyState);
-      return new Response(JSON.stringify({ jobComplete: false, sceneFailed: true }));
-    }
-
-    sceneCompletion.completedCapabilities.add(capability);
-    await this.state.storage.put('storyState', this.storyState);
-
-    console.log(`[JobDurableObject] Scene ${sceneIndex} capability '${capability}' completed`);
-
-    // Check if job is complete
-    if (this.isJobComplete()) {
-      this.storyState.jobPhase = 'FINALIZED';
-      await this.state.storage.put('storyState', this.storyState);
-      console.log(`[JobDurableObject] Job marked FINALIZED - all scenes complete`);
-      return new Response(JSON.stringify({ jobComplete: true, phase: 'FINALIZED' }));
-    }
-
-    // Check if we should pause for review
-    if (this.shouldPauseForReview()) {
-      this.storyState.jobPhase = 'AWAITING_REVIEW';
-      await this.state.storage.put('storyState', this.storyState);
-      console.log(`[JobDurableObject] Job paused at AWAITING_REVIEW phase`);
-      return new Response(JSON.stringify({ jobComplete: false, phase: 'AWAITING_REVIEW' }));
-    }
-
-    return new Response(JSON.stringify({ jobComplete: false, phase: 'GENERATION_RUNNING' }));
+    return new Response(JSON.stringify(result));
   }
 
   /**
    * User approves review, resume generation
    */
   private async handleApproveReview(): Promise<Response> {
-    await this.loadState();
+    let result: any;
 
-    if (!this.storyState) {
-      return new Response(JSON.stringify({ error: 'State not initialized' }), { status: 400 });
+    await this.state.storage.transaction(async (txn) => {
+      const state = await txn.get('storyState') as StoryState;
+
+      if (!state) {
+        result = { error: 'State not initialized', status: 400 };
+        return;
+      }
+
+      if (state.reviewApproved) {
+        result = { error: 'Review already approved', status: 400 };
+        return;
+      }
+
+      const imagesAllDone = state.imagesCompleted >= state.totalScenes;
+      const voiceOverEnabled = state.videoConfig?.enableVoiceOver !== false;
+      const audioAllDone = !voiceOverEnabled || state.audioCompleted >= state.totalScenes;
+
+      if (!imagesAllDone || !audioAllDone) {
+        result = { error: 'Pre-review generation not complete', status: 400 };
+        return;
+      }
+
+      state.reviewApproved = true;
+      state.jobPhase = 'GENERATION_RUNNING';
+      await txn.put('storyState', state);
+      this.storyState = state;
+
+      console.log(`[JobDurableObject] Review approved, resuming generation`);
+      result = { success: true, phase: 'GENERATION_RUNNING' };
+    });
+
+    if (result.error) {
+      return new Response(JSON.stringify(result), { status: result.status || 400 });
     }
-
-    if (this.storyState.jobPhase !== 'AWAITING_REVIEW') {
-      return new Response(JSON.stringify({ error: 'Job not in AWAITING_REVIEW phase' }), { status: 400 });
-    }
-
-    this.storyState.reviewApproved = true;
-    this.storyState.jobPhase = 'GENERATION_RUNNING';
-    await this.state.storage.put('storyState', this.storyState);
-
-    console.log(`[JobDurableObject] Review approved, resuming generation`);
-    return new Response(JSON.stringify({ success: true, phase: 'GENERATION_RUNNING' }));
+    return new Response(JSON.stringify(result));
   }
 
   /**
-   * Get required capabilities for execution based on DAG blocks
+   * Get required capabilities per scene (excludes script-generation and review_required).
+   * Script is global; review is a gate. Scene completion = image + voice + video when applicable.
    */
   private getRequiredCapabilities(): Set<string> {
     if (!this.storyState?.dag?.metadata?.blocks) {
@@ -833,7 +976,7 @@ export class JobDurableObject {
     const blocks = this.storyState.dag.metadata.blocks;
     return new Set(
       blocks
-        .filter((b: any) => b.capability !== 'review_required') // Exclude review block from required capabilities
+        .filter((b: any) => b.capability !== 'review_required' && b.capability !== 'script-generation')
         .map((b: any) => b.capability)
     );
   }
@@ -876,30 +1019,21 @@ export class JobDurableObject {
    */
   private shouldPauseForReview(): boolean {
     if (!this.storyState?.dag?.metadata?.reviewRequired) {
-      return false; // Profile doesn't require review
+      return false;
     }
 
     if (this.storyState.reviewApproved) {
-      return false; // Already approved, don't pause again
+      return false;
     }
 
-    // Get required capabilities before review block
-    const requiredCapabilitiesBeforeReview = this.storyState.dag.metadata.blocks
-      .filter((b: any) => b.capability !== 'review_required')
-      .map((b: any) => b.capability);
-
-    // Check if all scenes have capabilities before review block
-    for (let i = 0; i < this.storyState.totalScenes; i++) {
-      const scene = this.storyState.sceneCompletion.get(i);
-      if (!scene) return false;
-
-      for (const cap of requiredCapabilitiesBeforeReview) {
-        if (!scene.completedCapabilities.has(cap)) {
-          return false; // Not all scenes have pre-review capabilities
-        }
-      }
+    if (this.storyState.jobPhase === 'AWAITING_REVIEW') {
+      return false;
     }
 
-    return true; // All scenes have pre-review capabilities, pause for review
+    const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
+    const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
+
+    return imagesAllDone && audioAllDone;
   }
 }

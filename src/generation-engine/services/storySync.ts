@@ -1,5 +1,7 @@
 // Story Sync Service - syncs story data to Supabase
 
+import { createClient, SupabaseClient } from '@supabase/supabase-js';
+
 export interface SyncOptions {
   jobId: string;
   storyId: string;
@@ -17,10 +19,12 @@ export interface SyncResult {
 export class StorySyncService {
   private env: any;
   private useMock: boolean;
+  private supabase: SupabaseClient | null;
 
   constructor(env: any) {
     this.env = env;
     this.useMock = env.GEN_PROVIDER === 'mock';
+    this.supabase = this.useMock ? null : createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   }
 
   async syncPartialStory(options: SyncOptions, scenes: any[]): Promise<SyncResult> {
@@ -30,8 +34,7 @@ export class StorySyncService {
     }
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY);
+      const supabase = this.supabase!;
 
       const { data: currentStory } = await supabase
         .from('stories')
@@ -82,8 +85,7 @@ export class StorySyncService {
       console.log('[StorySync] syncStoryComplete - timeline received:', options.timeline !== undefined ? 'yes' : 'no');
       console.log('[StorySync] syncStoryComplete - story title:', story?.title);
       
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY);
+      const supabase = this.supabase!;
 
       // Read-merge-write: read current story from DB, merge scene data, write back
       // This preserves fields like imagePrompt, narration, etc. from the original script
@@ -171,8 +173,7 @@ export class StorySyncService {
     }
 
     try {
-      const { createClient } = await import('@supabase/supabase-js');
-      const supabase = createClient(this.env.SUPABASE_URL, this.env.SUPABASE_SERVICE_ROLE_KEY);
+      const supabase = this.supabase!;
 
       const updateData: any = {
         progress,
@@ -190,6 +191,30 @@ export class StorySyncService {
         .eq('job_id', jobId);
     } catch (error) {
       console.error('[StorySync] Failed to update job progress:', error);
+    }
+  }
+
+  async updateJobFailed(jobId: string, errorMessage?: string): Promise<void> {
+    if (this.useMock) {
+      console.log(`[StorySync] Mock - job ${jobId} failed: ${errorMessage || 'unknown'}`);
+      return;
+    }
+
+    try {
+      const supabase = this.supabase!;
+
+      await supabase
+        .from('story_jobs')
+        .update({
+          status: 'failed',
+          progress: 0,
+          error: errorMessage ?? null,
+          queue_status: 'failed',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('job_id', jobId);
+    } catch (error) {
+      console.error('[StorySync] Failed to update job failed state:', error);
     }
   }
 }

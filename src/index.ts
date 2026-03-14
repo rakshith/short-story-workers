@@ -273,7 +273,12 @@ async function handleCancelJob(request: Request, env: Env): Promise<Response> {
 
     await supabase
       .from('story_jobs')
-      .update({ status: 'cancelled' })
+      .update({
+        status: 'cancelled',
+        error: 'Cancelled by user',
+        queue_status: 'failed',
+        updated_at: new Date().toISOString(),
+      })
       .eq('job_id', jobId);
 
     return jsonResponse({ success: true, jobId });

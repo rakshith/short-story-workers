@@ -169,14 +169,13 @@ async function processWebhookDAG(
 
     console.log(`[WebhookDAG] Updated ${type} in DO, isComplete: ${status.isComplete}, images: ${status.imagesCompleted}/${status.totalScenes}, videos: ${status.videosCompleted}/${status.totalScenes}, audio: ${status.audioCompleted}/${status.totalScenes}`);
 
-    // Create DAG executor for sync operations
     const dagExecutor = createDAGExecutor({
       env,
       message: {
         jobId,
         storyId,
         userId,
-        templateId: '',
+        templateId: (status.videoConfig?.templateId as string) || '',
         videoConfig: status.videoConfig || {},
         seriesId,
       },
@@ -224,8 +223,8 @@ async function processWebhookDAG(
       return;
     }
 
-    // 5. Partial sync for image completions (non-review mode)
-    if (type === 'image' && resultUrl) {
+    // 5. Partial sync for image/video completions (non-review mode)
+    if ((type === 'image' || type === 'video') && resultUrl) {
       const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
       const progressData = await progressRes.json() as any;
 
@@ -235,7 +234,7 @@ async function processWebhookDAG(
           audioCompleted: status.audioCompleted,
           videosCompleted: status.videosCompleted,
           totalScenes: status.totalScenes,
-        });
+        }, type === 'video' ? 'video-generation' : 'image-generation');
       }
     }
 

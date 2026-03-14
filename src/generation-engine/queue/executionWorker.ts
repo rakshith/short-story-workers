@@ -98,10 +98,10 @@ class ExecutionWorker {
         }
 
         if (!scriptResult.success || !scriptResult.story) {
-          console.error('[ExecutionWorker] Script generation failed:', scriptResult.error);
-          this.eventLogger?.logJobFailed(message.jobId, message.storyId, message.userId, scriptResult.error || 'Script generation failed');
-          await this.eventLogger?.stop();
-          return;
+          const errMsg = scriptResult.error || 'Script generation failed';
+          console.error('[ExecutionWorker] Script generation failed:', errMsg);
+          await dagExecutor.onJobFailed(errMsg);
+          throw new Error(errMsg);
         }
 
         const storyData = scriptResult.story;
@@ -163,8 +163,10 @@ class ExecutionWorker {
       } catch (error) {
         console.error('[ExecutionWorker] Error in script generation:', error);
         this.eventLogger?.logJobFailed(message.jobId, message.storyId, message.userId, error instanceof Error ? error.message : 'Unknown error');
+        await this.eventLogger?.stop();
+        throw error;
       }
-      
+
       await this.eventLogger?.stop();
       return;
     }
@@ -177,34 +179,22 @@ class ExecutionWorker {
        const result = await processSceneImage(message, this.env);
        console.log(`[ExecutionWorker] Image result for scene ${message.sceneIndex}`, { success: result.success, imageUrl: result.imageUrl });
 
-       // Log completion event
-       if (result.success && result.imageUrl) {
-         this.eventLogger?.logImageGenerationCompleted(
-           message.jobId, message.storyId, message.userId,
-           `scene-${message.sceneIndex}`, message.sceneIndex || 0, result.imageUrl
-         );
+       if (!result.success) {
+         const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
+           method: 'POST',
+           body: JSON.stringify({
+             sceneIndex: message.sceneIndex,
+             capability: 'image-generation',
+             success: false,
+             error: result.error,
+             imageError: result.error,
+           }),
+         }));
+         const blockStatus = await blockCompleteRes.json() as any;
+         if (blockStatus.jobFailed || blockStatus.sceneFailed) {
+           await this.markJobFailed(message, coordinator, dagExecutor, blockStatus.failureReason || result.error);
+         }
        }
-
-        // Notify DO of block completion
-        const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: message.sceneIndex,
-            capability: 'image-generation',
-            success: result.success,
-            error: result.error,
-          }),
-        }));
-        const blockStatus = await blockCompleteRes.json() as any;
-
-        if (blockStatus.jobComplete) {
-          await this.finalizeJob(coordinator, dagExecutor);
-        } else if (blockStatus.phase === 'AWAITING_REVIEW') {
-          console.log('[ExecutionWorker] Job paused - awaiting user review approval');
-          // Don't schedule more nodes, wait for approval
-        } else if (result.success) {
-          await this.syncPartialProgress(coordinator, dagExecutor, blockStatus);
-        }
      } else if (message.type === 'video') {
        this.eventLogger?.logVideoStarted(
          message.jobId, message.storyId, message.userId,
@@ -213,29 +203,22 @@ class ExecutionWorker {
        const result = await processSceneVideo(message, this.env);
        console.log(`[ExecutionWorker] Video result for scene ${message.sceneIndex}`, { success: result.success, videoUrl: result.videoUrl });
 
-       // Log completion event
-       if (result.success && result.videoUrl) {
-         this.eventLogger?.logVideoCompleted(
-           message.jobId, message.storyId, message.userId,
-           `scene-${message.sceneIndex}`, message.sceneIndex || 0, result.videoUrl
-         );
+       if (!result.success) {
+         const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
+           method: 'POST',
+           body: JSON.stringify({
+             sceneIndex: message.sceneIndex,
+             capability: 'video-generation',
+             success: false,
+             error: result.error,
+             videoError: result.error,
+           }),
+         }));
+         const blockStatus = await blockCompleteRes.json() as any;
+         if (blockStatus.jobFailed || blockStatus.sceneFailed) {
+           await this.markJobFailed(message, coordinator, dagExecutor, blockStatus.failureReason || result.error);
+         }
        }
-
-        // Notify DO of block completion
-        const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: message.sceneIndex,
-            capability: 'video-generation',
-            success: result.success,
-            error: result.error,
-          }),
-        }));
-        const blockStatus = await blockCompleteRes.json() as any;
-
-        if (blockStatus.jobComplete) {
-          await this.finalizeJob(coordinator, dagExecutor);
-        }
      } else if (message.type === 'audio') {
        this.eventLogger?.logVoiceStarted(
          message.jobId, message.storyId, message.userId,
@@ -252,28 +235,35 @@ class ExecutionWorker {
           );
         }
 
-         // Notify DO of block completion
-         const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
+        const blockCompleteRes = await coordinator.fetch(new Request('http://do/blockComplete', {
           method: 'POST',
           body: JSON.stringify({
             sceneIndex: message.sceneIndex,
             capability: 'voice-generation',
             success: result.success,
             error: result.error,
+            audioUrl: result.audioUrl,
+            audioDuration: result.audioDuration,
+            captions: result.captions,
+            audioError: result.error,
           }),
         }));
+        if (!blockCompleteRes.ok) {
+          throw new Error(`blockComplete failed status ${blockCompleteRes.status}`);
+        }
         const blockStatus = await blockCompleteRes.json() as any;
 
         if (blockStatus.jobComplete) {
           await this.finalizeJob(coordinator, dagExecutor);
+        } else if (blockStatus.sceneFailed || blockStatus.jobFailed) {
+          await this.markJobFailed(message, coordinator, dagExecutor, blockStatus.failureReason || result.error);
         } else if (blockStatus.phase === 'AWAITING_REVIEW') {
-          console.log('[ExecutionWorker] Job paused - awaiting user review approval');
-          // Don't schedule more nodes, wait for approval
+          await this.transitionToReview(message, coordinator, dagExecutor, blockStatus);
         } else if (result.success) {
-          await this.syncPartialProgress(coordinator, dagExecutor, blockStatus);
+          await this.syncPartialProgress(coordinator, dagExecutor, blockStatus, 'voice-generation');
         }
       }
-      
+
       // Flush events to DB
       await this.eventLogger?.stop();
     }
@@ -296,18 +286,36 @@ class ExecutionWorker {
   /**
    * Sync partial progress from DO to DB via DAG executor
    */
-  private async syncPartialProgress(coordinator: any, dagExecutor: ReturnType<typeof createDAGExecutor>, status: any): Promise<void> {
+  private async syncPartialProgress(
+    coordinator: any,
+    dagExecutor: ReturnType<typeof createDAGExecutor>,
+    status: any,
+    nodeType?: string
+  ): Promise<void> {
     const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
     const progressData = await progressRes.json() as any;
 
     if (progressData.scenes) {
-      await dagExecutor.onNodeComplete(progressData.scenes, {
-        imagesCompleted: status.imagesCompleted || 0,
-        audioCompleted: status.audioCompleted || 0,
-        videosCompleted: status.videosCompleted || 0,
-        totalScenes: status.totalScenes || 1,
-      });
+      await dagExecutor.onNodeComplete(
+        progressData.scenes,
+        {
+          imagesCompleted: status.imagesCompleted || 0,
+          audioCompleted: status.audioCompleted || 0,
+          videosCompleted: status.videosCompleted || 0,
+          totalScenes: status.totalScenes || 1,
+        },
+        nodeType
+      );
     }
+  }
+
+  /**
+   * Mark job as failed in DB and DAG sync when a scene fails
+   */
+  private async markJobFailed(message: any, coordinator: any, dagExecutor: ReturnType<typeof createDAGExecutor>, errorDetail?: string): Promise<void> {
+    const reason = errorDetail || 'Scene generation failed';
+    console.error(`[ExecutionWorker] Marking job ${message.jobId} failed: ${reason}`);
+    await dagExecutor.onJobFailed(reason);
   }
 
   /**
@@ -355,6 +363,7 @@ export async function handleQueueDAG(batch: any, env: any): Promise<void> {
   const { createClient } = await import('@supabase/supabase-js');
   const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
   const { canProcessJob, sortMessagesByPriority } = await import('../../services/concurrency-manager');
+  const { isRetryableError } = await import('../../utils/error-handling');
 
   const sortedMessages = sortMessagesByPriority(batch.messages);
   console.log(`[handleQueueDAG] Processing batch of ${sortedMessages.length} messages`);
@@ -402,8 +411,11 @@ export async function handleQueueDAG(batch: any, env: any): Promise<void> {
       (message as any).ack();
     } catch (error) {
       console.error('[handleQueueDAG] Error processing message:', error);
-      // Retry on error to prevent data loss, with exponential backoff handled by queue
-      (message as any).retry();
+      if (isRetryableError(error)) {
+        (message as any).retry();
+      } else {
+        (message as any).ack();
+      }
     }
   }
 }
