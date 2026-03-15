@@ -60,6 +60,7 @@ export interface Env {
   // API Keys
   REPLICATE_API_TOKEN: string;
   OPENAI_API_KEY: string;
+  CF_AIG_TOKEN: string;
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_DEFAULT_VOICE_ID?: string;
   ELEVENLABS_MODEL_ID?: string;
@@ -67,6 +68,8 @@ export interface Env {
 
   // Cloudflare
   CLOUDFLARE_ACCOUNT_ID?: string;
+  CF_AI_GATEWAY_ID?: string;
+  CF_AI_GATEWAY_URL: string;
   APP_URL?: string;
 }
 

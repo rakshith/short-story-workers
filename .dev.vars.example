@@ -18,6 +18,7 @@ ELEVENLABS_API_KEY=your-elevenlabs-api-key
 ELEVENLABS_DEFAULT_VOICE_ID=your-default-voice-id
 ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
 
-# Cloudflare Account ID (optional)
-CLOUDFLARE_ACCOUNT_ID=your-cloudflare-account-id
+# Cloudflare AI Gateway token (replaces OpenAI key when routing via CF AI Gateway)
+CF_AIG_TOKEN=your-cloudflare-ai-gateway-token
+CF_AI_GATEWAY_URL=https://gateway.ai.cloudflare.com/v1/{account_id}/{gateway_id}/openai
 

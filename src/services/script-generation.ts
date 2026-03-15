@@ -1,6 +1,7 @@
 // Script generation service using Vercel AI SDK
 import { createOpenAI } from '@ai-sdk/openai';
 import { StoryTimeline } from '../types';
+import { Env } from '../types/env';
 
 // The following imports are no longer needed as logic is moved to @artflicks/video-compiler
 // import { generateText, LanguageModelUsage, Output } from 'ai';
@@ -32,7 +33,7 @@ export interface ScriptGenerationResult {
 
 export async function generateScript(
   params: ScriptGenerationParams,
-  openaiApiKey: string
+  env: Env
 ): Promise<ScriptGenerationResult> {
   const {
     prompt,
@@ -46,19 +47,17 @@ export async function generateScript(
 
   try {
     const openai = createOpenAI({
-      apiKey: openaiApiKey,
+      apiKey: env.OPENAI_API_KEY,
+      baseURL: env.CF_AI_GATEWAY_URL,
+      headers: {
+        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
+      },
     });
 
-    // Import dynamically to avoid top-level side effects if needed, 
-    // but static import is fine given we added paths
     const { ScriptGenerator, ScriptTemplateIds } = await import('@artflicks/video-compiler');
 
-    // Video mode requires a capable model for reliable structured output (word-count adherence).
-    // Force gpt-5.2 minimum for video; respect caller's choice for image mode.
-    const VIDEO_MIN_MODEL = 'gpt-5.2';
-    // const effectiveModel = mediaType === 'video' ? VIDEO_MIN_MODEL : (model || 'gpt-5.2');
     const effectiveModel = 'gpt-5.2';
-    const generator = new ScriptGenerator(openai(effectiveModel));
+    const generator = new ScriptGenerator(openai.chat(effectiveModel));
 
     const result = await generator.generate({
       prompt,

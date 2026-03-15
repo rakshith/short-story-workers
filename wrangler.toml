@@ -11,18 +11,17 @@ bindings = [
   { name = "STORY_COORDINATOR", class_name = "StoryCoordinator" }
 ]
 
+# DO classes already exist in staging/production; migrations are no-op to avoid re-add/delete errors
 [[migrations]]
 tag = "v1"
-new_classes = ["StoryCoordinator"]
+new_classes = []
+renamed_classes = []
+deleted_classes = []
 
 [[migrations]]
 tag = "v2"
 renamed_classes = []
 deleted_classes = []
-
-[[migrations]]
-tag = "v3"
-deleted_classes = ["JobDurableObject"]
 
 [env.staging]
 name = "create-story-worker-staging"
@@ -104,7 +103,6 @@ TIER3_PRIORITY = 3
 TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
-AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
 
 [env.production]
@@ -135,11 +133,10 @@ bucket_name = "videos"
 preview_bucket_name = "videos"
 
 # KV namespace for job status cache (production)
-# Create with: wrangler kv:namespace create "JOB_STATUS_CACHE" (and --preview for preview_id)
 [[env.production.kv_namespaces]]
 binding = "JOB_STATUS_CACHE"
-id = "REPLACE_WITH_PRODUCTION_KV_ID"
-preview_id = "REPLACE_WITH_PRODUCTION_KV_PREVIEW_ID"
+id = "2b8fb9602f9541678913d26e522f002c"
+preview_id = "81ec9c0eba7741f5b20d276149d4ae19"
 
 # Queue for async processing in production
 # Note: Tier-based concurrency is managed in code via concurrency-manager.ts
@@ -188,7 +185,6 @@ TIER3_PRIORITY = 3
 TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
-AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
 
 # Environment variables (set via wrangler secret put or dashboard)
@@ -206,7 +202,6 @@ TIER3_PRIORITY = 3
 TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
-AI_METER_INGEST_KEY = "521f3c05e8ce4deda8db78a14efa4587e32e191cb167f81a3914eb9f62497d04"
 APP_URL = "https://artflicks.app"
 
 # SUPABASE_URL
@@ -217,4 +212,7 @@ APP_URL = "https://artflicks.app"
 # ELEVENLABS_API_KEY
 # ELEVENLABS_DEFAULT_VOICE_ID
 # ELEVENLABS_MODEL_ID
+# CF_AIG_TOKEN
+# CF_AI_GATEWAY_URL
+# AI_METER_INGEST_KEY
 

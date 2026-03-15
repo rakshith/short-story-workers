@@ -235,7 +235,7 @@ async function generateAIScript(
             mediaType: body.videoConfig?.mediaType || 'image',
             characterReferenceImages: body.videoConfig?.characterReferenceImages
         },
-        env.OPENAI_API_KEY
+        env
     );
 
     if (!scriptResult.success || !scriptResult.story) {
