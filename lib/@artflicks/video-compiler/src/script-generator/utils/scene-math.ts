@@ -5,6 +5,7 @@ import {
     DURATION_TOLERANCE,
     VIDEO_SCENE_COUNT_GUIDE,
     VIDEO_SCENE_DURATION_GUIDE,
+    VIDEO_DURATION_TOLERANCE,
     VIDEO_ALLOWED_SCENE_DURATIONS,
     VIDEO_NARRATION_WPS,
 } from '../constants';
@@ -104,7 +105,8 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
     const perSceneDurationMax = sceneDurationGuide.max;         // image: 4s, video: 10s
 
     // ---------- DURATION TOLERANCE ----------
-    const tolerance = DURATION_TOLERANCE[durationSeconds] ?? {
+    const toleranceGuide = isVideo ? VIDEO_DURATION_TOLERANCE : DURATION_TOLERANCE;
+    const tolerance = toleranceGuide[durationSeconds] ?? {
         min: durationSeconds - 5,
         max: durationSeconds + 5,
     };

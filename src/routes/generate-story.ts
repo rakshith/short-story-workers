@@ -9,8 +9,8 @@ import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/
 import { sendQueueBatch } from '../utils/queue-batch';
 import { trackAIUsageInternal } from '../services/usage-tracking';
 import { templateSkipsImageStep } from '../config/template-video-config';
-import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts';
 import { initCoordinator } from '../utils/coordinator';
+import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts-defaults';
 
 interface GenerateStoryRequest {
     prompt: string;

@@ -8,6 +8,7 @@ import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { sendQueueBatch } from '../utils/queue-batch';
 import { initCoordinator } from '../utils/coordinator';
+import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts-defaults';
 
 /**
  * POST /create-story
@@ -72,7 +73,6 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
         }
 
         if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !(body.videoConfig?.characterReferenceImages?.length)) {
-            const { DEFAULT_SKELETON_REFERENCES } = await import('../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts');
             body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
         }
 

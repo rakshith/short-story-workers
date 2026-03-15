@@ -104,19 +104,36 @@ export const VIDEO_SCENE_DURATION_GUIDE = {
 } as const;
 
 /**
+ * Tight duration tolerance for VIDEO mode.
+ *
+ * Video scenes are expensive AI generations — every extra scene costs real money.
+ * Keep tolerance tight (±5s) so the LLM doesn't overshoot and generate
+ * unnecessary expensive clips. Tighter on the HIGH side to avoid waste.
+ */
+export const VIDEO_DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
+    15: { min: 10, max: 17 },
+    30: { min: 25, max: 33 },
+    60: { min: 55, max: 65 },
+    120: { min: 115, max: 125 },
+    180: { min: 175, max: 185 },
+};
+
+/**
  * Scene count guidelines for VIDEO mode per total video duration.
  *
  * Fewer scenes than image mode because each clip already has motion.
- * min = ceil(toleranceMin / maxDuration)
- * target = round(duration / targetDuration)
- * max = ceil(toleranceMax / minDuration)
+ * Tight max caps — every extra scene is an expensive video generation.
+ *
+ * min = ceil(videoToleranceMin / maxSceneDuration)
+ * target = round(duration / avgSceneDuration)
+ * max = tightened to avoid cost overruns
  */
 export const VIDEO_SCENE_COUNT_GUIDE: Record<number, { min: number; target: number; max: number }> = {
-    15: { min: 2, target: 2, max: 3 },         // 2×7=14s  (tol: 13–17) ✓
-    30: { min: 3, target: 4, max: 6 },          // 4×7=28s  (tol: 27–33) ✓
+    15: { min: 2, target: 2, max: 3 },         // 2×7=14s  (tol: 10–17) ✓
+    30: { min: 3, target: 4, max: 6 },          // 4×7=28s  (tol: 25–33) ✓
     60: { min: 6, target: 9, max: 12 },         // 9×7=63s  (tol: 55–65) ✓
-    120: { min: 11, target: 17, max: 22 },      // 17×7=119s(tol: 110–130) ✓
-    180: { min: 17, target: 26, max: 32 },      // 26×7=182s(tol: 165–195) ✓
+    120: { min: 12, target: 17, max: 20 },      // 17×7=119s(tol: 115–125) ✓
+    180: { min: 18, target: 26, max: 28 },      // 26×7=182s(tol: 175–185) ✓
 };
 
 // Legacy export kept for backward compatibility

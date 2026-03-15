@@ -20,7 +20,9 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
       const plan = getScenePlan(context.duration, context.mediaType || 'image');
       return createCharacterStorySchema({
         minScenes: plan.minScenes,
+        maxScenes: plan.maxScenes,
         totalWordsMin: plan.totalWordsMin,
+        totalWordsMax: plan.totalWordsMax,
         durationSeconds: plan.durationSeconds,
         mediaType: context.mediaType,
       });

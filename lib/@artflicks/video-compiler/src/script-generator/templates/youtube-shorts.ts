@@ -20,7 +20,9 @@ export class YouTubeShortsTemplate extends BaseScriptTemplate {
             const plan = getScenePlan(context.duration, context.mediaType || 'image');
             return createYouTubeShortsSchema({
                 minScenes: plan.minScenes,
+                maxScenes: plan.maxScenes,
                 totalWordsMin: plan.totalWordsMin,
+                totalWordsMax: plan.totalWordsMax,
                 durationSeconds: plan.durationSeconds,
                 mediaType: context.mediaType,
             });

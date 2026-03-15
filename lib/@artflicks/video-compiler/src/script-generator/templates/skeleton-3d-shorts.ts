@@ -5,12 +5,7 @@ import { getScenePlan } from '../utils/scene-math';
 import { VIDEO_NARRATION_WPS } from '../constants';
 import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
-
-// Default skeleton reference images for this template
-export const DEFAULT_SKELETON_REFERENCES = [
-    'https://image.artflicks.app/custom_characters/Gemini_Generated_Image_iibomsiibomsiibo.png',
-    'https://image.artflicks.app/generated-images/2e7c2562-71e3-4820-8c17-8b2b977f138a/85462027-2172-4e37-8bf4-3e2d94c94791.jpg'
-];
+import { DEFAULT_SKELETON_REFERENCES } from './skeleton-3d-shorts-defaults';
 
 // Character DNA - defines the visual characteristics (flexible for different characters/templates)
 export const SKELETON_CHARACTER_DNA = `CHARACTER DNA
@@ -39,7 +34,9 @@ export class Skeleton3DShortsTemplate extends BaseScriptTemplate {
             const plan = getScenePlan(context.duration, context.mediaType || 'image');
             return createYouTubeShortsSchema({
                 minScenes: plan.minScenes,
+                maxScenes: plan.maxScenes,
                 totalWordsMin: plan.totalWordsMin,
+                totalWordsMax: plan.totalWordsMax,
                 durationSeconds: plan.durationSeconds,
                 mediaType: context.mediaType,
             });

@@ -6,11 +6,15 @@ import { VIDEO_NARRATION_WPS } from "./constants";
 // ═══════════════════════════════════════════════════════════════
 
 export interface SchemaConstraints {
-    /** Minimum number of scenes (Zod .min() on the scenes array) */
+    /** Minimum number of scenes (Zod .min() → JSON Schema minItems) */
     minScenes: number;
-    /** Minimum total narration words across ALL scenes (Zod .refine()) */
+    /** Maximum number of scenes (Zod .max() → JSON Schema maxItems) */
+    maxScenes?: number;
+    /** Minimum total narration words (used in .describe() guidance) */
     totalWordsMin: number;
-    /** Target duration in seconds (used in error messages) */
+    /** Maximum total narration words (used in .describe() guidance) */
+    totalWordsMax?: number;
+    /** Target duration in seconds (used in descriptions) */
     durationSeconds: number;
     /** When 'video', scene duration must be 5 or 10 only */
     mediaType?: 'image' | 'video';
@@ -49,80 +53,55 @@ const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => z.obj
 });
 
 // ═══════════════════════════════════════════════════════════════
-// HELPERS — word count
-// ═══════════════════════════════════════════════════════════════
-
-function countWords(text: string): number {
-    return text.split(/\s+/).filter(Boolean).length;
-}
-
-function countTotalNarrationWords(scenes: { narration: string }[]): number {
-    return scenes.reduce((sum, s) => sum + countWords(s.narration), 0);
-}
-
-// ═══════════════════════════════════════════════════════════════
 // DYNAMIC SCHEMA FACTORIES
 //
-// Image: .min(minScenes) + total words ≥ totalWordsMin.
-// Video: .min(minScenes) only. Word limits are enforced via
-//        system prompt + schema field descriptions (not Zod refine).
-//        Per spec: "compliance with scene duration SHALL be achieved
-//        solely by ensuring the narration text produced by the LLM
-//        fits at generation time". No post-generation rejection.
+// Duration compliance is achieved through generation-time
+// constraints only (minItems/maxItems + descriptions).
+// No post-generation .refine() rejection — the script must
+// always be generated successfully. The system prompt +
+// schema descriptions guide the LLM to the correct range.
 // ═══════════════════════════════════════════════════════════════
 
 export function createYouTubeShortsSchema(constraints: SchemaConstraints) {
-    const { minScenes, totalWordsMin, durationSeconds, mediaType } = constraints;
+    const { minScenes, maxScenes, totalWordsMin, totalWordsMax, durationSeconds, mediaType } = constraints;
 
-    const base = z.object({
-        title: z.string().describe('Short, punchy title (3-6 words MAX). Catchy, intriguing, or hook-driven.'),
-        totalDuration: z.number().describe('Estimated total duration in seconds (sum of all scene durations)'),
-        scenes: z.array(createYouTubeShortsSceneSchema(mediaType))
-            .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
-            .describe(
-                mediaType === 'video'
-                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration. Sum of all scene durations must match the user-requested total.`
-                    : `Array of scenes. MINIMUM ${minScenes} scenes, at least ${totalWordsMin} total narration words.`
-            ),
-    });
+    let scenesArray = z.array(createYouTubeShortsSceneSchema(mediaType))
+        .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`);
 
-    if (mediaType === 'video') {
-        return base;
+    if (maxScenes) {
+        scenesArray = scenesArray.max(maxScenes, `Must have at most ${maxScenes} scenes for ${durationSeconds}s`);
     }
-    return base.refine(
-        (data) => countTotalNarrationWords(data.scenes) >= totalWordsMin,
-        {
-            message: `Total narration must be at least ${totalWordsMin} words to fill ${durationSeconds}s. The generated narration is too short.`,
-            path: ['scenes'],
-        }
-    );
+
+    const scenesDescription = mediaType === 'video'
+        ? `Array of scenes for ${durationSeconds}s video. MUST have ${minScenes}–${maxScenes ?? minScenes} scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Sum of all scene durations must equal ~${durationSeconds}s. Do NOT exceed ${maxScenes ?? minScenes} scenes.`
+        : `Array of scenes for ${durationSeconds}s video. MUST have ${minScenes}–${maxScenes ?? minScenes} scenes and ${totalWordsMin}–${totalWordsMax ?? totalWordsMin} total narration words. Do NOT exceed ${maxScenes ?? minScenes} scenes or ${totalWordsMax ?? totalWordsMin} words — that makes the video too long.`;
+
+    return z.object({
+        title: z.string().describe('Short, punchy title (3-6 words MAX). Catchy, intriguing, or hook-driven.'),
+        totalDuration: z.number().describe(`Estimated total duration in seconds (sum of all scene durations). Must be close to ${durationSeconds}s.`),
+        scenes: scenesArray.describe(scenesDescription),
+    });
 }
 
 export function createCharacterStorySchema(constraints: SchemaConstraints) {
-    const { minScenes, totalWordsMin, durationSeconds, mediaType } = constraints;
+    const { minScenes, maxScenes, totalWordsMin, totalWordsMax, durationSeconds, mediaType } = constraints;
 
-    const base = z.object({
-        title: z.string().describe('Compelling story title (4-8 words). Should hint at the character journey.'),
-        totalDuration: z.number().describe('Estimated total duration in seconds (sum of all scene durations)'),
-        scenes: z.array(createCharacterStorySceneSchema(mediaType))
-            .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`)
-            .describe(
-                mediaType === 'video'
-                    ? `Array of scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Never exceed max or audio exceeds scene duration. Sum of all scene durations must match the user-requested total.`
-                    : `Array of scenes. MINIMUM ${minScenes} scenes, at least ${totalWordsMin} total narration words.`
-            ),
-    });
+    let scenesArray = z.array(createCharacterStorySceneSchema(mediaType))
+        .min(minScenes, `Must have at least ${minScenes} scenes to fill ${durationSeconds}s`);
 
-    if (mediaType === 'video') {
-        return base;
+    if (maxScenes) {
+        scenesArray = scenesArray.max(maxScenes, `Must have at most ${maxScenes} scenes for ${durationSeconds}s`);
     }
-    return base.refine(
-        (data) => countTotalNarrationWords(data.scenes) >= totalWordsMin,
-        {
-            message: `Total narration must be at least ${totalWordsMin} words to fill ${durationSeconds}s. The generated narration is too short.`,
-            path: ['scenes'],
-        }
-    );
+
+    const scenesDescription = mediaType === 'video'
+        ? `Array of scenes for ${durationSeconds}s video. MUST have ${minScenes}–${maxScenes ?? minScenes} scenes. 5s scene: ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. 10s scene: ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Sum of all scene durations must equal ~${durationSeconds}s. Do NOT exceed ${maxScenes ?? minScenes} scenes.`
+        : `Array of scenes for ${durationSeconds}s video. MUST have ${minScenes}–${maxScenes ?? minScenes} scenes and ${totalWordsMin}–${totalWordsMax ?? totalWordsMin} total narration words. Do NOT exceed ${maxScenes ?? minScenes} scenes or ${totalWordsMax ?? totalWordsMin} words — that makes the video too long.`;
+
+    return z.object({
+        title: z.string().describe('Compelling story title (4-8 words). Should hint at the character journey.'),
+        totalDuration: z.number().describe(`Estimated total duration in seconds (sum of all scene durations). Must be close to ${durationSeconds}s.`),
+        scenes: scenesArray.describe(scenesDescription),
+    });
 }
 
 // ═══════════════════════════════════════════════════════════════
