@@ -74,7 +74,7 @@ export interface VideoConfig {
   mediaType?: MediaType;
   aspectRatio: string;
   model: string; // Video model for video generation
-  imageModel?: string; // Image model for image generation (default: xai/grok-imagine-image for skeleton templates)
+  imageModel?: string; // Image model for image generation (default: xai/grok-imagine-image only for skeleton + mediaType video 2-step refs; else flux-schnell)
   preset: AIPresetItem;
   music: string;
   musicVolume?: number; // Added missing field

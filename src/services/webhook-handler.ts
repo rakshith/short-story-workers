@@ -1,9 +1,11 @@
 // Webhook handler service for Replicate
 import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
+import { templateSkipsImageStep } from '../config/template-video-config';
 import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
+import { updateCoordinatorImage, updateCoordinatorVideo, getCoordinatorProgress } from '../utils/coordinator';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -96,14 +98,11 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             console.error(`[WEBHOOK] Prediction failed: ${prediction.error}`);
             const id = env.STORY_COORDINATOR.idFromName(storyId);
             const coordinator = env.STORY_COORDINATOR.get(id);
-            const body: any = { sceneIndex };
             if (type === 'video') {
-                body.videoError = prediction.error || 'Generation failed';
+                await updateCoordinatorVideo(coordinator, { sceneIndex, videoError: prediction.error || 'Generation failed' });
             } else {
-                body.imageError = prediction.error || 'Generation failed';
+                await updateCoordinatorImage(coordinator, { sceneIndex, imageError: prediction.error || 'Generation failed' });
             }
-            const errorEndpoint = type === 'video' ? 'http://do/updateVideo' : 'http://do/updateImage';
-            await coordinator.fetch(new Request(errorEndpoint, { method: 'POST', body: JSON.stringify(body) }));
             return;
         }
 
@@ -146,13 +145,10 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
 
         const id = env.STORY_COORDINATOR.idFromName(storyId);
         const coordinator = env.STORY_COORDINATOR.get(id);
-        const endpoint = type === 'video' ? 'http://do/updateVideo' : 'http://do/updateImage';
-        const body: any = { sceneIndex };
-        if (type === 'video') body.videoUrl = resultUrl;
-        else body.imageUrl = resultUrl;
 
-        const updateRes = await coordinator.fetch(new Request(endpoint, { method: 'POST', body: JSON.stringify(body) }));
-        const status = await updateRes.json() as any;
+        const status = type === 'video'
+            ? await updateCoordinatorVideo(coordinator, { sceneIndex, videoUrl: resultUrl })
+            : await updateCoordinatorImage(coordinator, { sceneIndex, imageUrl: resultUrl });
 
         apiLogger.info(`Updated ${type} in DO, isComplete: ${status.isComplete}, videosCompleted: ${status.videosCompleted}/${status.totalScenes}, audioCompleted: ${status.audioCompleted}/${status.totalScenes}`, { storyId, sceneIndex });
 
@@ -176,7 +172,21 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 .single();
 
             const mediaType = storyData?.video_config?.mediaType;
-            if (mediaType === 'video' && storyData?.video_config && jobData?.job_id) {
+            const templateId = storyData?.video_config?.templateId;
+            if (mediaType === 'video' && !templateSkipsImageStep(templateId) && storyData?.video_config && jobData?.job_id) {
+                const existingVideoUrl = storyData.story?.scenes?.[sceneIndex]?.generatedVideoUrl;
+                if (existingVideoUrl) {
+                    apiLogger.info(`Scene ${sceneIndex} already has generatedVideoUrl (manual from UI), skipping video queue`, { storyId });
+                    const updateStatus = await updateCoordinatorVideo(coordinator, { sceneIndex, videoUrl: existingVideoUrl });
+                    if (updateStatus.isComplete) {
+                        const { syncStoryToSupabase } = await import('../queue-consumer');
+                        await syncStoryToSupabase({ jobId: jobData.job_id, storyId, userId }, coordinator, env);
+                    } else {
+                        const { syncPartialStory } = await import('../queue-consumer');
+                        await syncPartialStory({ jobId: jobData.job_id, storyId, userId }, coordinator, env);
+                    }
+                    return;
+                }
                 apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
                 const videoConfig = storyData.video_config;
                 const jobId = jobData.job_id;
@@ -232,11 +242,13 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             return;
         }
 
-        // Normal flow: finalize when all complete
         if (status.isComplete) {
             apiLogger.info(`Story is complete, triggering final sync`, { storyId });
             const { syncStoryToSupabase } = await import('../queue-consumer');
             await syncStoryToSupabase({ jobId, storyId, userId }, coordinator, env);
+        } else if (type === 'video') {
+            const { syncPartialStory } = await import('../queue-consumer');
+            await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
         } else {
             apiLogger.info(`Story not complete yet, waiting for more generations`, { storyId, videosComplete: status.videosCompleted, audioComplete: status.audioCompleted, total: status.totalScenes });
         }
@@ -256,9 +268,7 @@ export async function syncStoryForReview(
     apiLogger.info(`Syncing story for review`, { jobId: data.jobId, storyId: data.storyId });
 
     try {
-        // Get story state from DO WITHOUT finalizing (preserves state for Step 2)
-        const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
-        const progressData = await progressRes.json() as any;
+        const progressData = await getCoordinatorProgress(coordinator);
 
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);

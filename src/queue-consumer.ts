@@ -5,6 +5,7 @@ import { processSceneImage, processSceneAudio, processSceneVideo } from './servi
 import { processWebhookInBackground } from './services/webhook-handler';
 import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
+import { updateCoordinatorImage, updateCoordinatorVideo, updateCoordinatorAudio, getCoordinatorProgress, finalizeCoordinator } from './utils/coordinator';
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 
@@ -120,15 +121,11 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         // Only update DO when we have a URL or an error. When imageUrl is null (async Replicate),
         // the webhook will update the DO—avoid double update and "total: 0/3" from worker.
         if (result.imageUrl != null || result.error != null) {
-          const updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
-            method: 'POST',
-            body: JSON.stringify({
-              sceneIndex: data.sceneIndex,
-              imageUrl: result.imageUrl,
-              imageError: result.success ? undefined : result.error,
-            }),
-          }));
-          const status = await updateRes.json() as any;
+          const status = await updateCoordinatorImage(coordinator, {
+            sceneIndex: data.sceneIndex,
+            imageUrl: result.imageUrl,
+            imageError: result.success ? undefined : result.error,
+          });
           if (status.isComplete) {
             await syncStoryToSupabase({
               jobId: data.jobId,
@@ -148,15 +145,11 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         // Only update DO when we have a URL or an error. When videoUrl is null (async Replicate),
         // the webhook will update the DO—avoid double update and conflict with webhook.
         if (result.videoUrl != null || result.error != null) {
-          const updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
-            method: 'POST',
-            body: JSON.stringify({
-              sceneIndex: data.sceneIndex,
-              videoUrl: result.videoUrl,
-              videoError: result.success ? undefined : result.error,
-            }),
-          }));
-          const status = await updateRes.json() as any;
+          const status = await updateCoordinatorVideo(coordinator, {
+            sceneIndex: data.sceneIndex,
+            videoUrl: result.videoUrl,
+            videoError: result.success ? undefined : result.error,
+          });
           if (status.isComplete) {
             await syncStoryToSupabase({
               jobId: data.jobId,
@@ -173,19 +166,13 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         const result = await processSceneAudio(data, env);
         queueLogger.info(`Audio result for scene ${data.sceneIndex}`, { sceneIndex: data.sceneIndex, success: result.success, audioUrl: result.audioUrl });
 
-        // Update via Durable Object (no race condition)
-        const updateRes = await coordinator.fetch(new Request('http://do/updateAudio', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            audioUrl: result.audioUrl,
-            audioDuration: result.audioDuration,
-            captions: result.captions,
-            audioError: result.success ? undefined : result.error,
-          }),
-        }));
-
-        const status = await updateRes.json() as any;
+        const status = await updateCoordinatorAudio(coordinator, {
+          sceneIndex: data.sceneIndex,
+          audioUrl: result.audioUrl,
+          audioDuration: result.audioDuration,
+          captions: result.captions,
+          audioError: result.success ? undefined : result.error,
+        });
         if (status.isComplete) {
           if (data.videoConfig?.sceneReviewRequired) {
             // Audio completed last in review mode - transition to awaiting_review
@@ -259,52 +246,23 @@ async function markSceneAsFailed(
 ): Promise<void> {
   try {
     const coordinator = getCoordinator(data.storyId);
-    let updateRes: Response;
+    let status: Awaited<ReturnType<typeof updateCoordinatorImage>>;
 
     switch (data.type) {
       case 'image':
-        updateRes = await coordinator.fetch(new Request('http://do/updateImage', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            imageUrl: null,
-            imageError: errorMessage,
-          }),
-        }));
+        status = await updateCoordinatorImage(coordinator, { sceneIndex: data.sceneIndex, imageUrl: null, imageError: errorMessage });
         break;
-
       case 'video':
-        updateRes = await coordinator.fetch(new Request('http://do/updateVideo', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            videoUrl: null,
-            videoError: errorMessage,
-          }),
-        }));
+        status = await updateCoordinatorVideo(coordinator, { sceneIndex: data.sceneIndex, videoUrl: null, videoError: errorMessage });
         break;
-
       case 'audio':
-        updateRes = await coordinator.fetch(new Request('http://do/updateAudio', {
-          method: 'POST',
-          body: JSON.stringify({
-            sceneIndex: data.sceneIndex,
-            audioUrl: null,
-            audioDuration: 0,
-            captions: [],
-            audioError: errorMessage,
-          }),
-        }));
+        status = await updateCoordinatorAudio(coordinator, { sceneIndex: data.sceneIndex, audioUrl: null, audioDuration: 0, captions: [], audioError: errorMessage });
         break;
-
       default:
         queueLogger.warn(`Unknown message type: ${data.type}`);
         return;
     }
 
-    const status = await updateRes.json() as any;
-
-    // If all scenes are now complete, sync to database
     if (status.isComplete) {
       const { syncStoryToSupabase } = await import('./queue-consumer');
       await syncStoryToSupabase({
@@ -335,8 +293,7 @@ export async function syncStoryToSupabase(
   queueLogger.info(`All scenes complete, syncing to database`, { jobId: data.jobId });
 
   try {
-    const finalRes = await coordinator.fetch(new Request('http://do/finalize', { method: 'POST' }));
-    const finalData = await finalRes.json() as any;
+    const finalData = await finalizeCoordinator(coordinator);
 
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -442,9 +399,7 @@ export async function syncPartialStory(
   env: Env
 ): Promise<void> {
   try {
-    // Get current state from DO WITHOUT finalizing (preserves state for video generation)
-    const progressRes = await coordinator.fetch(new Request('http://do/getProgress', { method: 'POST' }));
-    const progressData = await progressRes.json() as any;
+    const progressData = await getCoordinatorProgress(coordinator);
 
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -476,11 +431,13 @@ export async function syncPartialStory(
         .eq('id', data.storyId);
     }
 
-    // Progress: images + audio count toward 75% (videos are final 25%)
     const totalScenes = progressData.totalScenes || 1;
     const voiceOverEnabled = progressData.videoConfig?.enableVoiceOver !== false;
     const denominator = voiceOverEnabled ? totalScenes * 2 : totalScenes;
-    const numerator = (progressData.imagesCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0);
+    const useVideoProgress = progressData.videoConfig?.mediaType === 'video';
+    const numerator = useVideoProgress
+      ? (progressData.videosCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0)
+      : (progressData.imagesCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0);
     const progress = Math.min(Math.round((numerator / denominator) * 75), 75);
 
     await supabase

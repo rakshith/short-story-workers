@@ -3,6 +3,7 @@
 import { Env } from '../types/env';
 import { jsonResponse } from '../utils/response';
 import { ProjectStatus } from '../types';
+import { cancelCoordinator } from '../utils/coordinator';
 
 interface CancelStoryRequest {
     jobId: string;
@@ -73,9 +74,7 @@ export async function handleCancelStory(request: Request, env: Env): Promise<Res
             try {
                 const coordinatorId = env.STORY_COORDINATOR.idFromName(job.story_id);
                 const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
-                await coordinator.fetch(new Request('http://do/cancel', {
-                    method: 'POST',
-                }));
+                await cancelCoordinator(coordinator);
                 console.log(`[Cancel Story] Notified Durable Object for story ${job.story_id}`);
             } catch (doError) {
                 console.error('[Cancel Story] Failed to notify Durable Object:', doError);

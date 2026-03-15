@@ -7,6 +7,7 @@ import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { sendQueueBatch } from '../utils/queue-batch';
+import { initCoordinator } from '../utils/coordinator';
 
 /**
  * POST /create-story
@@ -68,6 +69,11 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
                     tier: userTier,
                 }, 429);
             }
+        }
+
+        if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !(body.videoConfig?.characterReferenceImages?.length)) {
+            const { DEFAULT_SKELETON_REFERENCES } = await import('../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts');
+            body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
         }
 
         // Generate job ID
@@ -194,17 +200,14 @@ async function initializeCoordinator(
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
     const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
-    await coordinator.fetch(new Request('http://do/init', {
-        method: 'POST',
-        body: JSON.stringify({
-            storyId,
-            userId,
-            scenes: storyData.scenes,
-            totalScenes: storyData.scenes.length,
-            videoConfig,
-            sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
-        }),
-    }));
+    await initCoordinator(coordinator, {
+        storyId,
+        userId,
+        scenes: storyData.scenes,
+        totalScenes: storyData.scenes.length,
+        videoConfig,
+        sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
+    });
     console.log(`[Create Story] Durable Object initialized for story ${storyId}`);
 }
 

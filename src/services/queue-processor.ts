@@ -36,11 +36,15 @@ export async function processSceneImage(
   }
 
   try {
-    // Determine image model: use imageModel if provided, otherwise use model
-    // For skeleton templates: default to xai/grok-imagine-image
-    const isSkeletonTemplate = videoConfig.templateId === 'skeleton-3d-shorts';
-    const defaultImageModel = isSkeletonTemplate ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
-    const imageModel = videoConfig.imageModel || videoConfig.model || defaultImageModel;
+    // Determine image model.
+    // For skeleton + mediaType video (2-step): default to xai/grok-imagine-image for reference images.
+    //   Only honour imageModel (explicit image override), NOT videoConfig.model (that's the video model).
+    // For everything else: imageModel > model > flux-schnell.
+    const isSkeletonVideoRefs = videoConfig.templateId === 'skeleton-3d-shorts' && videoConfig.mediaType === 'video';
+    const defaultImageModel = isSkeletonVideoRefs ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
+    const imageModel = isSkeletonVideoRefs
+      ? (videoConfig.imageModel || defaultImageModel)
+      : (videoConfig.imageModel || videoConfig.model || defaultImageModel);
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,

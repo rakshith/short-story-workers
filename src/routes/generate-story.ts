@@ -8,7 +8,9 @@ import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { sendQueueBatch } from '../utils/queue-batch';
 import { trackAIUsageInternal } from '../services/usage-tracking';
+import { templateSkipsImageStep } from '../config/template-video-config';
 import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts';
+import { initCoordinator } from '../utils/coordinator';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -59,6 +61,10 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         // Ensure audioModel has a default value
         if (!body.videoConfig.audioModel) {
             body.videoConfig.audioModel = 'eleven_multilingual_v2';
+        }
+
+        if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages?.length)) {
+            body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
         }
 
         // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
@@ -217,13 +223,6 @@ async function generateAIScript(
 ): Promise<{ story: StoryTimeline; usage?: any } | Response> {
     console.log(`[Generate Story] Generating script from prompt: "${body.prompt.substring(0, 50)}..."`);
 
-   
-    // Use default skeleton references if template is skeleton-3d-shorts and no references provided
-    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
-        ? DEFAULT_SKELETON_REFERENCES
-        : body.videoConfig?.characterReferenceImages;
-
-    // Restore import
     const { generateScript } = await import('../services/script-generation');
 
     const scriptResult = await generateScript(
@@ -234,7 +233,7 @@ async function generateAIScript(
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: body.videoConfig?.templateId,
             mediaType: body.videoConfig?.mediaType || 'image',
-            characterReferenceImages: effectiveReferences
+            characterReferenceImages: body.videoConfig?.characterReferenceImages
         },
         env.OPENAI_API_KEY
     );
@@ -364,17 +363,14 @@ async function initializeCoordinator(
 ): Promise<void> {
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
     const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
-    await coordinator.fetch(new Request('http://do/init', {
-        method: 'POST',
-        body: JSON.stringify({
-            storyId,
-            userId,
-            scenes: storyData.scenes,
-            totalScenes: storyData.scenes.length,
-            videoConfig,
-            sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
-        }),
-    }));
+    await initCoordinator(coordinator, {
+        storyId,
+        userId,
+        scenes: storyData.scenes,
+        totalScenes: storyData.scenes.length,
+        videoConfig,
+        sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
+    });
     console.log(`[Generate Story] Durable Object initialized for story ${storyId}`);
 }
 
@@ -393,23 +389,9 @@ async function queueGenerationJobs(
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
     const sceneReviewRequired = body.videoConfig?.sceneReviewRequired === true;
-    
-    // For video mediaType: always queue images first
-    // - sceneReviewRequired=false → videos queued after image completes (in webhook)
-    // - sceneReviewRequired=true → videos queued after user triggers with storyId
-    // Videos are NEVER queued immediately - only for image mediaType
-    const shouldQueueVideos = mediaType === 'image';
-    
-    // Use default skeleton references if template is skeleton-3d-shorts and no references provided
-    const effectiveReferences = (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages || body.videoConfig.characterReferenceImages.length === 0))
-        ? DEFAULT_SKELETON_REFERENCES
-        : body.videoConfig?.characterReferenceImages;
-
-    // Create updated videoConfig with effective references
-    const updatedVideoConfig = {
-        ...body.videoConfig,
-        characterReferenceImages: effectiveReferences
-    };
+    const templateId = body.videoConfig?.templateId;
+    const skipsImageStep = templateSkipsImageStep(templateId);
+    const shouldQueueVideos = mediaType === 'image' || (mediaType === 'video' && skipsImageStep);
 
     // Queue visual generation jobs (images or videos based on shouldQueueVideos)
     const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
@@ -419,7 +401,7 @@ async function queueGenerationJobs(
         storyId,
         title: storyData.title || body.title || '',
         storyData,
-        videoConfig: updatedVideoConfig,
+        videoConfig: body.videoConfig,
         sceneIndex: index,
         type: shouldQueueVideos ? mediaType : 'image' as const,
         baseUrl,
@@ -430,11 +412,14 @@ async function queueGenerationJobs(
     await sendQueueBatch(env.STORY_QUEUE, visualMessages);
     console.log(`[Generate Story] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : 'image'} generation jobs via sendBatch (Priority: ${priority})`);
 
-    // Queue videos only for image mediaType (never for video - handled via webhook or user trigger)
-    if (!sceneReviewRequired && mediaType === 'video') {
-        console.log(`[Generate Story] Videos will be queued after image completion (sceneReviewRequired=false)`);
-    } else if (sceneReviewRequired && mediaType === 'video') {
-        console.log(`[Generate Story] Videos will be queued after user triggers with storyId (sceneReviewRequired=true)`);
+    if (mediaType === 'video' && !shouldQueueVideos) {
+        if (!sceneReviewRequired) {
+            console.log(`[Generate Story] Videos will be queued after image completion (sceneReviewRequired=false)`);
+        } else {
+            console.log(`[Generate Story] Videos will be queued after user triggers with storyId (sceneReviewRequired=true)`);
+        }
+    } else if (mediaType === 'video' && skipsImageStep) {
+        console.log(`[Generate Story] Template uses direct text-to-video (no image step)`);
     }
 
     // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
@@ -448,7 +433,7 @@ async function queueGenerationJobs(
             storyId,
             title: storyData.title || body.title || '',
             storyData,
-            videoConfig: updatedVideoConfig,
+            videoConfig: body.videoConfig,
             sceneIndex: index,
             type: 'audio' as const,
             baseUrl,
@@ -516,10 +501,11 @@ async function handleResumeVideoGeneration(
             );
         }
 
-        // Get scenes that have generated images - generate videos only for those
         const scenesWithImages = storyData.scenes
             .map((scene: any, index: number) => ({ scene, index }))
             .filter(({ scene }: { scene: any; index: number }) => scene.generatedImageUrl);
+
+        const scenesNeedingVideo = scenesWithImages.filter(({ scene }: { scene: any }) => !scene.generatedVideoUrl);
 
         if (scenesWithImages.length === 0) {
             return jsonResponse(
@@ -531,7 +517,16 @@ async function handleResumeVideoGeneration(
             );
         }
 
-        console.log(`[Generate Story] Found ${scenesWithImages.length} scenes with images out of ${storyData.scenes.length}`);
+        if (scenesNeedingVideo.length === 0) {
+            return jsonResponse({
+                success: true,
+                storyId,
+                message: 'All scenes already have video (including manually generated). Nothing to generate.',
+                stats: { totalScenes: storyData.scenes.length, videosQueued: 0 },
+            });
+        }
+
+        console.log(`[Generate Story] Found ${scenesNeedingVideo.length} scenes needing video (${scenesWithImages.length - scenesNeedingVideo.length} already have video) out of ${storyData.scenes.length}`);
 
         // Check if story is in a valid status (processing, completed, or awaiting_review)
         const validStatuses = ['processing', 'completed', 'awaiting_review', 'draft'];
@@ -584,18 +579,15 @@ async function handleResumeVideoGeneration(
         const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
         const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
         
-        await coordinator.fetch(new Request('http://do/init', {
-            method: 'POST',
-            body: JSON.stringify({
-                storyId,
-                userId,
-                scenes: storyData.scenes,
-                totalScenes: storyData.scenes.length,
-                videoConfig,
-                skipAudioCheck: true, // Step 2 only needs videos - ignore audio
-                sceneReviewRequired: false, // Step 2 is auto-completing videos, not review mode
-            }),
-        }));
+        await initCoordinator(coordinator, {
+            storyId,
+            userId,
+            scenes: storyData.scenes,
+            totalScenes: storyData.scenes.length,
+            videoConfig,
+            skipAudioCheck: true,
+            sceneReviewRequired: false,
+        });
 
         // The storyData.scenes already has audioUrl from Step 1
         // So we need to mark audio as completed without calling updateAudio
@@ -610,7 +602,7 @@ async function handleResumeVideoGeneration(
         // Use baseUrl from request or fallback to default
         const webhookBaseUrl = requestBaseUrl || body.baseUrl || 'https://create-story-worker.artflicks.workers.dev';
 
-        const videoMessages: QueueMessage[] = scenesWithImages.map(({ index, scene }) => ({
+        const videoMessages: QueueMessage[] = scenesNeedingVideo.map(({ index, scene }) => ({
             jobId,
             userId,
             seriesId: videoConfig?.seriesId,
@@ -628,7 +620,7 @@ async function handleResumeVideoGeneration(
         }));
         await sendQueueBatch(env.STORY_QUEUE, videoMessages);
         
-        console.log(`[Generate Story] Queued ${scenesWithImages.length} video generation jobs for story ${storyId} (out of ${storyData.scenes.length} scenes)`);
+        console.log(`[Generate Story] Queued ${scenesNeedingVideo.length} video generation jobs for story ${storyId} (${scenesWithImages.length - scenesNeedingVideo.length} scenes already had video)`);
 
         return jsonResponse({
             success: true,
@@ -637,7 +629,7 @@ async function handleResumeVideoGeneration(
             message: 'Video generation started',
             stats: {
                 totalScenes: storyData.scenes.length,
-                videosQueued: scenesWithImages.length,
+                videosQueued: scenesNeedingVideo.length,
             },
         });
     } catch (error) {

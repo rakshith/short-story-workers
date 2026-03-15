@@ -51,8 +51,8 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     //black-forest-labs/flux-kontext-pro
     'flux-kontext-pro': { singleField: 'input_image' },
 
-    //xai/grok-imagine-image
-    'xai/grok-imagine-image': { singleField: 'image' },
+    //xai/grok-imagine-image (single image input; use first when multiple refs provided, e.g. skeleton template)
+    'xai/grok-imagine-image': { singleField: 'image', setSingleFromFirst: true },
 
     //ideogram-ai/ideogram-v3-turbo
     'ideogram-v3-turbo': { singleField: 'image' },

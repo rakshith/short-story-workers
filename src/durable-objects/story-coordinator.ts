@@ -82,23 +82,30 @@ export class StoryCoordinator {
   private async handleInit(request: Request): Promise<Response> {
     const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck, sceneReviewRequired } = await request.json() as any;
 
-    // Count already completed items from scenes (for resume flow - Step 2)
-    const imagesDone = scenes?.filter((s: any) => s.generatedImageUrl).length || 0;
-    const audioDone = skipAudioCheck ? totalScenes : (scenes?.filter((s: any) => s.audioUrl).length || 0);
-    const videosDone = scenes?.filter((s: any) => s.generatedVideoUrl).length || 0;
+    // Count and collect actual completed scene indices (for resume flow - Step 2)
+    const sceneList = scenes || [];
+    const imageScenesDone = sceneList.map((s: any, i: number) => (s?.generatedImageUrl ? i : -1)).filter((i: number) => i >= 0);
+    const videoScenesDone = sceneList.map((s: any, i: number) => (s?.generatedVideoUrl ? i : -1)).filter((i: number) => i >= 0);
+    const audioScenesDone = skipAudioCheck
+      ? Array.from({ length: totalScenes }, (_, i) => i)
+      : sceneList.map((s: any, i: number) => (s?.audioUrl ? i : -1)).filter((i: number) => i >= 0);
+
+    const imagesDone = imageScenesDone.length;
+    const videosDone = videoScenesDone.length;
+    const audioDone = audioScenesDone.length;
 
     this.storyState = {
       storyId,
       userId,
-      scenes: scenes || [],
+      scenes: sceneList,
       imagesCompleted: imagesDone,
       videosCompleted: videosDone,
       audioCompleted: audioDone,
       totalScenes,
       videoConfig,
-      imageScenesDone: Array.from({ length: imagesDone }, (_, i) => i),
-      videoScenesDone: Array.from({ length: videosDone }, (_, i) => i),
-      audioScenesDone: Array.from({ length: audioDone }, (_, i) => i),
+      imageScenesDone,
+      videoScenesDone,
+      audioScenesDone,
       completionSignaled: false,
       sceneReviewRequired: sceneReviewRequired || false,
     };
