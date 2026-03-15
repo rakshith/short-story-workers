@@ -6,6 +6,7 @@ import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
+import { sendQueueBatch } from '../utils/queue-batch';
 import { trackAIUsageInternal } from '../services/usage-tracking';
 import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts';
 
@@ -411,26 +412,23 @@ async function queueGenerationJobs(
     };
 
     // Queue visual generation jobs (images or videos based on shouldQueueVideos)
-    const visualPromises = storyData.scenes.map((scene, index) => {
-        const message: QueueMessage = {
-            jobId,
-            userId: body.userId,
-            seriesId: body.seriesId,
-            storyId,
-            title: storyData.title || body.title || '',
-            storyData,
-            videoConfig: updatedVideoConfig,
-            sceneIndex: index,
-            type: shouldQueueVideos ? mediaType : 'image', // If not queuing videos, queue images only
-            baseUrl,
-            teamId: body.teamId,
-            userTier,
-            priority,
-        };
-        return env.STORY_QUEUE.send(message);
-    });
-    await Promise.all(visualPromises);
-    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : 'image'} generation jobs (Priority: ${priority})`);
+    const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
+        jobId,
+        userId: body.userId,
+        seriesId: body.seriesId,
+        storyId,
+        title: storyData.title || body.title || '',
+        storyData,
+        videoConfig: updatedVideoConfig,
+        sceneIndex: index,
+        type: shouldQueueVideos ? mediaType : 'image' as const,
+        baseUrl,
+        teamId: body.teamId,
+        userTier,
+        priority,
+    }));
+    await sendQueueBatch(env.STORY_QUEUE, visualMessages);
+    console.log(`[Generate Story] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : 'image'} generation jobs via sendBatch (Priority: ${priority})`);
 
     // Queue videos only for image mediaType (never for video - handled via webhook or user trigger)
     if (!sceneReviewRequired && mediaType === 'video') {
@@ -443,26 +441,23 @@ async function queueGenerationJobs(
     const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
     
     if (enableVoiceOver) {
-        const audioPromises = storyData.scenes.map((scene, index) => {
-            const message: QueueMessage = {
-                jobId,
-                userId: body.userId,
-                seriesId: body.seriesId,
-                storyId,
-                title: storyData.title || body.title || '',
-                storyData,
-                videoConfig: updatedVideoConfig,
-                sceneIndex: index,
-                type: 'audio',
-                baseUrl,
-                teamId: body.teamId,
-                userTier,
-                priority,
-            };
-            return env.STORY_QUEUE.send(message);
-        });
-        await Promise.all(audioPromises);
-        console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
+        const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
+            jobId,
+            userId: body.userId,
+            seriesId: body.seriesId,
+            storyId,
+            title: storyData.title || body.title || '',
+            storyData,
+            videoConfig: updatedVideoConfig,
+            sceneIndex: index,
+            type: 'audio' as const,
+            baseUrl,
+            teamId: body.teamId,
+            userTier,
+            priority,
+        }));
+        await sendQueueBatch(env.STORY_QUEUE, audioMessages);
+        console.log(`[Generate Story] Queued ${storyData.scenes.length} audio generation jobs via sendBatch (Priority: ${priority})`);
     } else {
         console.log(`[Generate Story] Audio generation skipped (enableVoiceOver=false)`);
     }
@@ -615,27 +610,23 @@ async function handleResumeVideoGeneration(
         // Use baseUrl from request or fallback to default
         const webhookBaseUrl = requestBaseUrl || body.baseUrl || 'https://create-story-worker.artflicks.workers.dev';
 
-        const videoPromises = scenesWithImages.map(({ index, scene }) => {
-            const generatedImageUrl = scene.generatedImageUrl;
-            const message: QueueMessage = {
-                jobId,
-                userId,
-                seriesId: videoConfig?.seriesId,
-                storyId,
-                title: storyData.title || '',
-                storyData,
-                videoConfig,
-                sceneIndex: index,
-                type: 'video',
-                baseUrl: webhookBaseUrl,
-                teamId: body.teamId,
-                userTier,
-                priority,
-                generatedImageUrl,
-            };
-            return env.STORY_QUEUE.send(message);
-        });
-        await Promise.all(videoPromises);
+        const videoMessages: QueueMessage[] = scenesWithImages.map(({ index, scene }) => ({
+            jobId,
+            userId,
+            seriesId: videoConfig?.seriesId,
+            storyId,
+            title: storyData.title || '',
+            storyData,
+            videoConfig,
+            sceneIndex: index,
+            type: 'video' as const,
+            baseUrl: webhookBaseUrl,
+            teamId: body.teamId,
+            userTier,
+            priority,
+            generatedImageUrl: scene.generatedImageUrl,
+        }));
+        await sendQueueBatch(env.STORY_QUEUE, videoMessages);
         
         console.log(`[Generate Story] Queued ${scenesWithImages.length} video generation jobs for story ${storyId} (out of ${storyData.scenes.length} scenes)`);
 

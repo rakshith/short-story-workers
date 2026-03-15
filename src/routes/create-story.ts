@@ -6,6 +6,7 @@ import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
+import { sendQueueBatch } from '../utils/queue-batch';
 
 /**
  * POST /create-story
@@ -223,8 +224,29 @@ async function queueGenerationJobs(
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
 
     // Queue visual generation jobs with tier and priority
-    const visualPromises = storyData.scenes.map((scene, index) => {
-        const message: QueueMessage = {
+    const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
+        jobId,
+        userId: body.userId,
+        seriesId: body.seriesId,
+        storyId,
+        title: storyData.title,
+        storyData,
+        videoConfig: body.videoConfig!,
+        sceneIndex: index,
+        type: mediaType as QueueMessage['type'],
+        baseUrl,
+        teamId: body.teamId,
+        userTier,
+        priority,
+    }));
+    await sendQueueBatch(env.STORY_QUEUE, visualMessages);
+    console.log(`[Create Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs via sendBatch (Priority: ${priority})`);
+
+    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
+    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
+    
+    if (enableVoiceOver) {
+        const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
             jobId,
             userId: body.userId,
             seriesId: body.seriesId,
@@ -233,41 +255,14 @@ async function queueGenerationJobs(
             storyData,
             videoConfig: body.videoConfig!,
             sceneIndex: index,
-            type: mediaType,
+            type: 'audio' as const,
             baseUrl,
             teamId: body.teamId,
             userTier,
             priority,
-        };
-        return env.STORY_QUEUE.send(message);
-    });
-    await Promise.all(visualPromises);
-    console.log(`[Create Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs (Priority: ${priority})`);
-
-    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
-    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
-    
-    if (enableVoiceOver) {
-        const audioPromises = storyData.scenes.map((scene, index) => {
-            const message: QueueMessage = {
-                jobId,
-                userId: body.userId,
-                seriesId: body.seriesId,
-                storyId,
-                title: storyData.title,
-                storyData,
-                videoConfig: body.videoConfig!,
-                sceneIndex: index,
-                type: 'audio',
-                baseUrl,
-                teamId: body.teamId,
-                userTier,
-                priority,
-            };
-            return env.STORY_QUEUE.send(message);
-        });
-        await Promise.all(audioPromises);
-        console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`);
+        }));
+        await sendQueueBatch(env.STORY_QUEUE, audioMessages);
+        console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs via sendBatch (Priority: ${priority})`);
     } else {
         console.log(`[Create Story] Audio generation skipped (enableVoiceOver=false)`);
     }
