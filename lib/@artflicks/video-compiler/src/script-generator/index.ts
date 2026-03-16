@@ -26,13 +26,14 @@ export class ScriptGenerator {
         const systemPrompt = template.getSystemPrompt(context);
         const schema: any = template.getSchema(context);
 
-        const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
+        const systemWithJson = `You must respond with a single valid JSON object only. Do not include markdown or any text outside the JSON.\n\n${systemPrompt}`;
+
+        // const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
         try {
             const { output, usage } = await (generateText as any)({
                 model: this.model,
-                system: systemPrompt,
+                system: systemWithJson,
                 prompt: context.prompt,
-                temperature,
                 output: Output.object({ schema }),
             }) as Awaited<ReturnType<typeof generateText>>;
 

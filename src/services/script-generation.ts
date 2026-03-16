@@ -1,12 +1,7 @@
-// Script generation service using Vercel AI SDK
-import { createOpenAI } from '@ai-sdk/openai';
+import { createAiGateway } from 'ai-gateway-provider';
+import { createOpenAI } from 'ai-gateway-provider/providers/openai';
 import { StoryTimeline } from '../types';
 import { Env } from '../types/env';
-
-// The following imports are no longer needed as logic is moved to @artflicks/video-compiler
-// import { generateText, LanguageModelUsage, Output } from 'ai';
-// import { getScriptWriterPrompt } from '../utils/systemPrompts';
-// import { SCRIPT_WRITER_SCENE_SCHEMA } from '../types/zod-types';
 
 export interface ScriptGenerationParams {
   prompt: string;
@@ -46,18 +41,23 @@ export async function generateScript(
   } = params;
 
   try {
-    const openai = createOpenAI({
-      apiKey: env.OPENAI_API_KEY,
-      baseURL: env.CF_AI_GATEWAY_URL,
-      headers: {
-        'cf-aig-authorization': `Bearer ${env.CF_AIG_TOKEN}`,
-      },
+    const accountId = env.CLOUDFLARE_ACCOUNT_ID;
+    const gateway = env.CF_AI_GATEWAY_ID;
+    if (!accountId || !gateway) {
+      throw new Error('CLOUDFLARE_ACCOUNT_ID and CF_AI_GATEWAY_ID are required for script generation');
+    }
+    const aigateway = createAiGateway({
+      accountId,
+      gateway,
+      apiKey: env.CF_AIG_TOKEN,
     });
+    
+    const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
+    const effectiveModel = 'gpt-5.2';
+    const model = aigateway(openai(effectiveModel));
 
     const { ScriptGenerator, ScriptTemplateIds } = await import('@artflicks/video-compiler');
-
-    const effectiveModel = 'gpt-5.2';
-    const generator = new ScriptGenerator(openai.chat(effectiveModel));
+    const generator = new ScriptGenerator(model);
 
     const result = await generator.generate({
       prompt,
