@@ -161,12 +161,25 @@ export function getNearestDuration(requestedDuration: number, modelName: string)
 
 /**
  * Detects model type from model name and returns appropriate config
+ * @param modelName - The model name
+ * @param enableImmersiveAudio - Optional flag to enable audio generation for supported models
  */
-export function getModelImageConfig(modelName: string): ModelImageConfig {
+export function getModelImageConfig(modelName: string, enableImmersiveAudio?: boolean): ModelImageConfig {
     const lowerModel = modelName.toLowerCase();
 
     for (const [pattern, config] of Object.entries(MODEL_IMAGE_CONFIGS)) {
         if (pattern !== 'default' && lowerModel.includes(pattern)) {
+            // Override generate_audio if enableImmersiveAudio is true and model supports it
+            if (enableImmersiveAudio && (lowerModel.includes('kling') || lowerModel.includes('wan'))) {
+                return {
+                    ...config,
+                    defaultInputs: {
+                        ...config.defaultInputs,
+                        generate_audio: true,
+                        audio_enabled: true,
+                    }
+                };
+            }
             return config;
         }
     }

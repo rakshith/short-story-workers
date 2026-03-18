@@ -9,7 +9,8 @@ import {
 
 const MIN_SCENE_DURATION = 0.1; // prevents zero-length scenes
 const TRANSITION_BUFFER = 0.2; // small gap so next scene does not cut active narration/caption
-
+/** When voiceover is present, duck video embedded audio so voiceover stays high priority. */
+const DUCKED_VIDEO_VOLUME_WITH_VOICEOVER = 0.25;
 function getCaptionDuration(scene: Story['scenes'][number]): number {
   if (!Array.isArray(scene.captions) || scene.captions.length === 0) return 0;
 
@@ -73,7 +74,14 @@ export class SceneAdapter implements StoryAdapter {
 
       /* ---------------- Visual Track ---------------- */
       if (scene.generatedVideoUrl) {
-        // Video clip takes priority over still image
+        // Video clip takes priority over still image.
+        // When enableImmersiveAudio is true, play the video's embedded audio (LLM-generated sound).
+        // Voiceover is high priority: when scene has voiceover, duck video embedded volume so it plays smooth underneath.
+        const playEmbeddedAudio = videoConfig.enableImmersiveAudio === true;
+        const hasVoiceover = Boolean(scene.audioUrl && resolvedAudioDuration > 0);
+        const videoVolume = playEmbeddedAudio
+          ? (hasVoiceover ? DUCKED_VIDEO_VOLUME_WITH_VOICEOVER : 1)
+          : undefined;
         visual.push({
           start: sceneStart,
           end: sceneEnd,
@@ -82,6 +90,8 @@ export class SceneAdapter implements StoryAdapter {
             url: scene.generatedVideoUrl,
             prompt: scene.imagePrompt ?? null,
             sceneNumber: scene.sceneNumber,
+            playEmbeddedAudio,
+            ...(playEmbeddedAudio && { videoVolume }),
           },
         });
       } else if (scene.generatedImageUrl || scene.imagePrompt) {

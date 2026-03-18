@@ -52,7 +52,7 @@ export async function triggerVideoGeneration(
         prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
     };
 
-    const modelConfig = getModelImageConfig(params.model);
+    const modelConfig = getModelImageConfig(params.model, params.videoConfig?.enableImmersiveAudio);
     if (modelConfig.defaultInputs) {
         Object.assign(input, modelConfig.defaultInputs);
     }

@@ -103,6 +103,7 @@ export interface VideoConfig {
   characterReferenceImages?: string[];
   sceneReviewRequired?: boolean; // If true, pause after image generation for user review
   videoGenerationTriggered?: boolean; // Track if videos have been initiated
+  enableImmersiveAudio?: boolean; // Enable audio generation for supported video models (e.g. Kling, Wan)
 }
 
 export interface Scene {

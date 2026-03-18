@@ -50,6 +50,8 @@ export interface VideoConfig {
   musicVolume?: number;
   enableCaptions?: boolean;
   captionStylePreset?: string;
+  /** When true, LLM-generated video (e.g. Kling, Wan) embedded audio is played; runtime receives playEmbeddedAudio on visual items. */
+  enableImmersiveAudio?: boolean;
   watermark?: {
     show: boolean;
     text: string;
