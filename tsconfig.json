@@ -7,7 +7,8 @@
     "module": "ES2022",
     "moduleResolution": "bundler",
     "types": [
-      "@cloudflare/workers-types"
+      "@cloudflare/workers-types",
+      "node"
     ],
     "jsx": "react",
     "strict": true,
@@ -21,6 +22,9 @@
     "paths": {
       "@artflicks/video-compiler": [
         "./lib/@artflicks/video-compiler/src/index.ts"
+      ],
+      "@artflicks/credit-tracker": [
+        "./lib/@artflicks/credit-tracker/src/index.ts"
       ]
     }
   },

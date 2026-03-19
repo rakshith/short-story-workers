@@ -72,6 +72,7 @@ export type UserTier = 'tier1' | 'tier2' | 'tier3' | 'tier4';
 export interface VideoConfig {
   id?: string;
   mediaType?: MediaType;
+  mediaTier?: string; // Tier for cost calculation (e.g., 'basic', 'pro', 'ultra', 'max')
   aspectRatio: string;
   model: string; // Video model for video generation
   imageModel?: string; // Image model for image generation (default: xai/grok-imagine-image only for skeleton + mediaType video 2-step refs; else flux-schnell)

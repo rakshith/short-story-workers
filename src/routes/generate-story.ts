@@ -7,10 +7,12 @@ import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { sendQueueBatch } from '../utils/queue-batch';
-import { trackAIUsageInternal } from '../services/usage-tracking';
+import { trackAIUsageInternal, trackAndDeductCredits } from '../services/usage-tracking';
 import { templateSkipsImageStep } from '../config/template-video-config';
 import { initCoordinator } from '../utils/coordinator';
 import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts-defaults';
+import { estimateVideoGeneration } from '@artflicks/credit-tracker';
+import type { CostResponse } from '@artflicks/credit-tracker';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -317,7 +319,33 @@ async function createStoryRecord(
         }, env);
         console.log(`[Generate Story] Progress updated to 25% - Script & story created`);
 
-        return createdStory;
+        // Calculate actual cost using centralized pricing
+        const costResponse = calculateGenerationCost(body, storyData);
+        console.log(`[Generate Story] Calculated cost:`, costResponse);
+
+        // Track and deduct credits in Cloudflare (for future autopilot support)
+        let creditsDeducted = false;
+        let creditError: string | undefined;
+        
+        if (costResponse.valid && costResponse.credits > 0) {
+            const deductResult = await trackAndDeductCredits(jobId, body.userId, createdStory.id, costResponse, env);
+            creditsDeducted = deductResult.deducted;
+            creditError = deductResult.error;
+            
+            if (!deductResult.deducted) {
+                console.warn(`[Generate Story] Credit deduction failed: ${deductResult.error}`);
+                // Continue with generation but flag the error
+            }
+        }
+
+        // Return response with cost - cast to include jobId and cost
+        return {
+            ...createdStory,
+            jobId,
+            cost: costResponse,
+            creditsDeducted,
+            creditError,
+        } as typeof createdStory & { jobId: string; cost: typeof costResponse; creditsDeducted: boolean; creditError?: string };
     } catch (error) {
         console.error(`[Generate Story] Failed to create story:`, error);
 
@@ -334,7 +362,7 @@ async function createStoryRecord(
             imagesGenerated: 0,
             audioGenerated: 0,
             error: isDuplicateTitle
-                ? `A story with the title "${storyData.title}" already exists`
+                ? `A story with the title "${storyData?.title || 'Unknown'}" already exists`
                 : errorMessage || 'Failed to create story',
             teamId: body.teamId,
         }, env);
@@ -343,11 +371,61 @@ async function createStoryRecord(
             {
                 error: isDuplicateTitle ? 'Duplicate story title' : 'Failed to create story',
                 message: isDuplicateTitle
-                    ? `A story with the title "${storyData.title}" already exists. Please use a different prompt or modify your request.`
+                    ? `A story with the title "${storyData?.title || 'Unknown'}" already exists. Please use a different prompt or modify your request.`
                     : errorMessage || 'Unknown error'
             },
             isDuplicateTitle ? 409 : 500
         );
+    }
+}
+
+/**
+ * Calculate generation cost using centralized pricing
+ * Uses @artflicks/credit-tracker for consistent calculation across UI and Cloudflare
+ */
+function calculateGenerationCost(body: GenerateStoryRequest, storyData: StoryTimeline): CostResponse {
+    try {
+        const mediaType = body.videoConfig?.mediaType; // 'image' or 'video' (UI format)
+        
+        // Use mediaTier from videoConfig for cost calculation
+        // This is set from selectedTier in UI
+        let modelTier = body.videoConfig?.mediaTier || 'basic';
+        
+        // Use duration from body or default to 15
+        const duration = body.duration || 15;
+        
+        // Determine media type for estimation
+        // UI sends: 'image' or 'video' (not 'ai-images' or 'ai-videos')
+        const mediaTypeStr = String(mediaType || 'video');
+        const isImage = (mediaTypeStr === 'ai-images' || mediaTypeStr === 'image');
+        const mediaTypeForCalc: 'ai-images' | 'ai-videos' = isImage ? 'ai-images' : 'ai-videos';
+        
+        console.log('[Calculate Cost] Request:', { mediaType, mediaTypeStr, isImage, modelTier, duration });
+        
+        const result = estimateVideoGeneration({
+            duration,
+            modelTier,
+            mediaType: mediaTypeForCalc,
+            enableImmersiveAudio: body.videoConfig?.enableImmersiveAudio,
+        });
+        
+        console.log('[Calculate Cost] Result:', result);
+        
+        return {
+            credits: result.totalCredits,
+            breakdown: result.breakdown,
+            currency: 'credits',
+            valid: true,
+        };
+    } catch (error) {
+        console.error('[Generate Story] Error calculating cost:', error);
+        return {
+            credits: 0,
+            breakdown: {},
+            currency: 'credits',
+            valid: false,
+            error: error instanceof Error ? error.message : 'Unknown error calculating cost',
+        };
     }
 }
 

@@ -1,0 +1,35 @@
+{
+  "name": "@artflicks/credit-tracker",
+  "version": "1.0.0",
+  "description": "Credit cost calculations for ArtFlicks - works in Next.js and Cloudflare Workers",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "type-check": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "keywords": [
+    "credits",
+    "pricing",
+    "artflicks"
+  ],
+  "author": "ArtFlicks",
+  "license": "MIT",
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.3.3"
+  }
+}
