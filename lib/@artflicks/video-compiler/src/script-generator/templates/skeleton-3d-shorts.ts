@@ -78,8 +78,8 @@ ${mediaType === 'video' ? `
 ══════════════════════════════════════════════════════════════════════
     ⚠️ MANDATORY VIDEO WORD COUNTS — OUTPUT REJECTED IF WRONG ⚠️
 ══════════════════════════════════════════════════════════════════════
-• duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count them. Over ${VIDEO_NARRATION_WPS.maxWords5s} = REJECTED.
-• duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count them. Outside this range = REJECTED.
+- duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count them. Over ${VIDEO_NARRATION_WPS.maxWords5s} = REJECTED.
+- duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count them. Outside this range = REJECTED.
 Before you output, count the words in each scene's narration. If any scene is wrong, fix it.
 ══════════════════════════════════════════════════════════════════════
 ` : ''}
@@ -347,9 +347,37 @@ FINAL SCENE — ENDING
 ══════════════════════════════════════════════════════════════
 Each scene:
 1. sceneNumber — sequential
-2. duration — word count ÷ 2.5, rounded
+2. duration — ${mediaType === 'video' ? '5 or 10 only (no other values). Pick based on narration length.' : 'word count ÷ 2.5, rounded UP (always ceiling, never floor or round-down)'}
 3. narration — ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. ONE flowing sentence matching user's tone.
 4. imagePrompt — English. MUST use the 5-PART STRUCTURE below.
+
+══════════════════════════════════════════════════════════════
+     ⚠️ CAPTION SYNC — SELF-CHECK BEFORE OUTPUT
+══════════════════════════════════════════════════════════════
+Captions are generated from narration audio. Caption duration MUST be
+equal to or slightly LESS than the scene duration — never exceed it.
+${mediaType === 'video' ? `Scene durations are FIXED (5 or 10 seconds). If captions exceed the
+scene, they get cut off. Count your words carefully.
+
+BEFORE FINALIZING EACH SCENE, verify word count fits:
+- 5s scene  → MAX ${VIDEO_NARRATION_WPS.maxWords5s} words (at ${VIDEO_NARRATION_WPS.wps5s} wps = exactly 5.0s)
+- 10s scene → MAX ${VIDEO_NARRATION_WPS.maxWords10s} words (at ${VIDEO_NARRATION_WPS.wps10s} wps = exactly 10.0s)
+
+If narration exceeds these — trim immediately. Do NOT change the scene duration.` : `TTS reads at ~2.0 words/sec — slower than the ÷ 2.5 estimate.
+Always round duration UP (ceiling) to give captions room to finish.
+
+BEFORE FINALIZING EACH SCENE, verify:
+  words ÷ 2.0 ≤ scene duration (using your rounded-up duration)
+
+SAFE WORD LIMITS (pre-calculated):
+- ${plan.perSceneDurationMin}s scene → MAX ${plan.perSceneDurationMin * 2} words
+- ${plan.perSceneDurationTarget}s scene → MAX ${plan.perSceneDurationTarget * 2} words
+- ${plan.perSceneDurationMax}s scene → MAX ${plan.perSceneDurationMax * 2} words
+
+If narration exceeds the limit for your scene duration — trim the narration.
+Do NOT reduce the scene duration.`}
+Trim filler words first. The story beat must survive — only word count shrinks.
+══════════════════════════════════════════════════════════════
 
 ══════════════════════════════════════════════════════════════
      IMAGE PROMPT STRUCTURE (CHARACTER-CENTRIC)
@@ -520,7 +548,8 @@ Example narration: "The chef couldn't find the garlic..."
 ✔ CAMERA section includes angle, lighting, "main subject centered", "character occupies 40-60% of the frame", depth/composition
 ✔ Camera movements ALTERNATE across scenes (never same direction twice in a row)
 ✔ Story setting from user premise included in each scene
-✔ duration = word count ÷ 2.5
+✔ duration = ${mediaType === 'video' ? '5 or 10 per scene (fixed — narration must fit within)' : 'ceil(word count ÷ 2.5) — always round UP'}
+✔ Caption sync: ${mediaType === 'video' ? `5s → max ${VIDEO_NARRATION_WPS.maxWords5s} words, 10s → max ${VIDEO_NARRATION_WPS.maxWords10s} words (narration must finish before scene ends)` : `words ÷ 2.0 ≤ scene duration (captions must finish within the scene)`}
 ✔ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s
 ✔ Story completes with a meaningful ending (match user's tone - joke if comedic, dramatic ending if dramatic)
 
