@@ -3,13 +3,13 @@ import { z } from 'zod';
 export interface ScriptGenerationContext {
     duration: number;
     prompt: string;
-    language?: string; // e.g. 'en', 'es', 'fr'
-    model?: string; // Model name for logging/tracking
+    language?: string;
+    model?: string;
     topic?: string;
-    // Media type: 'image' (default, ~3s scenes) or 'video' (~5-10s scenes)
     mediaType?: 'image' | 'video';
-    // Character consistency via reference images
-    characterReferenceImages?: string[]; // Array of image URLs for character reference
+    characterReferenceImages?: string[];
+    tools?: Record<string, any>;
+    maxSteps?: number;
 }
 
 export interface ScriptGenerationResult {

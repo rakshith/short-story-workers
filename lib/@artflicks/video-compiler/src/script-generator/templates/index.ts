@@ -2,12 +2,14 @@ import { ScriptTemplate } from '../types';
 import { YouTubeShortsTemplate } from './youtube-shorts';
 import { CharacterStoryTemplate } from './character-story';
 import { Skeleton3DShortsTemplate } from './skeleton-3d-shorts';
+import { BodyScienceShortsTemplate } from './body-science-shorts';
 import { registry } from '../registry';
 
 export const ScriptTemplateIds = {
     YOUTUBE_SHORTS: 'youtube-shorts',
     CHARACTER_STORY: 'character-story',
     SKELETON_3D_SHORTS: 'skeleton-3d-shorts',
+    BODY_SCIENCE_SHORTS: 'body-science-shorts',
 } as const;
 
 export type ScriptTemplateId = typeof ScriptTemplateIds[keyof typeof ScriptTemplateIds];
@@ -16,6 +18,7 @@ export type ScriptTemplateId = typeof ScriptTemplateIds[keyof typeof ScriptTempl
 registry.register(new YouTubeShortsTemplate());
 registry.register(new CharacterStoryTemplate());
 registry.register(new Skeleton3DShortsTemplate());
+registry.register(new BodyScienceShortsTemplate());
 
 export { registry };
 

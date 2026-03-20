@@ -1,5 +1,6 @@
 import { createAiGateway } from 'ai-gateway-provider';
 import { createOpenAI } from 'ai-gateway-provider/providers/openai';
+import { ScriptAgentRouter } from '@artflicks/video-compiler';
 import { StoryTimeline } from '../types';
 import { Env } from '../types/env';
 
@@ -9,9 +10,7 @@ export interface ScriptGenerationParams {
   language?: string;
   model?: string;
   templateId?: string;
-  // Media type: 'image' (many short scenes) or 'video' (fewer longer scenes)
   mediaType?: 'image' | 'video';
-  // Allow passing extra context fields for specific templates
   characterReferenceImages?: string[];
 }
 
@@ -34,7 +33,6 @@ export async function generateScript(
     prompt,
     duration,
     language = 'en',
-    model,
     templateId,
     mediaType,
     characterReferenceImages
@@ -51,22 +49,20 @@ export async function generateScript(
       gateway,
       apiKey: env.CF_AIG_TOKEN,
     });
-    
+
     const openai = createOpenAI({ apiKey: env.OPENAI_API_KEY });
     const effectiveModel = 'gpt-5.2';
-    const model = aigateway(openai(effectiveModel));
+    const languageModel = aigateway(openai(effectiveModel));
+    const router = new ScriptAgentRouter(languageModel);
 
-    const { ScriptGenerator, ScriptTemplateIds } = await import('@artflicks/video-compiler');
-    const generator = new ScriptGenerator(model);
-
-    const result = await generator.generate({
+    const result = await router.run(templateId, {
       prompt,
       duration,
       language,
       model: effectiveModel,
       mediaType,
-      characterReferenceImages
-    }, templateId || ScriptTemplateIds.YOUTUBE_SHORTS);
+      characterReferenceImages,
+    });
 
     if (!result.success || !result.script) {
       return {
@@ -77,9 +73,8 @@ export async function generateScript(
 
     const output = result.script;
 
-    // Convert to StoryTimeline format
     const story: StoryTimeline = {
-      id: '', // Will be set later
+      id: '',
       title: output.title,
       totalDuration: output.totalDuration || duration,
       scenes: (output.scenes || []).map((scene: any) => ({

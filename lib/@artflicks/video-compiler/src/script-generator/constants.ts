@@ -85,11 +85,11 @@ export const VIDEO_ALLOWED_SCENE_DURATIONS = [5, 10] as const;
  */
 export const VIDEO_NARRATION_WPS = {
     wps5s: 2.0,
-    wps10s: 2.6,
+    wps10s: 2.4,
     minWords5s: 6,   // 5s scene minimum for substance (not bare 1–2 words)
     maxWords5s: 10,  // 10 words max at 2.0 wps = 5s — never exceed or TTS exceeds scene
-    maxWords10s: 26, // 26 words max at 2.6 wps = 10s — never exceed or TTS exceeds scene
-    minWords10s: 15, // 10s scene: 15–26 words at 2.6 wps — enough substance, never exceed 26 or audio exceeds 10s
+    maxWords10s: 24, // 24 words max at 2.4 wps = 10s — never exceed or TTS exceeds scene
+    minWords10s: 15, // 10s scene: 15–24 words at 2.4 wps — enough substance, never exceed 24 or audio exceeds 10s
 } as const;
 
 /**

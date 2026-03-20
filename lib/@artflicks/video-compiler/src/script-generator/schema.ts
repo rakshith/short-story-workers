@@ -53,6 +53,28 @@ const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => z.obj
 });
 
 // ═══════════════════════════════════════════════════════════════
+// METADATA SCHEMA (YouTube SEO + monetization signals)
+// ═══════════════════════════════════════════════════════════════
+
+const youtubeMetadataSchema = z.object({
+    youtubeTitle: z.string().describe(
+        'SEO-optimized YouTube title, 60–70 characters. Include the core concept and setting. Use power words: "Actually", "Nobody Told You", "What Happens When", "The Day". Match the hook format used in Scene 1.'
+    ),
+    youtubeDescription: z.string().describe(
+        'YouTube description. First 150 characters are critical (shown before "show more"). Open with the hook premise as a statement, not a question. Include 2–3 relevant keywords naturally.'
+    ),
+    hashtags: z.array(z.string()).min(6).max(8).describe(
+        '6–8 hashtags. Mix: 2 broad (#Shorts #YouTubeShorts), 2 topic-specific, 2 niche. Do not include the # symbol — it will be added automatically.'
+    ),
+    thumbnailConcept: z.string().describe(
+        'One sentence describing the strongest visual frame for the thumbnail. Format: "[Character action] + [setting detail] + [text overlay suggestion]".'
+    ),
+    hookFormat: z.enum(['A', 'B', 'C', 'D']).describe(
+        'Which hook format was used in Scene 1. A = What if/Imagine if question. B = Day X cold open. C = Nobody told you opener. D = Pure sensory cold open.'
+    ),
+});
+
+// ═══════════════════════════════════════════════════════════════
 // DYNAMIC SCHEMA FACTORIES
 //
 // Duration compliance is achieved through generation-time
@@ -80,6 +102,7 @@ export function createYouTubeShortsSchema(constraints: SchemaConstraints) {
         title: z.string().describe('Short, punchy title (3-6 words MAX). Catchy, intriguing, or hook-driven.'),
         totalDuration: z.number().describe(`Estimated total duration in seconds (sum of all scene durations). Must be close to ${durationSeconds}s.`),
         scenes: scenesArray.describe(scenesDescription),
+        metadata: youtubeMetadataSchema,
     });
 }
 
@@ -101,6 +124,7 @@ export function createCharacterStorySchema(constraints: SchemaConstraints) {
         title: z.string().describe('Compelling story title (4-8 words). Should hint at the character journey.'),
         totalDuration: z.number().describe(`Estimated total duration in seconds (sum of all scene durations). Must be close to ${durationSeconds}s.`),
         scenes: scenesArray.describe(scenesDescription),
+        metadata: youtubeMetadataSchema,
     });
 }
 
@@ -112,3 +136,5 @@ export const CHARACTER_STORY_SCHEMA = createCharacterStorySchema({ minScenes: 1,
 
 // Legacy alias
 export const SCRIPT_WRITER_SCENE_SCHEMA = YOUTUBE_SHORTS_SCHEMA;
+
+

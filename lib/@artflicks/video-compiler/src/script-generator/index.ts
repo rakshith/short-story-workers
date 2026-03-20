@@ -29,12 +29,17 @@ export class ScriptGenerator {
         const systemWithJson = `You must respond with a single valid JSON object only. Do not include markdown or any text outside the JSON.\n\n${systemPrompt}`;
 
         // const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
+        const hasTools = context.tools && Object.keys(context.tools).length > 0;
         try {
             const { output, usage } = await (generateText as any)({
                 model: this.model,
                 system: systemWithJson,
                 prompt: context.prompt,
                 output: Output.object({ schema }),
+                ...(hasTools && {
+                    tools: context.tools,
+                    maxSteps: context.maxSteps ?? 3,
+                }),
             }) as Awaited<ReturnType<typeof generateText>>;
 
             return {
