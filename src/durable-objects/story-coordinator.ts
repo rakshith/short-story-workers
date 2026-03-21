@@ -187,6 +187,14 @@ export class StoryCoordinator {
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
 
+    // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
+    const updatedSceneForGate = this.storyState.scenes[update.sceneIndex];
+    const sceneHasImage = !!(updatedSceneForGate?.generatedImageUrl);
+    const sceneHasAudio = !!(updatedSceneForGate?.audioDuration && updatedSceneForGate.audioDuration > 0);
+    const isSceneReadyForVideo = sceneHasImage && (sceneHasAudio || !voiceOverEnabled);
+    const sceneImageUrl = updatedSceneForGate?.generatedImageUrl || null;
+    const sceneAudioDuration: number = updatedSceneForGate?.audioDuration || 0;
+
     return new Response(JSON.stringify({
       success: true,
       imagesCompleted: this.storyState.imagesCompleted,
@@ -195,6 +203,9 @@ export class StoryCoordinator {
       totalScenes: this.storyState.totalScenes,
       isComplete,
       isImagesCompleteForReview,
+      isSceneReadyForVideo,
+      sceneImageUrl,
+      sceneAudioDuration,
     }));
   }
 
@@ -344,6 +355,15 @@ export class StoryCoordinator {
 
     console.log(`[StoryCoordinator] Audio updated for scene ${update.sceneIndex}, total: ${this.storyState.audioCompleted}/${this.storyState.totalScenes}`);
 
+    // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
+    const voiceOverEnabledAudio = this.storyState.videoConfig?.enableVoiceOver !== false;
+    const updatedSceneForAudioGate = this.storyState.scenes[update.sceneIndex];
+    const sceneHasImageAudio = !!(updatedSceneForAudioGate?.generatedImageUrl);
+    const sceneHasAudioAudio = !!(updatedSceneForAudioGate?.audioDuration && updatedSceneForAudioGate.audioDuration > 0);
+    const isSceneReadyForVideoAudio = sceneHasImageAudio && (sceneHasAudioAudio || !voiceOverEnabledAudio);
+    const sceneImageUrlAudio = updatedSceneForAudioGate?.generatedImageUrl || null;
+    const sceneAudioDurationAudio: number = updatedSceneForAudioGate?.audioDuration || 0;
+
     return new Response(JSON.stringify({
       success: true,
       imagesCompleted: this.storyState.imagesCompleted,
@@ -351,6 +371,9 @@ export class StoryCoordinator {
       audioCompleted: this.storyState.audioCompleted,
       totalScenes: this.storyState.totalScenes,
       isComplete,
+      isSceneReadyForVideo: isSceneReadyForVideoAudio,
+      sceneImageUrl: sceneImageUrlAudio,
+      sceneAudioDuration: sceneAudioDurationAudio,
     }));
   }
 

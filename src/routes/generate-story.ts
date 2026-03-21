@@ -235,7 +235,8 @@ async function generateAIScript(
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: body.videoConfig?.templateId,
             mediaType: body.videoConfig?.mediaType || 'image',
-            characterReferenceImages: body.videoConfig?.characterReferenceImages
+            characterReferenceImages: body.videoConfig?.characterReferenceImages,
+            speed: body.videoConfig?.speed,
         },
         env
     );

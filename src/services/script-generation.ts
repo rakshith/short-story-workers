@@ -12,6 +12,7 @@ export interface ScriptGenerationParams {
   templateId?: string;
   mediaType?: 'image' | 'video';
   characterReferenceImages?: string[];
+  speed?: number; // TTS playback speed passed from videoConfig
 }
 
 export interface ScriptGenerationResult {
@@ -35,7 +36,8 @@ export async function generateScript(
     language = 'en',
     templateId,
     mediaType,
-    characterReferenceImages
+    characterReferenceImages,
+    speed,
   } = params;
 
   try {
@@ -62,6 +64,7 @@ export async function generateScript(
       model: effectiveModel,
       mediaType,
       characterReferenceImages,
+      speed,
     });
 
     if (!result.success || !result.script) {

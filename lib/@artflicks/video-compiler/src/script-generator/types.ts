@@ -10,6 +10,7 @@ export interface ScriptGenerationContext {
     characterReferenceImages?: string[];
     tools?: Record<string, any>;
     maxSteps?: number;
+    speed?: number; // TTS playback speed (0.7–1.2) — used to calculate scene count
 }
 
 export interface ScriptGenerationResult {

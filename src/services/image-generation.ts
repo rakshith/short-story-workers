@@ -69,7 +69,7 @@ export async function triggerReplicateGeneration(
 
   if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY || 
       params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
-      params.videoConfig.templateId === 'skeleton-3d-shorts') {
+      params.videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS) {
     // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
     console.log('[IMAGE-GEN] Template ID:', params.videoConfig.templateId);
     console.log('[IMAGE-GEN] Character References:', params.videoConfig?.characterReferenceImages);

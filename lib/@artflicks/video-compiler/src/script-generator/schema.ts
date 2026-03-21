@@ -129,10 +129,37 @@ export function createCharacterStorySchema(constraints: SchemaConstraints) {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// BODY SCIENCE SHORTS SCHEMA
+//
+// Separate scene shape: narration (10-12 words), imagePrompt
+// (text-to-image), videoPrompt (image-to-video). No per-scene
+// duration — that is calculated downstream after generation.
+// ═══════════════════════════════════════════════════════════════
+
+const createBodyScienceSceneSchema = () => z.object({
+    sceneNumber: z.number().describe('Scene number in sequence'),
+    narration: z.string().describe('STRICT: EXACTLY 10–12 words — minimum 10, maximum 12. Complete meaningful thought. No fragments. Second-person ("you"). Must be speakable in under 7 seconds.'),
+    imagePrompt: z.string().describe('Detailed text-to-image prompt following all locked visual rules, anatomical accuracy lock, solid teal background, 9:16 vertical framing. ABSOLUTELY NO TEXT/TYPOGRAPHY/LETTERS in the image.'),
+    videoPrompt: z.string().describe('Detailed image-to-video animation prompt: cinematic motion, eye emotion shifts, lighting reflections, no text at any moment. Include narration line with alternating male/female voice consistency (odd scenes male, even scenes female).'),
+});
+
+export function createBodyScienceShortsSchema(constraints: { minScenes: number; maxScenes?: number }) {
+    return z.object({
+        title: z.string().describe('Title starting with "What Happens To Your Body If…" — 8–14 words, ends with question mark. Use EXACT terms from user premise.'),
+        scenes: z.array(createBodyScienceSceneSchema())
+            .min(constraints.minScenes, `Must have at least ${constraints.minScenes} micro-scenes`)
+            .max(constraints.maxScenes ?? 20, `Must have at most ${constraints.maxScenes ?? 20} micro-scenes`),
+        fullNarration: z.string().describe('Complete separate narration block — all narration lines joined in order, one per line.'),
+        metadata: youtubeMetadataSchema,
+    });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // STATIC SCHEMAS (backward-compatible defaults, no strict enforcement)
 // ═══════════════════════════════════════════════════════════════
 export const YOUTUBE_SHORTS_SCHEMA = createYouTubeShortsSchema({ minScenes: 1, totalWordsMin: 1, durationSeconds: 0 });
 export const CHARACTER_STORY_SCHEMA = createCharacterStorySchema({ minScenes: 1, totalWordsMin: 1, durationSeconds: 0 });
+export const BODY_SCIENCE_SHORTS_SCHEMA = createBodyScienceShortsSchema({ minScenes: 8 });
 
 // Legacy alias
 export const SCRIPT_WRITER_SCENE_SCHEMA = YOUTUBE_SHORTS_SCHEMA;

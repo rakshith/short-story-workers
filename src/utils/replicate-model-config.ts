@@ -86,7 +86,7 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'openai/sora-2': { singleField: 'input_reference' },
 
     // google/veo-3.1-fast
-    'google/veo-3.1-fast': { singleField: 'image' },
+    'google/veo-3.1-fast': { singleField: 'image', defaultInputs: { generate_audio: false } },
 
     // bytedance/seedance-1-pro-fast
     'bytedance/seedance-1-pro-fast': { singleField: 'image' },

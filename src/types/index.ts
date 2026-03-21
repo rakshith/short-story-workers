@@ -105,6 +105,7 @@ export interface VideoConfig {
   sceneReviewRequired?: boolean; // If true, pause after image generation for user review
   videoGenerationTriggered?: boolean; // Track if videos have been initiated
   enableImmersiveAudio?: boolean; // Enable audio generation for supported video models (e.g. Kling, Wan)
+  speed?: number; // TTS playback speed (0.7–1.2), default 1.0 — affects scene count calculation
 }
 
 export interface Scene {
@@ -114,6 +115,8 @@ export interface Scene {
   details: string;
   narration: string;
   imagePrompt: string;
+  /** Image-to-video animation prompt (body-science-shorts and similar templates) */
+  videoPrompt?: string;
   cameraAngle: string;
   mood: string;
   // Image generation tracking

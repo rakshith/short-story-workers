@@ -5,6 +5,7 @@ import { generateSceneAudio } from './audio-generation';
 import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
+import { ScriptTemplateIds } from '@artflicks/video-compiler';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -40,7 +41,10 @@ export async function processSceneImage(
     // For skeleton + mediaType video (2-step): default to xai/grok-imagine-image for reference images.
     //   Only honour imageModel (explicit image override), NOT videoConfig.model (that's the video model).
     // For everything else: imageModel > model > flux-schnell.
-    const isSkeletonVideoRefs = videoConfig.templateId === 'skeleton-3d-shorts' && videoConfig.mediaType === 'video';
+    const isSkeletonVideoRefs = (
+      videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
+      videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS
+    ) && videoConfig.mediaType === 'video';
     const defaultImageModel = isSkeletonVideoRefs ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
     const imageModel = isSkeletonVideoRefs
       ? (videoConfig.imageModel || defaultImageModel)
@@ -179,7 +183,11 @@ export async function processSceneVideo(
       userId,
     });
 
-    const prompt = scene.imagePrompt;
+    const prompt = scene.videoPrompt || scene.imagePrompt;
+    processorLogger.debug(`Video prompt source for scene ${sceneIndex}`, {
+      sceneIndex,
+      source: scene.videoPrompt ? 'videoPrompt' : 'imagePrompt (fallback)',
+    });
 
     // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
@@ -200,7 +208,7 @@ export async function processSceneVideo(
         width: 512,
         height: 512,
         resolution: videoConfig.resolution,
-        duration: scene.duration,
+        duration: message.sceneDuration ?? scene.audioDuration ?? scene.duration,
         aspect_ratio: videoConfig.aspectRatio,
         seed: videoConfig.preset.seed,
         videoConfig: videoConfig,

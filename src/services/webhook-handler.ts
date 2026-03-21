@@ -6,6 +6,7 @@ import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config
 import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { updateCoordinatorImage, updateCoordinatorVideo, getCoordinatorProgress } from '../utils/coordinator';
+import { calcVideoDelaySeconds } from '../utils/queue-batch';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -187,36 +188,46 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                     }
                     return;
                 }
-                apiLogger.info(`Auto-generating video for scene ${sceneIndex} using image: ${resultUrl}`, { storyId });
+
                 const videoConfig = storyData.video_config;
                 const jobId = jobData.job_id;
-                
-                // Queue video with generated image URL as reference - use dynamic origin
-                const queueMessage = {
-                    jobId,
-                    userId: jobData.user_id,
-                    seriesId: videoConfig.seriesId,
-                    storyId,
-                    title: storyData.story?.title || '',
-                    storyData: storyData.story,
-                    videoConfig,
-                    sceneIndex,
-                    type: 'video' as const,
-                    baseUrl: origin || 'https://create-story-worker-staging.matrixrak.workers.dev',
-                    teamId: jobData.team_id,
-                    userTier: videoConfig.userTier,
-                    priority: 3, // Default priority
-                    generatedImageUrl: resultUrl, // Use the generated image!
-                };
-                
-                await env.STORY_QUEUE.send(queueMessage);
-                apiLogger.info(`Queued video generation for scene ${sceneIndex} with reference image`, { storyId, imageUrl: resultUrl });
 
-                // Incrementally sync image to DB so it's not lost if job fails before videos complete
+                if (status.isSceneReadyForVideo) {
+                    // Audio already done for this scene — queue video now with real audio duration
+                    apiLogger.info(`Scene ${sceneIndex} image+audio both ready, queueing video (audioDuration: ${status.sceneAudioDuration}s)`, { storyId });
+                    const queueMessage = {
+                        jobId,
+                        userId: jobData.user_id,
+                        seriesId: videoConfig.seriesId,
+                        storyId,
+                        title: storyData.story?.title || '',
+                        storyData: storyData.story,
+                        videoConfig,
+                        sceneIndex,
+                        type: 'video' as const,
+                        baseUrl: origin || 'https://create-story-worker-staging.matrixrak.workers.dev',
+                        teamId: jobData.team_id,
+                        userTier: videoConfig.userTier,
+                        priority: 3,
+                        generatedImageUrl: resultUrl,
+                        sceneDuration: (status.sceneAudioDuration && status.sceneAudioDuration > 0)
+                            ? status.sceneAudioDuration
+                            : undefined,
+                    };
+                    await env.STORY_QUEUE.send(queueMessage, {
+                        delaySeconds: calcVideoDelaySeconds(sceneIndex, status.totalScenes ?? 1),
+                    });
+                    apiLogger.info(`Queued video for scene ${sceneIndex} with reference image and audioDuration=${status.sceneAudioDuration}s`, { storyId, imageUrl: resultUrl });
+                } else {
+                    // Audio not done yet — video will be queued from the audio completion path
+                    apiLogger.info(`Scene ${sceneIndex} image done, audio pending — video queued when audio completes`, { storyId });
+                }
+
+                // Incrementally sync image to DB regardless of whether video was queued
                 const { syncPartialStory } = await import('../queue-consumer');
                 await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
 
-                // Return early - don't mark complete yet, let video webhooks handle final completion
+                // Return early — completion handled by the video webhook
                 return;
             }
         }

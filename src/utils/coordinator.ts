@@ -15,6 +15,12 @@ export interface CoordinatorUpdateResult {
     audioCompleted: number;
     totalScenes: number;
     isCancelled?: boolean;
+    /** True when both the generated image URL and the real audio duration are present for this scene */
+    isSceneReadyForVideo?: boolean;
+    /** The generated image URL stored on this scene in the DO */
+    sceneImageUrl?: string | null;
+    /** The real ElevenLabs audio duration stored on this scene (seconds) */
+    sceneAudioDuration?: number;
 }
 
 export interface CoordinatorProgressResult {

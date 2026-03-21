@@ -8,6 +8,7 @@ import { sortMessagesByPriority, canProcessJob } from './services/concurrency-ma
 import { updateCoordinatorImage, updateCoordinatorVideo, updateCoordinatorAudio, getCoordinatorProgress, finalizeCoordinator } from './utils/coordinator';
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
+import { calcVideoDelaySeconds } from './utils/queue-batch';
 
 /**
  * Dead-letter queue handler - Logs and acks messages that exhausted retries or were sent for audit.
@@ -173,6 +174,41 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           captions: result.captions,
           audioError: result.success ? undefined : result.error,
         });
+
+        // Gate: if audio arrived second (image was already done), queue video now with real duration
+        if (
+          result.success &&
+          status.isSceneReadyForVideo &&
+          status.sceneImageUrl &&
+          data.videoConfig?.mediaType === 'video' &&
+          !data.videoConfig?.sceneReviewRequired
+        ) {
+          const videoQueueMessage = {
+            jobId: data.jobId,
+            userId: data.userId,
+            seriesId: data.seriesId,
+            storyId: data.storyId,
+            title: data.storyData.title || '',
+            storyData: data.storyData,
+            videoConfig: data.videoConfig,
+            sceneIndex: data.sceneIndex,
+            type: 'video' as const,
+            baseUrl: data.baseUrl,
+            teamId: data.teamId,
+            userTier: data.userTier,
+            priority: 3,
+            generatedImageUrl: status.sceneImageUrl,
+            sceneDuration: result.audioDuration > 0 ? result.audioDuration : undefined,
+          };
+          await env.STORY_QUEUE.send(videoQueueMessage, {
+            delaySeconds: calcVideoDelaySeconds(data.sceneIndex, status.totalScenes ?? 1),
+          });
+          queueLogger.info(`Queued video for scene ${data.sceneIndex} after audio completion (audioDuration: ${result.audioDuration}s)`, {
+            sceneIndex: data.sceneIndex,
+            audioDuration: result.audioDuration,
+          });
+        }
+
         if (status.isComplete) {
           if (data.videoConfig?.sceneReviewRequired) {
             // Audio completed last in review mode - transition to awaiting_review

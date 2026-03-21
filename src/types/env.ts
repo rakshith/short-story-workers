@@ -20,6 +20,8 @@ export interface QueueMessage {
   userTier?: string;
   priority?: number;
   generatedImageUrl?: string; // For video generation - use generated image as reference
+  /** Real clip duration derived from ElevenLabs audioDuration; overrides scene.duration when present */
+  sceneDuration?: number;
 }
 
 /** Webhook queue: durable processing so Replicate always gets 200 without waitUntil eviction */
