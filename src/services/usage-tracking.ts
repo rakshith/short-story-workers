@@ -6,25 +6,14 @@ import type { CostResponse } from '@artflicks/credit-tracker';
 // Cloudflare pricing
 const CLOUDFLARE_CPU_COST = 0.00000003; // $0.03 per million CPU-ms
 
-/**
- * Detect environment type from worker URL subdomain
- * staging: create-story-worker-staging.*.workers.dev
- * prod: create-story-worker-production.*.workers.dev
- */
 function detectEnvType(env: Env): 'prod' | 'test' {
-  const appUrl = env.APP_URL || '';
-  
-  // Check subdomain patterns
-  if (appUrl.includes('-staging.')) {
-    return 'test'; // Staging uses test credit pool
-  }
-  if (appUrl.includes('-production.')) {
-    return 'prod'; // Production uses prod credit pool
-  }
-  
-  // Default to test for safety (won't accidentally deduct from prod)
-  console.warn('[Usage Tracking] Could not detect environment from APP_URL, defaulting to test');
-  return 'test';
+  const environment = env.ENVIRONMENT?.toLowerCase();
+
+  if (environment === 'production') return 'prod';
+  if (environment === 'staging') return 'test';
+
+  console.warn(`[Usage Tracking] Unknown ENVIRONMENT value: "${environment}", defaulting to test`);
+  return 'prod';
 }
 
 /**

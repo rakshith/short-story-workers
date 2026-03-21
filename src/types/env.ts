@@ -72,6 +72,7 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CF_AI_GATEWAY_ID?: string;
   CF_AI_GATEWAY_URL: string;
+  ENVIRONMENT: string;
   APP_URL?: string;
 }
 
