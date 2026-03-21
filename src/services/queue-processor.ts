@@ -20,6 +20,7 @@ export interface JobStatus {
   error?: string;
   storyId?: string;
   teamId?: string | null;
+  estimatedDurationSeconds?: number;
 }
 
 /**
@@ -404,6 +405,7 @@ export async function updateJobStatus(
       story_id: status.storyId,
       updated_at: new Date().toISOString(),
       team_id: status.teamId || null,
+      estimated_duration_seconds: status.estimatedDurationSeconds,
     }, {
       onConflict: 'job_id',
     });

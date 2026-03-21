@@ -13,6 +13,7 @@ import { initCoordinator } from '../utils/coordinator';
 import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts-defaults';
 import { estimateVideoGeneration } from '@artflicks/credit-tracker';
 import type { CostResponse } from '@artflicks/credit-tracker';
+import { estimateGenerationSeconds } from '../services/estimation';
 
 interface GenerateStoryRequest {
     prompt: string;
@@ -116,8 +117,13 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         const usageData = scriptResult.usage;
         const storyData = scriptResult.story;
 
+        const estimatedDurationSeconds = estimateGenerationSeconds(
+            storyData.scenes,
+            body.videoConfig?.model || 'default'
+        );
+
         // Create initial story in database
-        const createResult = await createStoryRecord(jobId, body, storyData, env);
+        const createResult = await createStoryRecord(jobId, body, storyData, estimatedDurationSeconds, env);
 
         if (createResult instanceof Response) {
             // Track with jobId if story creation failed (still incurred cost)
@@ -172,6 +178,7 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             message: 'Story generation started',
             storyId,
             generatedScript: storyData,
+            estimated_duration_seconds: estimatedDurationSeconds,
         });
     } catch (error) {
         console.error('[Generate Story] Error:', error);
@@ -276,6 +283,7 @@ async function createStoryRecord(
     jobId: string,
     body: GenerateStoryRequest,
     storyData: StoryTimeline,
+    estimatedDurationSeconds: number,
     env: Env
 ): Promise<{ id: string } | Response> {
     try {
@@ -317,6 +325,7 @@ async function createStoryRecord(
             audioGenerated: 0,
             storyId: createdStory.id,
             teamId: body.teamId,
+            estimatedDurationSeconds,
         }, env);
         console.log(`[Generate Story] Progress updated to 25% - Script & story created`);
 
