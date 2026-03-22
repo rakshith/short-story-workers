@@ -226,14 +226,13 @@ async function queueGenerationJobs(
 ): Promise<void> {
     const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
 
-    // Queue visual generation jobs with tier and priority
+    // Queue visual generation jobs with tier and priority (no storyData - workers fetch from DO)
     const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
         jobId,
         userId: body.userId,
         seriesId: body.seriesId,
         storyId,
         title: storyData.title,
-        storyData,
         videoConfig: body.videoConfig!,
         sceneIndex: index,
         type: mediaType as QueueMessage['type'],
@@ -255,7 +254,6 @@ async function queueGenerationJobs(
             seriesId: body.seriesId,
             storyId,
             title: storyData.title,
-            storyData,
             videoConfig: body.videoConfig!,
             sceneIndex: index,
             type: 'audio' as const,

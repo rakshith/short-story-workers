@@ -484,14 +484,13 @@ async function queueGenerationJobs(
     const skipsImageStep = templateSkipsImageStep(templateId);
     const shouldQueueVideos = mediaType === 'image' || (mediaType === 'video' && skipsImageStep);
 
-    // Queue visual generation jobs (images or videos based on shouldQueueVideos)
+    // Queue visual generation jobs (images or videos based on shouldQueueVideos) - no storyData, workers fetch from DO
     const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
         jobId,
         userId: body.userId,
         seriesId: body.seriesId,
         storyId,
         title: storyData.title || body.title || '',
-        storyData,
         videoConfig: body.videoConfig,
         sceneIndex: index,
         type: shouldQueueVideos ? mediaType : 'image' as const,
@@ -513,7 +512,7 @@ async function queueGenerationJobs(
         console.log(`[Generate Story] Template uses direct text-to-video (no image step)`);
     }
 
-    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
+    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false) - no storyData, workers fetch from DO
     const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
     
     if (enableVoiceOver) {
@@ -523,7 +522,6 @@ async function queueGenerationJobs(
             seriesId: body.seriesId,
             storyId,
             title: storyData.title || body.title || '',
-            storyData,
             videoConfig: body.videoConfig,
             sceneIndex: index,
             type: 'audio' as const,
@@ -699,7 +697,6 @@ async function handleResumeVideoGeneration(
             seriesId: videoConfig?.seriesId,
             storyId,
             title: storyData.title || '',
-            storyData,
             videoConfig,
             sceneIndex: index,
             type: 'video' as const,

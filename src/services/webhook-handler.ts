@@ -201,7 +201,6 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                         seriesId: videoConfig.seriesId,
                         storyId,
                         title: storyData.story?.title || '',
-                        storyData: storyData.story,
                         videoConfig,
                         sceneIndex,
                         type: 'video' as const,

@@ -6,6 +6,19 @@
  * response themselves.
  */
 
+import { Env } from '../types/env';
+
+export function getCoordinator(storyId: string, env: Env): any {
+    const id = env.STORY_COORDINATOR.idFromName(storyId);
+    return env.STORY_COORDINATOR.get(id);
+}
+
+export async function getSceneFromCoordinator(storyId: string, sceneIndex: number, env: Env): Promise<any | null> {
+    const coordinator = getCoordinator(storyId, env);
+    const progress = await getCoordinatorProgress(coordinator);
+    return progress.scenes[sceneIndex] || null;
+}
+
 export interface CoordinatorUpdateResult {
     success: boolean;
     isComplete: boolean;

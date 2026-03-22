@@ -11,7 +11,7 @@ export interface QueueMessage {
   seriesId?: string;
   storyId: string;
   title: string;
-  storyData: StoryTimeline;
+  storyData?: StoryTimeline; // Optional - workers fetch from DO if not provided
   videoConfig: VideoConfig;
   sceneIndex: number;
   type: 'image' | 'video' | 'audio' | 'finalize';

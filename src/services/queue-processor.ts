@@ -6,6 +6,7 @@ import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { getSceneFromCoordinator } from '../utils/coordinator';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -31,7 +32,7 @@ export async function processSceneImage(
   env: Env
 ): Promise<{ sceneIndex: number; imageUrl: string | null; success: boolean; error?: string }> {
   const { storyData, videoConfig, userId, seriesId, storyId, sceneIndex } = message;
-  const scene = storyData.scenes[sceneIndex];
+  const scene = storyData?.scenes[sceneIndex] ?? await getSceneFromCoordinator(storyId, sceneIndex, env);
 
   if (!scene) {
     return { sceneIndex, imageUrl: null, success: false, error: 'Scene not found' };
@@ -168,7 +169,7 @@ export async function processSceneVideo(
   env: Env
 ): Promise<{ sceneIndex: number; videoUrl: string | null; success: boolean; error?: string }> {
   const { storyData, videoConfig, userId, seriesId, storyId, sceneIndex } = message;
-  const scene = storyData.scenes[sceneIndex];
+  const scene = storyData?.scenes[sceneIndex] ?? await getSceneFromCoordinator(storyId, sceneIndex, env);
 
   if (!scene) {
     return { sceneIndex, videoUrl: null, success: false, error: 'Scene not found' };
@@ -271,8 +272,8 @@ export async function processSceneAudio(
   message: QueueMessage,
   env: Env
 ): Promise<{ sceneIndex: number; audioUrl: string | null; audioDuration: number; captions: any[]; success: boolean; error?: string }> {
-  const { storyData, videoConfig, userId, sceneIndex } = message;
-  const scene = storyData.scenes[sceneIndex];
+  const { storyData, videoConfig, userId, storyId, sceneIndex } = message;
+  const scene = storyData?.scenes[sceneIndex] ?? await getSceneFromCoordinator(storyId, sceneIndex, env);
 
   if (!scene) {
     return {

@@ -60,13 +60,6 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
         throw new Error('durationSeconds must be a positive number.');
     }
 
-    const allowed = [15, 30, 60, 120, 180];
-    if (!allowed.includes(durationSeconds)) {
-        throw new Error(
-            `Unsupported duration. Allowed values: ${allowed.join(', ')}`
-        );
-    }
-
     // ---------- SELECT GUIDES BASED ON MEDIA TYPE ----------
     const isVideo = mediaType === 'video';
     const sceneCountGuide = isVideo ? VIDEO_SCENE_COUNT_GUIDE : SCENE_COUNT_GUIDE;
@@ -74,7 +67,10 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
 
     // ---------- SCENE COUNT ----------
     const sceneGuide = sceneCountGuide[durationSeconds] ?? {
-        min: Math.max(3, Math.floor(durationSeconds / (isVideo ? 10 : 4))),
+        // Dynamic min scenes formula: ensures enough scenes to hit target duration
+        // Video: ceil(duration / 10) guarantees min scenes × 10s hits target exactly
+        // Image: ceil(duration / 4) with 97% buffer for shorter audio
+        min: Math.max(3, Math.ceil(durationSeconds / (isVideo ? 10 : 4))),
         target: Math.round(durationSeconds / (isVideo ? 7 : 3)),
         max: Math.ceil(durationSeconds / (isVideo ? 5 : 2.5)),
     };
