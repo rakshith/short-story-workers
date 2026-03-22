@@ -179,6 +179,9 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             storyId,
             generatedScript: storyData,
             estimated_duration_seconds: estimatedDurationSeconds,
+            cost: createResult.cost,
+            creditsDeducted: createResult.creditsDeducted,
+            creditError: createResult.creditError,
         });
     } catch (error) {
         console.error('[Generate Story] Error:', error);
@@ -285,7 +288,7 @@ async function createStoryRecord(
     storyData: StoryTimeline,
     estimatedDurationSeconds: number,
     env: Env
-): Promise<{ id: string } | Response> {
+): Promise<{ id: string; cost: any; creditsDeducted: boolean; creditError?: string } | Response> {
     try {
         const { StoryService } = await import('../services/supabase');
         const { ProjectStatus } = await import('../types');
