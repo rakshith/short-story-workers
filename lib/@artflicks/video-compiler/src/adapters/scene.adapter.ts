@@ -51,23 +51,14 @@ export class SceneAdapter implements StoryAdapter {
       let resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
       const captionDuration = getCaptionDuration(scene);
 
-      // For video clips: keep both visual and audio within scene duration so clip stays in sync
-      const isVideoScene = Boolean(scene.generatedVideoUrl);
-      if (isVideoScene && sceneDuration > 0) {
-        resolvedAudioDuration = Math.min(resolvedAudioDuration, sceneDuration);
-      }
-
       // Scene should not advance until narration/captions have finished.
+      // Use audio duration as primary driver - audio completes, then transition
       const narrationDuration = Math.max(resolvedAudioDuration, captionDuration);
-      let effectiveSceneDuration = Math.max(
+      const effectiveSceneDuration = Math.max(
         visualDuration,
         narrationDuration > 0 ? narrationDuration + TRANSITION_BUFFER : 0,
         MIN_SCENE_DURATION
       );
-      if (isVideoScene && sceneDuration > 0) {
-        // For generated video clips, preserve clip length and keep strict sync.
-        effectiveSceneDuration = sceneDuration;
-      }
 
       const sceneStart = currentTime;
       const sceneEnd = sceneStart + effectiveSceneDuration;
@@ -180,7 +171,7 @@ export class SceneAdapter implements StoryAdapter {
     }
 
     return {
-      duration: finalDuration,
+      duration: Math.floor(finalDuration),
       tracks: {
         visual,
         audio, // voiceovers + optional background music

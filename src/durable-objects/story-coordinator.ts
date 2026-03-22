@@ -316,6 +316,7 @@ export class StoryCoordinator {
       if (update.audioUrl) {
         sceneUpdate.audioUrl = update.audioUrl;
         sceneUpdate.audioDuration = update.audioDuration;
+        sceneUpdate.duration = update.audioDuration;
         sceneUpdate.captions = update.captions || [];
       }
       if (update.audioError) {
