@@ -30,30 +30,18 @@ import {
 } from './scenes';
 
 /**
- * Get cost per scene for a model tier or model ID
+ * Get cost per scene for a model tier
  * Uses imageTiers for ai-images and videoTiers for ai-videos
+ * Now uses tier-based pricing only (no individual model costs)
  */
-function getCostPerScene(modelTierOrId: string, mediaType: GenerationMediaType): number {
+function getCostPerScene(modelTier: string, mediaType: GenerationMediaType): number {
   // Use the correct tier based on media type
   const tierCost = mediaType === 'ai-images' 
-    ? getImageTierCost(modelTierOrId) 
-    : getVideoTierCost(modelTierOrId);
+    ? getImageTierCost(modelTier) 
+    : getVideoTierCost(modelTier);
   
-  if (tierCost > 0) {
-    return tierCost;
-  }
-  
-  // Try direct model cost lookup (works for model IDs like 'wan-video/wan-2.5-i2v')
-  const modelCost = getModelCost(modelTierOrId);
-  if (modelCost > 0) {
-    return modelCost;
-  }
-  
-  // Fallback to basic tier
-  const basicCost = mediaType === 'ai-images' 
-    ? (getImageTierCost('basic') || 2)
-    : (getVideoTierCost('basic') || 30);
-  return basicCost;
+  // Fallback to basic tier if tier cost is 0 or invalid
+  return tierCost || (mediaType === 'ai-images' ? 2 : 30);
 }
 
 /**

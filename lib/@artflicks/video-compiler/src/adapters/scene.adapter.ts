@@ -44,6 +44,7 @@ export class SceneAdapter implements StoryAdapter {
     const effects: TimelineItem[] = [];
 
     let currentTime = 0;
+    let lastVisualIndex = -1;  // Track last visual item index
 
     for (const scene of story.scenes) {
       const sceneDuration = scene.duration ?? 0;
@@ -85,6 +86,7 @@ export class SceneAdapter implements StoryAdapter {
             ...(playEmbeddedAudio && { videoVolume }),
           },
         });
+        lastVisualIndex = visual.length - 1;
       } else if (scene.generatedImageUrl || scene.imagePrompt) {
         visual.push({
           start: sceneStart,
@@ -96,6 +98,7 @@ export class SceneAdapter implements StoryAdapter {
             sceneNumber: scene.sceneNumber,
           },
         });
+        lastVisualIndex = visual.length - 1;
       }
 
       /* ---------------- Voiceover Track ---------------- */
@@ -133,9 +136,23 @@ export class SceneAdapter implements StoryAdapter {
       currentTime = sceneEnd;
     }
 
+    // Find actual audio end time
+    const audioEndTime = audio.length > 0 
+      ? Math.max(...audio.map(item => item.end)) 
+      : 0;
+
+    // Extend last visual if audio extends beyond scene duration (prevents black frames)
+    if (lastVisualIndex >= 0 && audioEndTime > 0) {
+      const lastVisual = visual[lastVisualIndex];
+      if (audioEndTime > lastVisual.end) {
+        lastVisual.end = audioEndTime;
+      }
+    }
+
     const finalDuration = Math.max(
-      currentTime,
-      story.totalDuration ?? 0
+      story.totalDuration ?? 0,
+      audioEndTime,
+      ...visual.map(v => v.end)
     );
 
     /* ---------------- Background Music (full duration) ---------------- */

@@ -107,15 +107,15 @@ export const VIDEO_SCENE_DURATION_GUIDE = {
  * Tight duration tolerance for VIDEO mode.
  *
  * Video scenes are expensive AI generations — every extra scene costs real money.
- * Keep tolerance tight (±5s) so the LLM doesn't overshoot and generate
+ * Keep tolerance tight (±2s) so the LLM doesn't overshoot and generate
  * unnecessary expensive clips. Tighter on the HIGH side to avoid waste.
  */
 export const VIDEO_DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {
-    15: { min: 10, max: 17 },
-    30: { min: 25, max: 33 },
-    60: { min: 55, max: 65 },
-    120: { min: 115, max: 125 },
-    180: { min: 175, max: 185 },
+    15: { min: 13, max: 17 },
+    30: { min: 28, max: 33 },
+    60: { min: 58, max: 65 },
+    120: { min: 118, max: 125 },
+    180: { min: 178, max: 185 },
 };
 
 /**

@@ -17,13 +17,14 @@ export function getModelsByCategory(category: ModelCategory): Record<string, num
 
 /**
  * Get cost for a specific model
+ * Note: For image and video models, use tier-based pricing instead.
+ * This function now returns 0 for image/video models as tiers are the source of truth.
  * @param modelId - The model ID (e.g., 'kwaivgi/kling-v3-video')
- * @returns The credit cost, or 0 if model not found
+ * @returns The credit cost, or 0 if model not found (use tiers for image/video)
  */
 export function getModelCost(modelId: string): number {
+  // For image and video models, return 0 - tiers are the source of truth
   const allModels: Record<string, number> = {
-    ...pricingData.models.image,
-    ...pricingData.models.video,
     ...pricingData.models.chat,
     ...pricingData.models.inpaint,
     ...pricingData.models.upscaler,

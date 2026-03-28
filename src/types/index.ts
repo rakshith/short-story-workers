@@ -130,6 +130,7 @@ export interface Scene {
   // Voice-over and captions
   audioUrl?: string; // Generated voice-over audio URL
   audioDuration?: number; // Actual duration of generated audio
+  videoDuration?: number; // Cached video duration for generation (before audio replaces duration)
   captions?: Caption[]; // Timed captions for this scene
   isGeneratingAudio?: boolean;
   audioGenerationError?: string;

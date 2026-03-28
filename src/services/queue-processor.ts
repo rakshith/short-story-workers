@@ -210,7 +210,7 @@ export async function processSceneVideo(
         width: 512,
         height: 512,
         resolution: videoConfig.resolution,
-        duration: message.sceneDuration ?? scene.audioDuration ?? scene.duration,
+        duration: scene.videoDuration ?? scene.duration,
         aspect_ratio: videoConfig.aspectRatio,
         seed: videoConfig.preset.seed,
         videoConfig: videoConfig,

@@ -3,47 +3,8 @@
   "currency": "credits",
   "description": "Centralized pricing for all models and operations. Single source of truth for ArtFlicks and Cloudflare.",
   "models": {
-    "image": {
-      "black-forest-labs/flux-schnell": 1,
-      "black-forest-labs/flux-dev": 2,
-      "black-forest-labs/flux-1.1-pro": 2,
-      "black-forest-labs/flux-1.1-pro-ultra": 3,
-      "black-forest-labs/flux-redux-schnell": 2,
-      "black-forest-labs/flux-redux-dev": 3,
-      "black-forest-labs/flux-kontext-pro": 5,
-      "google/nano-banana": 8,
-      "google/nano-banana-pro": 10,
-      "google/gemini-2.5-flash-image": 4,
-      "fal-ai/gpt-image-1.5": 4,
-      "xai/grok-imagine-image": 2,
-      "ideogram/ideogram-v3-turbo": 2,
-      "ideogram/ideogram-v3-quality": 3,
-      "runwayml/gen4-image-pro": 4,
-      "runwayml/gen4-image-turbo": 3,
-      "bytedance/seedream-4": 3,
-      "bytedance/seedream-4.5": 4,
-      "bytedance/seedance-1-pro-fast": 4
-    },
-    "video": {
-      "wan-video/wan2.6-i2v-flash": 30,
-      "wan-video/wan-2.5-i2v": 40,
-      "wan-video/wan-2.5-i2v-fast": 50,
-      "wan-video/wan-2.6-i2v": 50,
-      "wan-video/wan-2.5-t2v": 35,
-      "wan-video/wan-2.5-t2v-fast": 40,
-      "wan-video/wan-2.6-t2v": 45,
-      "kwaivgi/kling-v2.6": 80,
-      "kwaivgi/kling-v3-video": 100,
-      "kwaivgi/kling-v2.5-turbo-pro": 90,
-      "kwaivgi/kling-v2.1-master": 85,
-      "kwaivgi/kling-v2.1": 75,
-      "kwaivgi/kling-v1.6-standard": 60,
-      "runwayml/gen4-turbo": 60,
-      "runwayml/gen-4.5": 80,
-      "runwayml/video-to-video": 40,
-      "openai/sora-2": 100,
-      "google/veo-3.1-fast": 80
-    },
+    "image": {},
+    "video": {},
     "chat": {
       "gpt-5.2": 7,
       "gpt-5": 6,
@@ -69,28 +30,27 @@
     }
   },
   "operations": {
-    "script-generation": 8,
-    "voice-generation": 1,
+    "script-generation": 12,
+    "voice-generation": 2,
     "background-music": 1,
-    "immersive-audio": 3,
+    "immersive-audio": 5,
     "story-export": 2,
     "youtube-extract": 5
   },
   "imageTiers": {
-    "basic": 2,
-    "pro": 4,
+    "basic": 1,
+    "pro": 2,
     "ultra": 6,
     "max": 10,
-    "ultra-max": 15
+    "ultra-max": 12
   },
   "videoTiers": {
     "basic": 30,
-    "lite": 20,
     "pro": 50,
-    "influencer": 75,
-    "ultra": 80,
-    "max": 100,
-    "ultra-max": 140
+    "influencer": 80,
+    "ultra": 100,
+    "max": 150,
+    "ultra-max": 200
   },
   "videoTierModels": {
     "basic": "wan-video/wan2.6-i2v-flash",
