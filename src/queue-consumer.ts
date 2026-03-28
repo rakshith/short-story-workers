@@ -41,7 +41,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
     return env.STORY_COORDINATOR.get(id);
   };
 
-  // Sort messages by priority - high-tier users processed first for better experience
+  // Sort messages by priority - high-tier users processed first for better UX
   const sortedMessages = sortMessagesByPriority(batch.messages);
   queueLogger.info(`Processing batch of ${sortedMessages.length} messages (sorted by priority)`);
 
@@ -379,6 +379,41 @@ export async function syncStoryToSupabase(
       .eq('job_id', data.jobId);
 
     queueLogger.info(`Story synced to database`, { jobId: data.jobId, storyId: data.storyId });
+
+    // Broadcast completion to SSE clients via DO (BEFORE sending email)
+    try {
+      const broadcastData = {
+        type: 'story_completed',
+        storyId: data.storyId,
+        jobId: data.jobId,
+        status: 'completed',
+        progress: 100,
+        title: updatedStory?.title || 'Your Story',
+      };
+      
+      // Call broadcast endpoint on Cloudflare worker (NOT NextJS)
+      // Use the correct worker URL based on environment
+      const isStaging = env.ENVIRONMENT === 'staging' || !env.ENVIRONMENT;
+      const workerUrl = isStaging 
+        ? 'https://create-story-worker-staging.matrixrak.workers.dev'
+        : 'https://create-story-worker-production.matrixrak.workers.dev';
+      
+      const response = await fetch(`${workerUrl}/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId: data.storyId, data: broadcastData }),
+      });
+      
+      if (response.ok) {
+        queueLogger.info(`[SSE] Broadcasted completion for story: ${data.storyId}`);
+      } else {
+        const errorText = await response.text();
+        queueLogger.error(`[SSE] Failed to broadcast: ${response.status} - ${errorText}`, { storyId: data.storyId });
+      }
+    } catch (sseError) {
+      queueLogger.error('[SSE] Error broadcasting:', sseError, { storyId: data.storyId });
+      // Don't fail the job if SSE fails - continue with email
+    }
 
     // Send completion email notification
     try {

@@ -31,6 +31,14 @@ export default {
       case method === 'GET' && pathname === '/status':
         return handleStatus(request, env);
 
+      // GET /sse - Server-Sent Events for story updates (routes to DO)
+      case method === 'GET' && pathname === '/sse':
+        return this.handleSSE(request, env);
+
+      // POST /broadcast - Broadcast to SSE clients via DO
+      case method === 'POST' && pathname === '/broadcast':
+        return this.handleBroadcast(request, env);
+
       // POST /cancel-generation - Cancel a running generation
       case method === 'POST' && pathname === '/cancel-generation':
         return handleCancelStory(request, env);
@@ -73,6 +81,62 @@ export default {
       // 404 - Not found
       default:
         return notFoundResponse(method, pathname);
+    }
+  },
+
+  /**
+   * Handle SSE connections - route to StoryCoordinator DO
+   */
+  async handleSSE(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url);
+    const storyId = url.searchParams.get('storyId');
+
+    if (!storyId) {
+      return new Response('Missing storyId parameter', { 
+        status: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    // Get the DO stub for this story
+    const id = env.STORY_COORDINATOR.idFromName(storyId);
+    const coordinator = env.STORY_COORDINATOR.get(id);
+
+    // Forward the request to the DO
+    return coordinator.fetch(request);
+  },
+
+  /**
+   * Handle broadcast - forward to StoryCoordinator DO
+   */
+  async handleBroadcast(request: Request, env: Env): Promise<Response> {
+    try {
+      const body = await request.json() as { storyId: string; data: any };
+      const { storyId, data } = body;
+
+      if (!storyId) {
+        return new Response(JSON.stringify({ error: 'Missing storyId' }), { 
+          status: 400,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      }
+
+      // Get the DO stub for this story
+      const id = env.STORY_COORDINATOR.idFromName(storyId);
+      const coordinator = env.STORY_COORDINATOR.get(id);
+
+      // Forward to DO
+      return coordinator.fetch(new Request('http://do/broadcast', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ storyId, data }),
+      }));
+    } catch (error) {
+      console.error('[Index] Error in handleBroadcast:', error);
+      return new Response(JSON.stringify({ error: 'Failed to broadcast' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
     }
   },
 

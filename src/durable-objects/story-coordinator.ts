@@ -42,6 +42,8 @@ export class StoryCoordinator {
   private state: DurableObjectState;
   private env: Env;
   private storyState: StoryState | null = null;
+  // SSE clients for real-time updates - stored in DO memory
+  private sseClients: Map<string, Set<ReadableStreamDefaultController>> = new Map();
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -68,6 +70,10 @@ export class StoryCoordinator {
           return this.handleCancel();
         case 'finalize':
           return this.handleFinalize(request);
+        case 'sse':
+          return this.handleSSE(request);
+        case 'broadcast':
+          return this.handleBroadcast(request);
         default:
           return new Response(JSON.stringify({ error: 'Unknown action' }), { status: 400 });
       }
@@ -187,6 +193,8 @@ export class StoryCoordinator {
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
 
+    // Note: Progress updates removed - only completion is broadcasted
+
     // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
     const updatedSceneForGate = this.storyState.scenes[update.sceneIndex];
     const sceneHasImage = !!(updatedSceneForGate?.generatedImageUrl);
@@ -270,6 +278,8 @@ export class StoryCoordinator {
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.videosCompleted}/${this.storyState.totalScenes}`);
+
+    // Note: Progress updates removed - only completion is broadcasted
 
     return new Response(JSON.stringify({
       success: true,
@@ -356,6 +366,8 @@ export class StoryCoordinator {
     await this.state.storage.put('storyState', this.storyState);
 
     console.log(`[StoryCoordinator] Audio updated for scene ${update.sceneIndex}, total: ${this.storyState.audioCompleted}/${this.storyState.totalScenes}`);
+
+    // Note: Progress updates removed - only completion is broadcasted
 
     // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
     const voiceOverEnabledAudio = this.storyState.videoConfig?.enableVoiceOver !== false;
@@ -506,6 +518,127 @@ export class StoryCoordinator {
     console.log(`[StoryCoordinator] Finalized and cleaned up with compiled timeline`);
 
     return new Response(JSON.stringify(result));
+  }
+
+  // ==================== SSE Methods ====================
+
+  /**
+   * Handle SSE connection - keeps connection open for real-time updates
+   * GET /sse?storyId=xxx
+   */
+  private async handleSSE(request: Request): Promise<Response> {
+    const url = new URL(request.url);
+    const storyId = url.searchParams.get('storyId');
+
+    if (!storyId) {
+      return new Response('Missing storyId parameter', { 
+        status: 400,
+        headers: { 'Access-Control-Allow-Origin': '*' }
+      });
+    }
+
+    console.log(`[StoryCoordinator] SSE client connecting for story: ${storyId}`);
+
+    // Initialize clients Set for this story if not exists
+    if (!this.sseClients.has(storyId)) {
+      this.sseClients.set(storyId, new Set());
+    }
+
+    // Store reference to sseClients for use in callbacks
+    const sseClients = this.sseClients;
+    let clientController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    
+    const stream = new ReadableStream({
+      start(controller) {
+        try {
+          clientController = controller;
+          sseClients.get(storyId)?.add(controller);
+
+          // Send initial connection message
+          const encoder = new TextEncoder();
+          const message = `data: ${JSON.stringify({ type: 'connected', storyId })}\n\n`;
+          controller.enqueue(encoder.encode(message));
+
+          console.log(`[StoryCoordinator] SSE client registered for story: ${storyId}, total: ${sseClients.get(storyId)?.size}`);
+        } catch (error) {
+          console.error(`[StoryCoordinator] Error starting SSE stream:`, error);
+          controller.error(error);
+        }
+      },
+      cancel(reason) {
+        console.log(`[StoryCoordinator] SSE client disconnected for story: ${storyId}, reason:`, reason);
+        
+        if (clientController) {
+          sseClients.get(storyId)?.delete(clientController);
+        }
+
+        if (sseClients.get(storyId)?.size === 0) {
+          sseClients.delete(storyId);
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      }
+    });
+  }
+
+  /**
+   * Handle broadcast - send message to all SSE clients for a story
+   * POST /broadcast with body { storyId, data }
+   */
+  private async handleBroadcast(request: Request): Promise<Response> {
+    try {
+      const { storyId, data } = await request.json() as { storyId: string; data: any };
+      
+      if (!storyId) {
+        return new Response(JSON.stringify({ error: 'Missing storyId' }), { status: 400 });
+      }
+
+      this.broadcastToSSE(storyId, data);
+      return new Response(JSON.stringify({ success: true }));
+    } catch (error) {
+      console.error('[StoryCoordinator] Error in handleBroadcast:', error);
+      return new Response(JSON.stringify({ error: 'Failed to broadcast' }), { status: 500 });
+    }
+  }
+
+  /**
+   * Broadcast message to all SSE clients for a story
+   */
+  private broadcastToSSE(storyId: string, data: any): void {
+    const clients = this.sseClients.get(storyId);
+    if (!clients || clients.size === 0) {
+      console.log(`[StoryCoordinator] No SSE clients to broadcast for story: ${storyId}`);
+      return;
+    }
+
+    const message = `data: ${JSON.stringify(data)}\n\n`;
+    const encoder = new TextEncoder();
+    const encodedMessage = encoder.encode(message);
+
+    console.log(`[StoryCoordinator] Broadcasting to ${clients.size} SSE clients for story: ${storyId}`);
+
+    for (const controller of clients) {
+      try {
+        controller.enqueue(encodedMessage);
+      } catch (error) {
+        // Client disconnected, remove
+        clients.delete(controller);
+        console.log(`[StoryCoordinator] Removed disconnected SSE client for story: ${storyId}`);
+      }
+    }
+
+    // Clean up empty client sets
+    if (clients.size === 0) {
+      this.sseClients.delete(storyId);
+    }
   }
 }
 
