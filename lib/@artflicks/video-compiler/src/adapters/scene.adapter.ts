@@ -44,20 +44,21 @@ export class SceneAdapter implements StoryAdapter {
     const effects: TimelineItem[] = [];
 
     let currentTime = 0;
-    let lastVisualIndex = -1;  // Track last visual item index
+    let lastVisualIndex = -1;
+    const isLastScene = (index: number) => index === story.scenes.length - 1;
 
-    for (const scene of story.scenes) {
+    for (let sceneIndex = 0; sceneIndex < story.scenes.length; sceneIndex++) {
+      const scene = story.scenes[sceneIndex];
       const sceneDuration = scene.duration ?? 0;
       const visualDuration = sceneDuration;
       let resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
       const captionDuration = getCaptionDuration(scene);
 
-      // Scene should not advance until narration/captions have finished.
-      // Use audio duration as primary driver - audio completes, then transition
       const narrationDuration = Math.max(resolvedAudioDuration, captionDuration);
+      const isLast = isLastScene(sceneIndex);
       const effectiveSceneDuration = Math.max(
         visualDuration,
-        narrationDuration > 0 ? narrationDuration + TRANSITION_BUFFER : 0,
+        narrationDuration > 0 && !isLast ? narrationDuration + TRANSITION_BUFFER : narrationDuration,
         MIN_SCENE_DURATION
       );
 
@@ -188,7 +189,7 @@ export class SceneAdapter implements StoryAdapter {
     }
 
     return {
-      duration: Math.floor(finalDuration),
+      duration: Math.round(finalDuration),
       tracks: {
         visual,
         audio, // voiceovers + optional background music
