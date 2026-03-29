@@ -80,6 +80,31 @@ export async function handleCancelStory(request: Request, env: Env): Promise<Res
                 console.error('[Cancel Story] Failed to notify Durable Object:', doError);
                 // Non-fatal, DB update is primary
             }
+
+            // 5. Broadcast cancellation to SSE clients
+            try {
+                const isStaging = !env.ENVIRONMENT || env.ENVIRONMENT === 'staging';
+                const workerUrl = isStaging 
+                    ? 'https://create-story-worker-staging.matrixrak.workers.dev'
+                    : 'https://create-story-worker-production.matrixrak.workers.dev';
+                
+                await fetch(`${workerUrl}/broadcast`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        storyId: job.story_id, 
+                        data: { 
+                            type: 'story_cancelled', 
+                            storyId: job.story_id, 
+                            jobId: body.jobId,
+                            error: 'Cancelled by user'
+                        } 
+                    }),
+                });
+            } catch (broadcastError) {
+                console.error('[Cancel Story] Failed to broadcast cancellation:', broadcastError);
+                // Non-fatal - cancellation still succeeded
+            }
         }
 
         return jsonResponse({

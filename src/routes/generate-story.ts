@@ -166,11 +166,42 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             });
         }
 
-        // Initialize Durable Object for this story
-        await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
-
-        // Queue generation jobs with tier-based priority
-        await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
+        // Initialize Durable Object and queue jobs - wrapped to catch and broadcast with storyId in scope
+        try {
+            await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
+            await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
+        } catch (error) {
+            console.error('[Generate Story] Error in coordinator/queue:', error);
+            
+            // Broadcast failure to SSE clients
+            try {
+                const isStaging = !env.ENVIRONMENT || env.ENVIRONMENT === 'staging';
+                const workerUrl = isStaging 
+                    ? 'https://create-story-worker-staging.matrixrak.workers.dev'
+                    : 'https://create-story-worker-production.matrixrak.workers.dev';
+                
+                await fetch(`${workerUrl}/broadcast`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        storyId, 
+                        data: { 
+                            type: 'story_failed', 
+                            storyId, 
+                            jobId,
+                            error: error instanceof Error ? error.message : 'Failed to create story'
+                        } 
+                    }),
+                });
+            } catch (broadcastError) {
+                console.error('[Generate Story] Failed to broadcast failure:', broadcastError);
+            }
+            
+            return jsonResponse(
+                { error: 'Internal Server Error', details: error instanceof Error ? error.message : 'Unknown error' },
+                500
+            );
+        }
 
         return jsonResponse({
             success: true,
@@ -184,6 +215,8 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             creditError: createResult.creditError,
         });
     } catch (error) {
+        // This catches errors from script generation or story creation (before coordinator/queue)
+        // storyId is not available at this point, so no SSE broadcast
         console.error('[Generate Story] Error:', error);
         return jsonResponse(
             { error: 'Internal Server Error', details: error instanceof Error ? error.message : 'Unknown error' },

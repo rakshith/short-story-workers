@@ -298,6 +298,108 @@ Tier concurrency settings (set in wrangler.toml or vars):
 2. Run `npm run type-check` to validate
 3. Update Zod schemas in `src/types/zod-types.ts` if needed
 
+## Future Optimizations
+
+### SSE Connection Idle Timeout
+
+**Problem:** SSE connections stay open until client disconnects. At high scale (10k+ concurrent), this accumulates DO memory costs. While cleanup works correctly on normal disconnect (cancel callback fires), connections from crashed tabs or abandoned sessions can persist.
+
+**Current State:** SSE clients Map is in-memory only, cleaned up on cancel callback. DO keeps running until Cloudflare evicts it.
+
+**Cost at Scale:**
+| Concurrent Connections | Monthly DO Memory Cost | Monthly DO Request Cost |
+|----------------------|----------------------|----------------------|
+| 100 | ~$0.002 | ~$0.00002 |
+| 10,000 | ~$0.20 | ~$0.002 |
+| 50,000 | ~$1.00 | ~$0.01 |
+| 100,000 | ~$2.00 | ~$0.02 |
+
+**When to Implement:** When concurrent SSE connections exceed ~10,000 or DO costs become noticeable on billing.
+
+**Implemented:** SSE broadcasts for `story_completed`, `story_cancelled`, and `story_failed` are now implemented. See Implementation Status below.
+
+#### Mechanism 1: Completion Auto-Close (Primary Protection)
+
+**Trigger events:**
+- `story_completed` - Normal successful completion
+- `story_failed` - Generation failed
+- `story_cancelled` - User cancelled
+
+**Behavior:**
+1. Broadcast message sent to all SSE clients for the story
+2. After small delay (100ms), close all SSE connections for that story
+3. Connections closed cleanly, client receives final event before close
+
+**Guarantee:** 100% of normal completion paths close immediately after event delivery.
+
+#### Mechanism 2: Idle Timeout via DO Alarm (Safety Net)
+
+**Timeout Duration:** 30 minutes of inactivity
+
+**Key Insight:** During active story generation, the DO is called frequently by webhooks (image/video/audio completions). Each call resets the alarm timer. This means the alarm only fires when ALL processing has stopped AND no activity for 30 minutes.
+
+**Alarm Reset Points (must reset on each):**
+- `handleInit` - New story started
+- `handleImageUpdate` - Image completed webhook
+- `handleVideoUpdate` - Video completed webhook
+- `handleAudioUpdate` - Audio completed webhook
+- `handleBroadcast` - Completion broadcast sent
+- `handleCancel` - Story cancelled
+- `handleSSE` - Client connected (for new connections after long idle)
+
+**Alarm NOT Reset On:**
+- `handleGetProgress` - Polling calls don't indicate activity
+
+**Cleanup Guard:** Before closing connections, check `shouldCleanupConnections()`:
+```typescript
+private shouldCleanupConnections(): boolean {
+  if (!this.storyState) return true;                    // Story never started
+  if (this.storyState.completionSignaled) return true;  // Story completed/cancelled
+  return false;                                          // Story actively processing - DO NOT interrupt
+}
+```
+
+**Guarantee:** Alarm never fires during active 10+ minute generation. Processing webhooks keep resetting it.
+
+#### Implementation Outline
+
+1. **Add to StoryCoordinator class:**
+   - `private static IDLE_TIMEOUT_MS = 30 * 60 * 1000;`
+   - `private isAlarming = false;` (re-entrant guard)
+
+2. **Register alarm in constructor:**
+   ```typescript
+   state.storage.setAlarmHandler(async () => {
+     await this.handleIdleAlarm();
+   });
+   ```
+
+3. **Add methods:**
+   - `handleIdleAlarm()` - Called by alarm, checks shouldCleanup, closes connections
+   - `shouldCleanupConnections()` - Returns true if safe to cleanup
+   - `closeAllSSEClients(storyId)` - Closes and removes all controllers for story
+
+4. **Modify handlers to reset alarm:**
+   - Add after successful processing in: `handleInit`, `handleImageUpdate`, `handleVideoUpdate`, `handleAudioUpdate`, `handleBroadcast`, `handleCancel`
+   - Set alarm: `await this.state.storage.setAlarm(Date.now() + IDLE_TIMEOUT_MS)`
+
+5. **Modify broadcast to auto-close on terminal events:**
+   - After broadcasting, check `data.type`
+   - If terminal event, call `closeAllSSEClients(storyId)` after 100ms delay
+
+#### Testing Checklist
+
+- [ ] SSE connects → alarm scheduled on connect
+- [ ] Story completes → SSE closes immediately (auto-close)
+- [ ] SSE connected, story processing for 10+ min → alarm never fires
+- [ ] SSE connected, no story started → alarm fires at 30min, closes SSE
+- [ ] Multiple concurrent stories → each cleans up independently
+- [ ] DO cold restart → alarm state preserved, rescheduled on next activity
+
+**Files to modify:** `src/durable-objects/story-coordinator.ts`
+
+**Note:** Do NOT use `setTimeout()` for idle cleanup - it doesn't survive DO restarts. Only DO Alarms persist across restarts.
+
 ## Before Deploying
 
 Always run:

@@ -44,6 +44,10 @@ export class StoryCoordinator {
   private storyState: StoryState | null = null;
   // SSE clients for real-time updates - stored in DO memory
   private sseClients: Map<string, Set<ReadableStreamDefaultController>> = new Map();
+  // Idle timeout: 30 minutes
+  private static IDLE_TIMEOUT_MS = 30 * 60 * 1000;
+  // Re-entrant guard for alarm handling
+  private isAlarming = false;
 
   constructor(state: DurableObjectState, env: Env) {
     this.state = state;
@@ -85,6 +89,14 @@ export class StoryCoordinator {
     }
   }
 
+  /**
+   * Alarm handler - called when idle timeout expires
+   */
+  async alarm(alarmInfo?: { retryCount?: number; isRetry?: boolean }): Promise<void> {
+    console.log(`[StoryCoordinator] Alarm triggered, retryCount: ${alarmInfo?.retryCount ?? 0}`);
+    await this.handleIdleAlarm();
+  }
+
   private async handleInit(request: Request): Promise<Response> {
     const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck, sceneReviewRequired } = await request.json() as any;
 
@@ -118,6 +130,9 @@ export class StoryCoordinator {
 
     // Persist to durable storage
     await this.state.storage.put('storyState', this.storyState);
+
+    // Reset idle alarm for new story activity
+    await this.resetIdleAlarm();
 
     console.log(`[StoryCoordinator] Initialized for story ${storyId} with ${totalScenes} scenes (images: ${imagesDone}, audio: ${audioDone}, videos: ${videosDone}, skipAudioCheck: ${skipAudioCheck})`);
     return new Response(JSON.stringify({ success: true }));
@@ -190,6 +205,9 @@ export class StoryCoordinator {
     }
 
     await this.state.storage.put('storyState', this.storyState);
+
+    // Reset idle alarm for active processing
+    await this.resetIdleAlarm();
 
     console.log(`[StoryCoordinator] Image updated for scene ${update.sceneIndex}, total: ${this.storyState.imagesCompleted}/${this.storyState.totalScenes}`);
 
@@ -276,6 +294,9 @@ export class StoryCoordinator {
 
     // Persist
     await this.state.storage.put('storyState', this.storyState);
+
+    // Reset idle alarm for active processing
+    await this.resetIdleAlarm();
 
     console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.videosCompleted}/${this.storyState.totalScenes}`);
 
@@ -365,6 +386,9 @@ export class StoryCoordinator {
     // Persist
     await this.state.storage.put('storyState', this.storyState);
 
+    // Reset idle alarm for active processing
+    await this.resetIdleAlarm();
+
     console.log(`[StoryCoordinator] Audio updated for scene ${update.sceneIndex}, total: ${this.storyState.audioCompleted}/${this.storyState.totalScenes}`);
 
     // Note: Progress updates removed - only completion is broadcasted
@@ -438,6 +462,9 @@ export class StoryCoordinator {
 
     this.storyState.isCancelled = true;
     await this.state.storage.put('storyState', this.storyState);
+
+    // Reset idle alarm after cancellation
+    await this.resetIdleAlarm();
 
     console.log(`[StoryCoordinator] Job for story ${this.storyState.storyId} has been cancelled`);
     return new Response(JSON.stringify({ success: true, isCancelled: true }));
@@ -546,6 +573,7 @@ export class StoryCoordinator {
 
     // Store reference to sseClients for use in callbacks
     const sseClients = this.sseClients;
+    const coordinator = this;
     let clientController: ReadableStreamDefaultController<Uint8Array> | undefined;
     
     const stream = new ReadableStream({
@@ -560,6 +588,9 @@ export class StoryCoordinator {
           controller.enqueue(encoder.encode(message));
 
           console.log(`[StoryCoordinator] SSE client registered for story: ${storyId}, total: ${sseClients.get(storyId)?.size}`);
+
+          // Set idle alarm for cleanup (fire and forget - errors handled internally)
+          coordinator.resetIdleAlarm().catch(() => {});
         } catch (error) {
           console.error(`[StoryCoordinator] Error starting SSE stream:`, error);
           controller.error(error);
@@ -602,6 +633,15 @@ export class StoryCoordinator {
       }
 
       this.broadcastToSSE(storyId, data);
+      
+      // Reset idle alarm after broadcast
+      await this.resetIdleAlarm();
+      
+      // Auto-close on terminal events
+      if (data?.type === 'story_completed' || data?.type === 'story_failed' || data?.type === 'story_cancelled') {
+        setTimeout(() => this.closeAllSSEClients(storyId), 100);
+      }
+      
       return new Response(JSON.stringify({ success: true }));
     } catch (error) {
       console.error('[StoryCoordinator] Error in handleBroadcast:', error);
@@ -638,6 +678,82 @@ export class StoryCoordinator {
     // Clean up empty client sets
     if (clients.size === 0) {
       this.sseClients.delete(storyId);
+    }
+  }
+
+  // ==================== Idle Alarm Methods ====================
+
+  /**
+   * Check if it's safe to cleanup SSE connections
+   */
+  private shouldCleanupConnections(): boolean {
+    if (!this.storyState) return true;
+    if (this.storyState.completionSignaled) return true;
+    return false;
+  }
+
+  /**
+   * Close all SSE clients for a story
+   */
+  private closeAllSSEClients(storyId: string): void {
+    const clients = this.sseClients.get(storyId);
+    if (!clients) return;
+    
+    console.log(`[StoryCoordinator] Closing ${clients.size} SSE clients for story: ${storyId}`);
+    
+    for (const controller of clients) {
+      try {
+        controller.close();
+      } catch {}
+    }
+    
+    this.sseClients.delete(storyId);
+  }
+
+  /**
+   * Handle idle alarm - cleanup stale SSE connections
+   */
+  private async handleIdleAlarm(): Promise<void> {
+    if (this.isAlarming) return;
+    this.isAlarming = true;
+    
+    try {
+      if (!this.shouldCleanupConnections()) {
+        if (this.sseClients.size > 0) {
+          try {
+            await this.state.storage.setAlarm(Date.now() + StoryCoordinator.IDLE_TIMEOUT_MS);
+          } catch {}
+        }
+        return;
+      }
+      
+      console.log(`[StoryCoordinator] Idle alarm triggered, cleaning up stale SSE connections`);
+      const storyIds = [...this.sseClients.keys()];
+      for (const storyId of storyIds) {
+        this.closeAllSSEClients(storyId);
+      }
+      
+      if (this.sseClients.size > 0) {
+        try {
+          await this.state.storage.setAlarm(Date.now() + StoryCoordinator.IDLE_TIMEOUT_MS);
+        } catch {}
+      }
+    } finally {
+      this.isAlarming = false;
+    }
+  }
+
+  /**
+   * Reset idle alarm if clients are connected
+   */
+  private async resetIdleAlarm(): Promise<void> {
+    if (this.sseClients.size > 0) {
+      try {
+        await this.state.storage.setAlarm(Date.now() + StoryCoordinator.IDLE_TIMEOUT_MS);
+        console.log(`[StoryCoordinator] Reset idle alarm (${StoryCoordinator.IDLE_TIMEOUT_MS / 60000}min)`);
+      } catch (error) {
+        console.warn('[StoryCoordinator] Failed to set alarm:', error instanceof Error ? error.message : error);
+      }
     }
   }
 }
