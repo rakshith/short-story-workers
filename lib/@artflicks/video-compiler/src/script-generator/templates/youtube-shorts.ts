@@ -1,48 +1,47 @@
-import { z } from 'zod';
-import { BaseScriptTemplate } from './base';
-import { ScriptGenerationContext, TemplateManifest } from '../types';
-import { getScenePlan } from '../utils/scene-math';
-import { VIDEO_NARRATION_WPS } from '../constants';
-import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from '../schema';
-import { ScriptTemplateIds } from './index';
+import { z } from "zod";
+import { BaseScriptTemplate } from "./base";
+import { ScriptGenerationContext, TemplateManifest } from "../types";
+import { getScenePlan } from "../utils/scene-math";
+import { VIDEO_NARRATION_WPS } from "../constants";
+import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from "../schema";
+import { ScriptTemplateIds } from "./index";
 
 export class YouTubeShortsTemplate extends BaseScriptTemplate {
-    manifest: TemplateManifest = {
-        id: ScriptTemplateIds.YOUTUBE_SHORTS,
-        name: 'YouTube Shorts',
-        version: '4.0.0',
-        description: 'Cinematic fast-paced storytelling. ~3s per scene, flowing narration with rapid visual cuts.',
-        tags: ['youtube', 'shorts', 'viral', 'cinematic', 'fast-paced'],
-    };
+  manifest: TemplateManifest = {
+    id: ScriptTemplateIds.YOUTUBE_SHORTS,
+    name: "YouTube Shorts",
+    version: "4.0.0",
+    description:
+      "Cinematic fast-paced storytelling. ~3s per scene, flowing narration with rapid visual cuts.",
+    tags: ["youtube", "shorts", "viral", "cinematic", "fast-paced"],
+  };
 
-    getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
-        if (context?.duration) {
-            const plan = getScenePlan(context.duration, context.mediaType || 'image');
-            return createYouTubeShortsSchema({
-                minScenes: plan.minScenes,
-                maxScenes: plan.maxScenes,
-                totalWordsMin: plan.totalWordsMin,
-                totalWordsMax: plan.totalWordsMax,
-                durationSeconds: plan.durationSeconds,
-                mediaType: context.mediaType,
-            });
-        }
-        return YOUTUBE_SHORTS_SCHEMA;
+  getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
+    if (context?.duration) {
+      const plan = getScenePlan(context.duration, context.mediaType || "image");
+      return createYouTubeShortsSchema({
+        minScenes: plan.minScenes,
+        maxScenes: plan.maxScenes,
+        totalWordsMin: plan.totalWordsMin,
+        totalWordsMax: plan.totalWordsMax,
+        durationSeconds: plan.durationSeconds,
+        mediaType: context.mediaType,
+      });
     }
+    return YOUTUBE_SHORTS_SCHEMA;
+  }
 
-    getSystemPrompt(context: ScriptGenerationContext): string {
-        const {
-            duration,
-            language = 'en',
-            mediaType = 'image'
-        } = context;
+  getSystemPrompt(context: ScriptGenerationContext): string {
+    const { duration, language = "en", mediaType = "image" } = context;
 
-        const languageName = this.getLanguageName(language);
-        const languageCode = language;
-        const plan = getScenePlan(duration, mediaType);
+    const languageName = this.getLanguageName(language);
+    const languageCode = language;
+    const plan = getScenePlan(duration, mediaType);
 
-        return `You are an elite YouTube Shorts scriptwriter. You create cinematic, scene-by-scene scripts for AI video generation that grip viewers from first second to last.
-${mediaType === 'video' ? `
+    return `You are an elite YouTube Shorts scriptwriter. You create cinematic, scene-by-scene scripts for AI video generation that grip viewers from first second to last.
+${
+  mediaType === "video"
+    ? `
 ═══════════════════════════════════════════════════════════════
     ⚠️ ADJUST YOUR RESPONSE TO MATCH USER REQUEST ⚠️
 ═══════════════════════════════════════════════════════════════
@@ -51,12 +50,14 @@ The user requested exactly ${duration} seconds. Always adjust your script so the
 • duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count and fix before output.
 • duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count and fix before output.
 ═══════════════════════════════════════════════════════════════
-` : ''}
+`
+    : ""
+}
 ═══════════════════════════════════════════════════════════════
     ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
 ═══════════════════════════════════════════════════════════════
 VIDEO DURATION: ${duration} seconds
-YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})${mediaType === 'video' ? `, total duration SUM = ${duration}s` : ''}
+YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})${mediaType === "video" ? `, total duration SUM = ${duration}s` : ""}
 TOTAL WORDS REQUIRED: ~${plan.totalWordsTarget} (range: ${plan.totalWordsMin}–${plan.totalWordsMax})
 
 ${plan.sceneGuidance}
@@ -80,9 +81,13 @@ PER-SCENE RULES:
 • Target: ~${plan.perSceneWordsTarget} words per scene (~${plan.perSceneDurationTarget}s)
 • Hard max: ${plan.perSceneWordsMax} words (${plan.perSceneDurationMax}s). NEVER exceed this.
 • If a thought needs more → SPLIT into two scenes with two visuals.
-${mediaType === 'video' ? `
+${
+  mediaType === "video"
+    ? `
 • DURATION: Each scene must be exactly 5 or exactly 10 seconds (no other values).
-• NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (${VIDEO_NARRATION_WPS.wps5s} wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (${VIDEO_NARRATION_WPS.wps10s} wps; never exceed or audio exceeds 10s).` : ''}
+• NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (${VIDEO_NARRATION_WPS.wps5s} wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (${VIDEO_NARRATION_WPS.wps10s} wps; never exceed or audio exceeds 10s).`
+    : ""
+}
 
 ═══════════════════════════════════════════════════════════════
     🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
@@ -100,11 +105,11 @@ SLIDESHOW (❌ WRONG — disconnected, choppy, boring):
   → Each scene is an isolated fact. No flow. No grip. Viewer scrolls away.
 
 CINEMATIC (✅ RIGHT — flowing, gripping, one continuous story):
-  Scene 1: "In 1593, a sixty-year-old pirate walked into the English court—"
-  Scene 2: "—and looked Queen Elizabeth dead in the eye."
+  Scene 1: "In 1593, a sixty-year-old pirate walked into the English court."
+  Scene 2: "She looked Queen Elizabeth dead in the eye."
   Scene 3: "Her name was Grace O'Malley."
-  Scene 4: "They called her the sea queen of Ireland—"
-  Scene 5: "—and she'd come to negotiate the release of her sons."
+  Scene 4: "She was known as the sea queen of Ireland."
+  Scene 5: "She had come to negotiate the release of her sons."
   Scene 6: "Neither spoke the other's language."
   Scene 7: "So they spoke in Latin."
   Scene 8: "And Elizabeth, for the first time, listened."
@@ -115,8 +120,8 @@ KEY PRINCIPLES:
 1. The narration across all scenes reads as ONE flowing monologue
 2. Scene breaks are for VISUAL changes — the story never stops
 3. Each scene's narration connects naturally to the next
-4. Use mid-sentence scene breaks for momentum ("she reached for—" / "—the door")
-5. Build tension ACROSS scenes, not within one scene
+4. Each scene MUST contain at least one complete sentence
+5. Build tension ACROSS scenes through the narrative, not by breaking sentences
 
 ═══════════════════════════════════════════════════════════════
                     NARRATION RULES
@@ -130,11 +135,10 @@ SCENE 1 — HOOK (${plan.perSceneDurationMin}–${plan.perSceneDurationTarget}s)
 One jaw-dropping opening line. Curiosity, conflict, or bold claim.
 
 MIDDLE — RAPID CINEMATIC BUILD
-- One sentence per scene, story flows across cuts
+- One complete sentence per scene
 - Rising stakes with every visual change
 - Tension loops: questions opened, answered scenes later
 - Emotional shifts scene-to-scene
-- Mid-sentence cuts for momentum
 
 FINAL SCENE — PAYOFF
 - Resolve the story, emotional closure
@@ -146,7 +150,7 @@ FINAL SCENE — PAYOFF
 ═══════════════════════════════════════════════════════════════
 Each scene:
 1. sceneNumber — sequential
-2. duration — ${mediaType === 'video' ? '5 or 10 only (no other values)' : 'word count ÷ 2.5, rounded'}
+2. duration — ${mediaType === "video" ? "5 or 10 only (no other values)" : "word count ÷ 2.5, rounded"}
 3. narration — ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. ONE flowing sentence.
 4. details — internal notes (not spoken)
 5. imagePrompt — English. Cinematic, dramatic, visually distinct per scene.
@@ -166,7 +170,7 @@ IMAGE PROMPTS:
 ✔ Each scene: ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words MAX
 ✔ Total narration: ${plan.totalWordsMin}–${plan.totalWordsMax} words
 ✔ All scene narrations read as ONE flowing story back-to-back
-✔ duration = ${mediaType === 'video' ? '5 or 10 only per scene' : 'word count ÷ 2.5'}
+✔ duration = ${mediaType === "video" ? "5 or 10 only per scene" : "word count ÷ 2.5"}
 ✔ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s — adjust scene count and 5s/10s mix so total = ${duration}s
 ✔ Story completes with resolution
 
@@ -178,14 +182,14 @@ ADJUST YOUR OUTPUT so none of these occur (fix before returning):
 ❌ Narration reads like disconnected facts (slideshow feel)
 ❌ Story unfinished or cut off
 `;
-    }
+  }
 
-    private getLanguageName(code: string): string {
-        const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
-        try {
-            return displayNames.of(code) || code;
-        } catch (e) {
-            return code;
-        }
+  private getLanguageName(code: string): string {
+    const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+    try {
+      return displayNames.of(code) || code;
+    } catch (e) {
+      return code;
     }
+  }
 }
