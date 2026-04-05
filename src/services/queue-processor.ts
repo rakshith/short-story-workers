@@ -5,7 +5,7 @@ import { generateSceneAudio } from './audio-generation';
 import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
-import { ScriptTemplateIds } from '../script-generator/templates';
+import { ScriptTemplateIds } from '../script-generator';
 import { getSceneFromCoordinator } from '../utils/coordinator';
 import { Scene } from '../types';
 

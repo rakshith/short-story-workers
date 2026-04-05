@@ -1,7 +1,5 @@
 import { LanguageModel } from 'ai';
-import { ScriptGenerator } from '../index';
-import { ScriptTemplateIds } from '../templates';
-import { ScriptGenerationContext, ScriptGenerationResult } from '../types';
+import { ScriptGenerator, ScriptTemplateIds, ScriptGenerationContext, ScriptGenerationResult } from '../index';
 import { BaseScriptAgent } from './base-agent';
 import { FacelessVideoAgent } from './faceless-video-agent';
 import { CharacterStoryAgent } from './character-story-agent';

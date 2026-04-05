@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from '../templates';
+import { ScriptTemplateIds } from '../index';
 import { bodyScienceShortsTools } from '../tools/body-science-shorts-tools';
 import { BaseScriptAgent } from './base-agent';
 

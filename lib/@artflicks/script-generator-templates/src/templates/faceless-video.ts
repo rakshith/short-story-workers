@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { BaseScriptTemplate } from "./base";
 import { ScriptGenerationContext, TemplateManifest } from "../types";
-import { getScenePlan } from "../utils/scene-math";
-import { VIDEO_NARRATION_WPS } from "../constants";
-import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from "../schema";
-import { ScriptTemplateIds } from "./index";
+import { getScenePlan } from '../utils/scene-math';
+import { VIDEO_NARRATION_WPS } from '../constants';
+import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from '../schema';
+import { ScriptTemplateIds } from './index';
 
 export class FacelessVideoTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
@@ -113,7 +113,7 @@ CINEMATIC (✅ RIGHT — flowing, gripping, one continuous story):
   Scene 6: "Neither spoke the other's language."
   Scene 7: "So they spoke in Latin."
   Scene 8: "And Elizabeth, for the first time, listened."
-  → One flowing story. Each scene CUTs to a new visual. The voice NEVER pauses.
+  → One flowing story. Each scene CUTS to a new visual. The voice NEVER pauses.
   → The viewer is hooked because the story pulls them forward across every cut.
 
 KEY PRINCIPLES:

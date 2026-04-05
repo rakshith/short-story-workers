@@ -3,11 +3,6 @@ import { BaseScriptTemplate } from './base';
 import { ScriptGenerationContext, TemplateManifest } from '../types';
 import { createBodyScienceShortsSchema, BODY_SCIENCE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
-import { DEFAULT_SKELETON_REFERENCES } from './skeleton-3d-shorts-defaults';
-
-// ─────────────────────────────────────────────────────────────────
-// CHARACTER DNA — 3D uncanny skeleton with translucent glassy skin
-// ─────────────────────────────────────────────────────────────────
 
 export const BODY_SCIENCE_CHARACTER_DNA = `3D rendered skeleton with translucent glassy skin overlay
 large expressive cartoon eyes (primary emotion source)
@@ -18,10 +13,6 @@ no facial muscle movement (emotion only through eyes)`;
 
 export const BODY_SCIENCE_CONSISTENCY_LINE =
     'same character as the reference image, same skull shape, same eyes, same proportions, translucent glassy skin overlay with visible skeleton underneath';
-
-// ─────────────────────────────────────────────────────────────────
-// ORGAN GLOW COLORS — used in image prompt guidance
-// ─────────────────────────────────────────────────────────────────
 
 export const ORGAN_GLOW_COLORS = {
     liver_depleting:    'amber / warm orange draining',
@@ -41,10 +32,6 @@ export const ORGAN_GLOW_COLORS = {
     immune_active:      'bright white scattered glow',
 } as const;
 
-// ─────────────────────────────────────────────────────────────────
-// TEMPLATE
-// ─────────────────────────────────────────────────────────────────
-
 export class BodyScienceShortsTemplate extends BaseScriptTemplate {
     manifest: TemplateManifest = {
         id: ScriptTemplateIds.BODY_SCIENCE_SHORTS,
@@ -52,13 +39,12 @@ export class BodyScienceShortsTemplate extends BaseScriptTemplate {
         version: '2.0.0',
         description:
             'Viral short-form psychological science storyteller with a visually consistent 3D uncanny skeleton character ' +
-            'explaining the internal biological journey. Each scene produces narration + text-to-image prompt + image-to-video prompt. ' +
-            'Anatomically accurate organ visualization with locked visual style.',
+            'explaining the internal biological journey.',
         tags: ['skeleton', 'science', 'health', 'body', 'organs', 'explainer', 'educational', 'anatomy', '3d', 'viral', 'shorts'],
     };
 
     getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
-        const BASE_SCENE_SECONDS = 6; // ~10-12 words at normal TTS pace
+        const BASE_SCENE_SECONDS = 6;
         const duration = context?.duration ?? 60;
         const speed = context?.speed ?? 1.0;
         const avgSceneSeconds = BASE_SCENE_SECONDS / speed;
@@ -80,7 +66,7 @@ export class BodyScienceShortsTemplate extends BaseScriptTemplate {
         const effectiveReferences =
             characterReferenceImages && characterReferenceImages.length > 0
                 ? characterReferenceImages
-                : DEFAULT_SKELETON_REFERENCES;
+                : [];
 
         const hasCharacterImages = effectiveReferences.length > 0;
         const languageName = this.getLanguageName(language);
@@ -98,13 +84,13 @@ Your task is to generate a high-retention educational short
 featuring a visually consistent 3D uncanny skeleton character
 explaining the internal biological journey of the topic below.
 
-────────────────────────────────────────
+─────────────────────
 TOPIC: "${topic}"
-────────────────────────────────────────
+─────────────────────
 
 TARGET VIDEO DURATION: ${duration}s → generate EXACTLY ${targetScenes} scenes.
 Each scene narration ≈ 6s of speech. Total scenes × 6s must not exceed ${duration}s.
-────────────────────────────────────────
+─────────────────────
 
 LANGUAGE REQUIREMENT:
 - All narration: ${languageName} (${language})
@@ -116,9 +102,9 @@ The skeleton in the reference image IS the viewer going through this experiment.
 Narration MUST use "you/your" — the audience experiences this as their own body.
 ` : ''}
 
-═══════════════════════════════════════
+═════════════════════════════════════
 CORE RULES
-═══════════════════════════════════════
+═════════════════════════════════════
 
 1. Each narration line must be EXACTLY 10–12 words. Hard floor: NEVER fewer than 10 words. Hard cap: NEVER exceed 12 words.
 2. One narration line per visual scene.
@@ -128,13 +114,11 @@ CORE RULES
 NARRATION TIMING RULE:
 - MINIMUM 10 words, MAXIMUM 12 words — no exceptions in either direction
 - Lines must be complete, meaningful thoughts — never fragments
-- Bad example (too short, no meaning): "Your body starts changing." ✗
-- Good example (10 words, complete): "Your liver starts breaking down stored fat for energy." ✓
 - Target lines speakable in under 7 seconds at normal TTS pace
 - This ensures every narration line fits cleanly inside a single 8s video clip
 5. After EACH narration line provide:
    - One Detailed Text-to-Image Prompt (imagePrompt)
-   - One Detailed Image-to-Video Prompt (videoPrompt) — with narration line and voice consistency
+   - One Detailed Image-to-Video Prompt (videoPrompt)
 6. Do NOT combine multiple narration lines in one scene.
 7. If explanation requires more steps, add more micro-scenes.
 8. ALL internal organs must follow the Anatomical Accuracy Lock below.
@@ -142,9 +126,9 @@ NARRATION TIMING RULE:
 10. ABSOLUTELY NO TEXT, NO TYPOGRAPHY, NO LETTERS inside images.
 11. Provide a "fullNarration" field with all narration lines joined.
 
-═══════════════════════════════════════
+═════════════════════════════════════
 ANATOMICAL ACCURACY LOCK
-═══════════════════════════════════════
+═════════════════════════════════════
 
 All internal organ visualizations MUST follow medically accurate human anatomy.
 
@@ -168,8 +152,6 @@ ORIENTATION REQUIREMENTS:
 - Never float organs
 - Never center the heart
 - Never place liver on left side
-- Never detach organs from rib cage or spine
-- Maintain correct anterior or side profile orientation
 
 ANCHORING RULE:
 - Organs must appear embedded inside torso cavity
@@ -177,22 +159,20 @@ ANCHORING RULE:
 - Sternum visible in anterior view
 - Spine visible in internal shots
 - Clavicles anatomically aligned
-- Diaphragm boundary respected between chest and abdomen
-- Organs proportionate to rib cage size
+- Diaphragm boundary respected
 
 MANDATORY INTERNAL SCENE LINE:
 For every internal organ scene, add this sentence inside the imagePrompt:
 "Medically accurate anatomical placement, correct left-right orientation from skeleton's perspective, not mirrored, not floating, anatomically anchored to ribs and spine."
 
-═══════════════════════════════════════
+═════════════════════════════════════
 VISUAL STYLE RULES (LOCKED)
-═══════════════════════════════════════
+═════════════════════════════════════
 
 Character Design:
 - 3D rendered skeleton with translucent glassy skin overlay
 - Large expressive cartoon eyes (primary emotion source)
 - Realistic bone texture with visible teeth details
-- Metallic braces with reflective surfaces (when relevant)
 - Uncanny valley aesthetic — slightly creepy but charming
 - No facial muscle movement (emotion only through eyes)
 
@@ -200,44 +180,17 @@ Background:
 - Solid teal/blue background only (#2A6F8F to #4A8FBF)
 - No gradients
 - No patterns
-- No objects in background
 - Studio lighting with soft shadows
 
 Camera and Composition:
 - Extreme close-ups for intense biological moments
 - Medium close-up for reactions (head + upper torso)
-- Dynamic angles (front-facing, side profile, slight upward)
+- Dynamic angles
 - 9:16 vertical aspect ratio (mobile optimized)
 
-Lighting:
-- Soft studio lighting from front and sides
-- Highlights on glossy translucent skin
-- Reflective highlights on metallic braces
-- Subtle rim lighting on skeleton edges
-
-Visual Effects (use ONLY when script implies):
-- Pain: Red lightning/electricity from organ
-- Transformation: Blue or gold glowing aura
-- Anatomical tracing: Red arrows following organ path
-- Scientific explanation: X-ray view with blue energy glow
-- Infection/toxin: Dark particles moving internally
-
-Props and Objects:
-- Hyper-realistic rendering
-- Vibrant accent colors
-- Held in skeleton's hands or near mouth
-- No floating labels
-- No UI elements
-- No text overlays
-
-Emotion Expression:
-- ALL emotion shown through eyes only
-- Slight head tilts allowed
-- No facial muscles
-
-═══════════════════════════════════════
+═════════════════════════════════════
 STRUCTURE TO FOLLOW
-═══════════════════════════════════════
+═════════════════════════════════════
 
 SCENE 1 — CONSUMPTION
 
@@ -261,9 +214,9 @@ videoPrompt:
 - Maintain solid teal background
 - No text appears at any time
 
-═══════════════════════════════════════
+═════════════════════════════════════
 INTERNAL JOURNEY MICRO-SCENES
-═══════════════════════════════════════
+═════════════════════════════════════
 
 Each next narration line must represent ONE biological step.
 
@@ -272,38 +225,14 @@ For INTERNAL scenes:
 - Blue energy glow for scientific visualization
 - Red lightning for pain/damage
 - Red arrows for anatomical tracing
-- Dark particles for infection/toxin
 - Maintain solid teal background
-- Keep 9:16 framing
+- 9:16 framing
 - NO TEXT OVERLAYS
 - MUST include the mandatory anatomical placement sentence
 
-Each step format:
-
-narration: (10–12 words)
-
-imagePrompt:
-(Follow ALL locked rules including anatomical lock)
-
-videoPrompt:
-(Animated biological motion, glowing flows, camera micro-movements, eye emotion shift, NO TEXT at any moment, include dialogue with consistent male and female voices for alternative scenes — scene 1 male voice, scene 2 female voice, and so on)
-
-═══════════════════════════════════════
-FINAL SCENE RULE
-═══════════════════════════════════════
-
-Final narration must feel psychologically strong.
-
-Return to medium close-up skeleton.
-Half-lit with subtle rim lighting.
-Eyes intense.
-Slow zoom inward.
-Fade out on teal background.
-No text.
-
-═══════════════════════════════════════
+═════════════════════════════════════
 OUTPUT FORMAT
-═══════════════════════════════════════
+═════════════════════════════════════
 
 For each scene output:
 - sceneNumber: sequential integer

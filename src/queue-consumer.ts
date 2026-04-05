@@ -342,6 +342,15 @@ export async function syncStoryToSupabase(
 
     let updatedStory: any = null;
 
+    // Check if any scenes have errors (outside the if block so available for job update)
+    const hasErrors = finalData.scenes?.some((scene: any) => 
+      scene.generationError || scene.videoGenerationError || scene.audioGenerationError
+    );
+
+    // Set job status: 'failed' if errors, 'completed' if clean
+    const jobStatus = hasErrors ? 'failed' : 'completed';
+    const jobProgress = hasErrors ? 95 : 100;
+
     if (currentStory?.story && finalData.scenes) {
       updatedStory = { ...currentStory.story };
       // Merge each scene's generated content
@@ -366,12 +375,12 @@ export async function syncStoryToSupabase(
         .eq('id', data.storyId);
     }
 
-    // Mark job complete (Progress 4/4: 100%)
+    // Mark job with appropriate status (failed if errors, completed if clean)
     await supabase
       .from('story_jobs')
       .update({
-        status: 'completed',
-        progress: 100,
+        status: jobStatus,
+        progress: jobProgress,
         images_generated: finalData.imagesCompleted,
         audio_generated: finalData.audioCompleted,
         updated_at: new Date().toISOString(),
@@ -386,8 +395,8 @@ export async function syncStoryToSupabase(
         type: 'story_completed',
         storyId: data.storyId,
         jobId: data.jobId,
-        status: 'completed',
-        progress: 100,
+        status: jobStatus,
+        progress: jobProgress,
         title: updatedStory?.title || 'Your Story',
       };
       

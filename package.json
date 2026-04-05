@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Cloudflare Workers service for creating short stories with AI-generated images and audio",
   "main": "src/index.ts",
+  "workspaces": [
+    "lib/@artflicks/*"
+  ],
   "scripts": {
     "dev": "wrangler dev",
     "dev:staging": "wrangler dev --env staging",

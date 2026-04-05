@@ -1,22 +1,44 @@
 import { generateText, Output, LanguageModel, jsonSchema } from 'ai';
 import * as z from 'zod';
-import { ScriptGenerationContext, ScriptGenerationResult } from './types';
-import { getTemplate, ScriptTemplateIds } from './templates';
 
-export * from './types';
-export * from './schema';
-export * from './templates';
+import {
+    getTemplate,
+    ScriptTemplateIds,
+    registry,
+    defaultTemplate,
+    DEFAULT_SKELETON_REFERENCES,
+    DEFAULT_SKELETON_REFERENCE,
+} from '@artflicks/script-generator-templates';
+
+import type { ScriptGenerationContext, ScriptGenerationResult, ScriptTemplate, TemplateManifest } from '@artflicks/script-generator-templates';
+
+export {
+    getTemplate,
+    ScriptTemplateIds,
+    registry,
+    defaultTemplate,
+    DEFAULT_SKELETON_REFERENCES,
+    DEFAULT_SKELETON_REFERENCE,
+};
+
+export type {
+    ScriptGenerationContext,
+    ScriptGenerationResult,
+    ScriptTemplate,
+    TemplateManifest,
+};
+
+export { BaseScriptTemplate } from '@artflicks/script-generator-templates';
 
 export class ScriptGenerator {
     constructor(private model: LanguageModel) { }
 
     async generate(
         context: ScriptGenerationContext,
-        templateName: string = ScriptTemplateIds.FACELESS_VIDEO
+        templateName: string = 'faceless-video'
     ): Promise<ScriptGenerationResult> {
         const template = getTemplate(templateName);
 
-        // Validate template
         if (!template) {
             return {
                 success: false,
@@ -24,7 +46,6 @@ export class ScriptGenerator {
             };
         }
 
-        // Ensure duration is always present
         if (!context.duration || context.duration <= 0) {
             return {
                 success: false,
@@ -40,7 +61,6 @@ export class ScriptGenerator {
 
         const systemWithJson = `You must respond with a single valid JSON object only. Do not include markdown or any text outside the JSON.\n\n${systemPrompt}`;
 
-        // const temperature = context.mediaType === 'video' ? 0.4 : 0.7;
         const hasTools = context.tools && Object.keys(context.tools).length > 0;
         try {
             const { output, usage } = await (generateText as any)({
@@ -76,7 +96,6 @@ export class ScriptGenerator {
             const err = error instanceof Error ? error : new Error(String(error));
             const message = err.message;
 
-            // Log detailed schema validation info when response didn't match schema
             if (message.includes('did not match schema') || message.includes('No object generated')) {
                 console.error('[ScriptGenerator] Schema validation failed:', message);
                 if (err.cause) {
@@ -91,7 +110,6 @@ export class ScriptGenerator {
                         } catch (_) {}
                     }
                 }
-                // Log any extra details the SDK may attach
                 const raw = error as Record<string, unknown>;
                 if (raw.validationErrors) {
                     console.error('[ScriptGenerator] validationErrors:', JSON.stringify(raw.validationErrors, null, 2));
@@ -106,7 +124,7 @@ export class ScriptGenerator {
             return {
                 success: false,
                 error: message,
-                systemPrompt, // useful for debugging
+                systemPrompt,
             };
         }
     }

@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from '../templates';
+import { ScriptTemplateIds } from '../index';
 import { skeleton3DShortsTools } from '../tools/skeleton-3d-shorts-tools';
 import { BaseScriptAgent } from './base-agent';
 

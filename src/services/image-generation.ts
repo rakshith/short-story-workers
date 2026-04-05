@@ -2,13 +2,11 @@
 
 import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
-import { generateShortStoryPath, generateUUID } from '../utils/storage';
-import { uploadToDefaultBucket } from '../utils/image-upload';
-import { FOLDER_NAMES, video_output_format } from '../config/table-config';
-import { v4 as uuidv4 } from 'uuid';
+import { generateUUID } from '../utils/storage';
+import {video_output_format } from '../config/table-config';
 import { VideoConfig } from '../types';
 import { attachImageInputs } from '../utils/replicate-model-config';
-import { ScriptTemplateIds } from '../script-generator/templates';
+import { ScriptTemplateIds } from '../script-generator';
 
 export interface ImageGenerationParams {
   prompt: string;

@@ -8,7 +8,7 @@ export abstract class BaseScriptTemplate implements ScriptTemplate {
 
     abstract getSchema(context?: ScriptGenerationContext): z.ZodType<any>;
 
-    getConstraints(context: ScriptGenerationContext): any {
+    getConstraints(context: ScriptGenerationContext): Record<string, unknown> {
         return {};
     }
 }

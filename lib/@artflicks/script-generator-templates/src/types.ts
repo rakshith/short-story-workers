@@ -23,8 +23,8 @@ export interface ScriptGenerationContext {
 
 export interface ScriptGenerationResult {
     success: boolean;
-    script?: any; // The raw object matching the schema
-    systemPrompt?: string; // For debugging
+    script?: any;
+    systemPrompt?: string;
     error?: string;
     usage?: {
         promptTokens: number;
@@ -40,33 +40,18 @@ export interface TemplateManifest {
     description: string;
     tags?: string[];
     author?: string;
-    // Future marketplace fields
     thumbnailUrl?: string;
     price?: number;
 }
 
 export interface ScriptTemplate {
     manifest: TemplateManifest;
-
-
-    /**
-     * Generates the system prompt for this template
-     */
     getSystemPrompt(context: ScriptGenerationContext): string;
-
-    /**
-     * Returns the Zod schema for the output validation.
-     * Accepts optional context to build dynamic schemas (e.g. min scene count by duration).
-     */
     getSchema(context?: ScriptGenerationContext): z.ZodType<any>;
-
-    /**
-     * Optional: Calculates scene plan or constraints
-     */
     getConstraints?(context: ScriptGenerationContext): any;
 }
 
 export interface ScriptGeneratorOptions {
-    apiKey?: string; // If using internal fetch
-    model?: any; // versatile for AI SDK model
+    apiKey?: string;
+    model?: any;
 }

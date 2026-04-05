@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from '../script-generator/templates';
+import { ScriptTemplateIds } from '../script-generator';
 
 const TEMPLATES_SKIP_IMAGE_STEP = new Set<string>([ScriptTemplateIds.FACELESS_VIDEO]);
 

@@ -1,5 +1,4 @@
-import { ScriptGenerator } from '../index';
-import { ScriptGenerationContext, ScriptGenerationResult } from '../types';
+import { ScriptGenerator, ScriptGenerationContext, ScriptGenerationResult } from '../index';
 
 export abstract class BaseScriptAgent {
     abstract readonly templateId: string;

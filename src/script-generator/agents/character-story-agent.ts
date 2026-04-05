@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from '../templates';
+import { ScriptTemplateIds } from '../index';
 import { characterStoryTools } from '../tools/character-story-tools';
 import { BaseScriptAgent } from './base-agent';
 

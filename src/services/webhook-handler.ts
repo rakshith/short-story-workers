@@ -104,6 +104,30 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             } else {
                 await updateCoordinatorImage(coordinator, { sceneIndex, imageError: prediction.error || 'Generation failed' });
             }
+            
+            // Check if all scenes are accounted for (success or failure) - don't block story completion
+            const { getCoordinatorProgress } = await import('../utils/coordinator');
+            const progressStatus = await getCoordinatorProgress(coordinator);
+            
+            const allImagesDone = progressStatus.imagesCompleted >= progressStatus.totalScenes;
+            const allAudioDone = progressStatus.audioCompleted >= progressStatus.totalScenes;
+            const allVideosDone = progressStatus.videosCompleted >= progressStatus.totalScenes;
+            const voiceOverEnabled = progressStatus.videoConfig?.enableVoiceOver !== false;
+            const audioAllDone = !voiceOverEnabled || allAudioDone;
+            
+            // For image-only stories: images + audio must be done
+            // For video stories: videos + audio must be done
+            const isImageOnlyStory = progressStatus.videoConfig?.mediaType !== 'video';
+            const allDone = isImageOnlyStory 
+                ? (allImagesDone && audioAllDone)
+                : (allVideosDone && audioAllDone);
+            
+            if (allDone) {
+                apiLogger.info(`${type} failed but all scenes done, completing story`, { storyId, sceneIndex, error: prediction.error });
+                const { syncStoryToSupabase } = await import('../queue-consumer');
+                await syncStoryToSupabase({ jobId, storyId, userId }, coordinator, env);
+            }
+            
             return;
         }
 

@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from "../templates";
+import { ScriptTemplateIds } from "../index";
 import { BaseScriptAgent } from "./base-agent";
 
 export class ScriptToShortsAgent extends BaseScriptAgent {

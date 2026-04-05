@@ -7,7 +7,7 @@ import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
 import { orchestrateStoryCreation, orchestrateVideoResume } from '../services/story-orchestrator';
-import { DEFAULT_SKELETON_REFERENCES } from '../script-generator/templates/skeleton-3d-shorts-defaults';
+import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
 import { estimateGenerationSeconds } from '../services/estimation';
 
 interface GenerateStoryRequest {

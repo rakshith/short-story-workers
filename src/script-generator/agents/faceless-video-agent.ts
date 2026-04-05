@@ -1,4 +1,4 @@
-import { ScriptTemplateIds } from '../templates';
+import { ScriptTemplateIds } from '../index';
 import { facelessVideoTools } from '../tools/faceless-video-tools';
 import { BaseScriptAgent } from './base-agent';
 

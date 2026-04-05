@@ -5,6 +5,8 @@ import { Skeleton3DShortsTemplate } from './skeleton-3d-shorts';
 import { BodyScienceShortsTemplate } from './body-science-shorts';
 import { ScriptToShortsTemplate } from './script-to-shorts';
 import { registry } from '../registry';
+export * from './base';
+export * from './skeleton-3d-shorts-defaults';
 
 export const ScriptTemplateIds = {
     FACELESS_VIDEO: 'faceless-video',
@@ -16,7 +18,6 @@ export const ScriptTemplateIds = {
 
 export type ScriptTemplateId = typeof ScriptTemplateIds[keyof typeof ScriptTemplateIds];
 
-// Register default templates
 registry.register(new FacelessVideoTemplate());
 registry.register(new CharacterStoryTemplate());
 registry.register(new Skeleton3DShortsTemplate());
