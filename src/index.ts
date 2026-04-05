@@ -6,6 +6,7 @@ import { handleStatus } from './routes/status';
 import { handleCancelStory } from './routes/cancel-story';
 import { handleCreateStory } from './routes/create-story';
 import { handleGenerateAndCreateStory } from './routes/generate-story';
+import { handleScriptToVideo } from './routes/script-to-video';
 import { handleReplicateWebhook, handleReplicateWebhookRecover } from './services/webhook-handler';
 import { jsonResponse, corsResponse, notFoundResponse } from './utils/response';
 
@@ -55,6 +56,10 @@ export default {
       case method === 'POST' && pathname === '/generate-and-create-story':
         return handleGenerateAndCreateStory(request, env);
 
+      // POST /script-to-video - Generate from user script with hints [Visual] Narration
+      case method === 'POST' && pathname === '/script-to-video':
+        return handleScriptToVideo(request, env);
+
       // POST /create-story - Create story from existing script
       case method === 'POST' && pathname === '/create-story':
         return handleCreateStory(request, env);
@@ -71,6 +76,7 @@ export default {
           availableEndpoints: {
             'POST /create-story': 'Create a new story (queued for async processing)',
             'POST /generate-and-create-story': 'Generate script and create story',
+            'POST /script-to-video': 'Generate from user script with [Visual] Narration hints',
             'POST /cancel-generation': 'Cancel a currently running generation job',
             'GET /status?jobId=<jobId>': 'Check the status of a story generation job',
           },

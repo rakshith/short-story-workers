@@ -8,7 +8,7 @@ import { FOLDER_NAMES, video_output_format } from '../config/table-config';
 import { v4 as uuidv4 } from 'uuid';
 import { VideoConfig } from '../types';
 import { attachImageInputs } from '../utils/replicate-model-config';
-import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { ScriptTemplateIds } from '../script-generator/templates';
 
 export interface ImageGenerationParams {
   prompt: string;

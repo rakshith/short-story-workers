@@ -5,10 +5,66 @@ import { generateSceneAudio } from './audio-generation';
 import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
-import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { ScriptTemplateIds } from '../script-generator/templates';
 import { getSceneFromCoordinator } from '../utils/coordinator';
+import { Scene } from '../types';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
+
+/**
+ * Build final prompt for image or video generation
+ * For video: uses videoPrompt directly if available, appends stylePrompt + characterAnchor
+ * For image: combines imagePrompt + stylePrompt + characterAnchor
+ */
+function buildFinalPrompt(
+  scene: Scene,
+  mediaType: 'image' | 'video',
+  stylePrompt: string,
+  characterAnchor?: string | null
+): string {
+  // For video: use videoPrompt directly if available (comprehensive video-specific prompt)
+  if (mediaType === 'video' && scene.videoPrompt) {
+    const parts = [scene.videoPrompt];
+    if (stylePrompt) parts.push(stylePrompt);
+    if (characterAnchor) parts.push(characterAnchor);
+    return parts.filter(p => p).join(', ');
+  }
+  
+  // For image or video fallback: build from individual components
+  const parts: string[] = [];
+  
+  // Base image prompt (visual description)
+  if (scene.imagePrompt) {
+    parts.push(scene.imagePrompt);
+  }
+  
+  // Action for video animation
+  if (scene.action) {
+    parts.push(`${scene.action}`);
+  }
+  
+  // Camera angle
+  if (scene.cameraAngle) {
+    parts.push(`${scene.cameraAngle} shot`);
+  }
+  
+  // Mood
+  if (scene.mood) {
+    parts.push(`${scene.mood} mood`);
+  }
+  
+  // Style prompt
+  if (stylePrompt) {
+    parts.push(stylePrompt);
+  }
+  
+  // Character anchor - ensures consistent character across all scenes
+  if (characterAnchor) {
+    parts.push(characterAnchor);
+  }
+  
+  return parts.filter(p => p).join(', ');
+}
 
 export interface JobStatus {
   jobId: string;
@@ -82,7 +138,7 @@ export async function processSceneImage(
       });
     }
 
-    const prompt = `${scene.imagePrompt}, ${videoConfig.preset.stylePrompt}`;
+    const prompt = buildFinalPrompt(scene, 'image', videoConfig.preset.stylePrompt, storyData?.characterAnchor);
 
     // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
@@ -185,10 +241,10 @@ export async function processSceneVideo(
       userId,
     });
 
-    const prompt = scene.videoPrompt || scene.imagePrompt;
-    processorLogger.debug(`Video prompt source for scene ${sceneIndex}`, {
+    const prompt = buildFinalPrompt(scene, 'video', videoConfig.preset.stylePrompt, storyData?.characterAnchor);
+    processorLogger.debug(`Video prompt for scene ${sceneIndex}`, {
       sceneIndex,
-      source: scene.videoPrompt ? 'videoPrompt' : 'imagePrompt (fallback)',
+      prompt: prompt.substring(0, 100),
     });
 
     // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)

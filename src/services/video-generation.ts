@@ -4,7 +4,7 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
-import { ScriptTemplateIds } from '@artflicks/video-compiler';
+import { ScriptTemplateIds } from '../script-generator/templates';
 import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
 
 export interface VideoGenerationParams {

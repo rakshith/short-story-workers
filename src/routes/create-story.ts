@@ -1,14 +1,12 @@
 // Create story endpoint handler - Queue jobs for async processing
 
-import { Env, QueueMessage } from '../types/env';
-import { CreateStoryRequest, StoryTimeline, VideoConfig } from '../types';
+import { Env } from '../types/env';
+import { CreateStoryRequest, StoryTimeline } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
 import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
-import { sendQueueBatch } from '../utils/queue-batch';
-import { initCoordinator } from '../utils/coordinator';
-import { DEFAULT_SKELETON_REFERENCES } from '../../lib/@artflicks/video-compiler/src/script-generator/templates/skeleton-3d-shorts-defaults';
+import { orchestrateStoryCreation } from '../services/story-orchestrator';
 
 /**
  * POST /create-story
@@ -72,60 +70,42 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
             }
         }
 
-        if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && !(body.videoConfig?.characterReferenceImages?.length)) {
-            body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
-        }
-
         // Generate job ID
         const jobId = generateUUID();
         
         console.log(`[Create Story] Queuing job ${jobId} for user ${body.userId} (Tier: ${userTier}, Priority: ${priority}, Active: ${activeJobs?.length || 0}/${maxConcurrency})`);
         console.log(`[Create Story] Story: ${body.title}, Scenes: ${storyData.scenes.length}`);
 
-        // Create initial story in database
-        const createResult = await createInitialStory(body, storyData, jobId, env);
-        if (createResult instanceof Response) {
-            return createResult;
-        }
+        // Initialize job at 0%
+        await updateJobStatus(jobId, {
+            jobId,
+            userId: body.userId,
+            status: 'processing',
+            progress: 0,
+            totalScenes: storyData.scenes.length,
+            imagesGenerated: 0,
+            audioGenerated: 0,
+            teamId: body.teamId,
+        }, env);
 
-        const storyId = createResult.id;
+        // Use orchestrator for story creation
+        const result = await orchestrateStoryCreation({
+            jobId,
+            userId: body.userId,
+            storyData,
+            videoConfig: body.videoConfig,
+            baseUrl: url.origin,
+            userTier,
+            priority,
+            seriesId: body.seriesId,
+            teamId: body.teamId,
+            title: body.title,
+            env,
+        });
 
-        // Initialize Durable Object and queue jobs - wrapped to catch and broadcast with storyId in scope
-        try {
-            await initializeCoordinator(storyId, body.userId, storyData, body.videoConfig, env);
-            await queueGenerationJobs(jobId, body, storyId, storyData, url.origin, userTier, priority, env);
-        } catch (error) {
-            console.error('[Create Story] Error in coordinator/queue:', error);
-            
-            // Broadcast failure to SSE clients
-            try {
-                const isStaging = !env.ENVIRONMENT || env.ENVIRONMENT === 'staging';
-                const workerUrl = isStaging 
-                    ? 'https://create-story-worker-staging.matrixrak.workers.dev'
-                    : 'https://create-story-worker-production.matrixrak.workers.dev';
-                
-                await fetch(`${workerUrl}/broadcast`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        storyId, 
-                        data: { 
-                            type: 'story_failed', 
-                            storyId, 
-                            jobId,
-                            error: error instanceof Error ? error.message : 'Failed to create story'
-                        } 
-                    }),
-                });
-            } catch (broadcastError) {
-                console.error('[Create Story] Failed to broadcast failure:', broadcastError);
-            }
-            
+        if (!result.success) {
             return jsonResponse(
-                {
-                    error: 'Failed to queue story generation',
-                    details: error instanceof Error ? error.message : 'Unknown error',
-                },
+                { error: result.error || 'Failed to create story' },
                 500
             );
         }
@@ -134,6 +114,7 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
         return jsonResponse({
             success: true,
             jobId,
+            storyId: result.storyId,
             status: 'pending',
             message: 'Story generation queued successfully. Use /status?jobId=' + jobId + ' to check progress.',
             stats: {
@@ -141,7 +122,6 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
             },
         });
     } catch (error) {
-        // This catches errors from createInitialStory (before storyId exists)
         console.error('[Create Story] Error:', error);
         return jsonResponse(
             {
@@ -151,156 +131,4 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
             500
         );
     }
-}
-
-/**
- * Creates the initial story record in the database
- */
-async function createInitialStory(
-    body: CreateStoryRequest,
-    storyData: StoryTimeline,
-    jobId: string,
-    env: Env
-): Promise<{ id: string } | Response> {
-    try {
-        const { StoryService } = await import('../services/supabase');
-        const { ProjectStatus } = await import('../types');
-        const storyService = new StoryService(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
-
-        // Persist videoConfig with mediaType set from request
-        const videoConfigToPersist = {
-            ...body.videoConfig,
-            mediaType: body.videoConfig?.mediaType ?? 'image',
-        } as VideoConfig;
-        const createdStory = await storyService.createStory({
-            userId: body.userId,
-            seriesId: body.seriesId,
-            title: storyData.title,
-            videoType: body.videoConfig?.videoType || 'faceless-video',
-            story: storyData,
-            status: ProjectStatus.PROCESSING,
-            videoConfig: videoConfigToPersist,
-            storyCost: body.videoConfig?.estimatedCredits,
-            teamId: body.teamId,
-        });
-        console.log(`[Create Story] Initial story created in database with ID: ${createdStory.id}`);
-
-        // Progress Update: Story created - 25%
-        await updateJobStatus(jobId, {
-            jobId,
-            userId: body.userId,
-            status: 'processing',
-            progress: 25,
-            totalScenes: storyData.scenes.length,
-            imagesGenerated: 0,
-            audioGenerated: 0,
-            storyId: createdStory.id,
-            teamId: body.teamId,
-        }, env);
-        console.log(`[Create Story] Progress updated to 25% - Story created`);
-
-        return createdStory;
-    } catch (error) {
-        console.error(`[Create Story] Failed to create story:`, error);
-        await updateJobStatus(jobId, {
-            jobId,
-            userId: body.userId,
-            status: 'failed',
-            progress: 0,
-            totalScenes: storyData.scenes.length,
-            imagesGenerated: 0,
-            audioGenerated: 0,
-            error: error instanceof Error ? error.message : 'Failed to create story',
-            teamId: body.teamId,
-        }, env);
-        return jsonResponse(
-            {
-                error: 'Failed to create story',
-                details: error instanceof Error ? error.message : 'Unknown error'
-            },
-            500
-        );
-    }
-}
-
-/**
- * Initializes the Durable Object coordinator for a story
- */
-async function initializeCoordinator(
-    storyId: string,
-    userId: string,
-    storyData: StoryTimeline,
-    videoConfig: VideoConfig,
-    env: Env
-): Promise<void> {
-    const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
-    const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
-    await initCoordinator(coordinator, {
-        storyId,
-        userId,
-        scenes: storyData.scenes,
-        totalScenes: storyData.scenes.length,
-        videoConfig,
-        sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
-    });
-    console.log(`[Create Story] Durable Object initialized for story ${storyId}`);
-}
-
-/**
- * Queues visual and audio generation jobs for all scenes with tier-based priority
- */
-async function queueGenerationJobs(
-    jobId: string,
-    body: CreateStoryRequest,
-    storyId: string,
-    storyData: StoryTimeline,
-    baseUrl: string,
-    userTier: string,
-    priority: number,
-    env: Env
-): Promise<void> {
-    const mediaType = body.videoConfig?.mediaType === 'video' ? 'video' : 'image';
-
-    // Queue visual generation jobs with tier and priority (no storyData - workers fetch from DO)
-    const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
-        jobId,
-        userId: body.userId,
-        seriesId: body.seriesId,
-        storyId,
-        title: storyData.title,
-        videoConfig: body.videoConfig!,
-        sceneIndex: index,
-        type: mediaType as QueueMessage['type'],
-        baseUrl,
-        teamId: body.teamId,
-        userTier,
-        priority,
-    }));
-    await sendQueueBatch(env.STORY_QUEUE, visualMessages);
-    console.log(`[Create Story] Queued ${storyData.scenes.length} ${mediaType} generation jobs via sendBatch (Priority: ${priority})`);
-
-    // Queue audio generation jobs with tier and priority (only if enableVoiceOver is not false)
-    const enableVoiceOver = body.videoConfig?.enableVoiceOver !== false;
-    
-    if (enableVoiceOver) {
-        const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
-            jobId,
-            userId: body.userId,
-            seriesId: body.seriesId,
-            storyId,
-            title: storyData.title,
-            videoConfig: body.videoConfig!,
-            sceneIndex: index,
-            type: 'audio' as const,
-            baseUrl,
-            teamId: body.teamId,
-            userTier,
-            priority,
-        }));
-        await sendQueueBatch(env.STORY_QUEUE, audioMessages);
-        console.log(`[Create Story] Queued ${storyData.scenes.length} audio generation jobs via sendBatch (Priority: ${priority})`);
-    } else {
-        console.log(`[Create Story] Audio generation skipped (enableVoiceOver=false)`);
-    }
-
 }

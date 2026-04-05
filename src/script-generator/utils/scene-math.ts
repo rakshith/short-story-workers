@@ -164,10 +164,25 @@ NARRATION (FLOWING CINEMATIC STORY — NOT A SLIDESHOW):
 - Each scene's last words should naturally flow into the next scene's first words.
 - Think: documentary voiceover with rapid B-roll cuts underneath.
 
+NARRATION QUALITY (MUST FOLLOW):
+- IMMERSIVE POV: Write as if the viewer IS there. Use sensory language — what they see, hear, smell.
+  ✅ "Smoke curls around the quill. Heat bites your skin."
+  ❌ "The building is on fire."
+- MICRO-CLIFFHANGERS: End each scene on unresolved tension, never flat summary.
+  ✅ "The quill hovers. One word more. Then—footsteps."
+  ❌ "The looters are approaching the room."
+- SHOW DON'T TELL: Make viewer FEEL stakes, don't state them.
+  ✅ "His hand trembles. One name left."
+  ❌ "The report contains important evidence."
+- HOOK EVERY SCENE: Each narration pulls viewer into next — curiosity gap, open loop, or escalation.
+  ❌ BAD: "Rome fell. The report was never finished." (repeats facts)
+  ✅ GOOD: "Rome fell. But he kept writing." (adds new detail, hooks next)
+
 SELF-CHECK BEFORE FINISHING:
 1. Count your scenes. Is it ≥ ${minScenes}? If not, ADD more scenes.
 2. Count total words across ALL narrations. Is it ~${totalWordsTarget}? If not, ADD more scenes.
 3. Total words ÷ 2.5 ≈ ${durationSeconds}s? If way under, you need MORE scenes.${isVideo ? `\n4. For each scene: 5s → at most ${VIDEO_NARRATION_WPS.maxWords5s} words; 10s → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (never exceed or audio exceeds scene).` : ''}
+5. Does each scene's narration HOOK the viewer into the next? If flat/repetitive → rewrite.
 `.trim();
 
     return {

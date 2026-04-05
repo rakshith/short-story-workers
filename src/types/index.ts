@@ -22,52 +22,59 @@ export interface Caption {
   tokens?: CaptionToken[];
 }
 
-export type TransitionPreset = 'crossfade' | 'zoom-pan' | 'zoom-out-pan' | 'bounce-pan' | 'blur-motion' | 'bounce-flash' | 'floating';
+export type TransitionPreset =
+  | "crossfade"
+  | "zoom-pan"
+  | "zoom-out-pan"
+  | "bounce-pan"
+  | "blur-motion"
+  | "bounce-flash"
+  | "floating";
 
 // Watermark Configuration Type
 export interface WatermarkConfig {
   text?: string;
-  variant?: 'gradient' | 'glass' | 'neon' | 'minimal';
-  position?: 'top-right' | 'top-left' | 'bottom-right' | 'bottom-left';
+  variant?: "gradient" | "glass" | "neon" | "minimal";
+  position?: "top-right" | "top-left" | "bottom-right" | "bottom-left";
   opacity?: number;
   fontSize?: string;
   show?: boolean;
 }
 
 export type CaptionStylePreset =
-  | 'beast'
-  | 'tiktok'
-  | 'bold-modern'
-  | 'minimal'
-  | 'serif-elegant'
-  | 'retro-pop'
-  | 'handwritten'
-  | 'newspaper'
-  | 'techno'
-  | 'comic-book'
-  | 'mono-terminal'
-  | 'luxury'
-  | 'stroke-outline'
-  | 'stroke-gold'
-  | 'stroke-pink'
-  | 'stroke-green'
-  | 'stroke-purple'
-  | 'white-stroke';
+  | "beast"
+  | "tiktok"
+  | "bold-modern"
+  | "minimal"
+  | "serif-elegant"
+  | "retro-pop"
+  | "handwritten"
+  | "newspaper"
+  | "techno"
+  | "comic-book"
+  | "mono-terminal"
+  | "luxury"
+  | "stroke-outline"
+  | "stroke-gold"
+  | "stroke-pink"
+  | "stroke-green"
+  | "stroke-purple"
+  | "white-stroke";
 
 export interface StoryCompositionProps {
   scenes: Scene[];
   backgroundMusic?: string;
   backgroundMusicVolume?: number;
-  userTier?: 'free' | 'premium' | 'pro';
+  userTier?: "free" | "premium" | "pro";
   showWatermark?: boolean;
   transitionPreset?: TransitionPreset; // Plug-and-play transition preset
   captionStylePreset?: CaptionStylePreset; // Caption style preset
   watermark?: WatermarkConfig; // Watermark configuration object
 }
 
-export type MediaType = 'image' | 'video';
+export type MediaType = "image" | "video";
 
-export type UserTier = 'tier1' | 'tier2' | 'tier3' | 'tier4';
+export type UserTier = "tier1" | "tier2" | "tier3" | "tier4";
 
 export interface VideoConfig {
   id?: string;
@@ -119,6 +126,7 @@ export interface Scene {
   videoPrompt?: string;
   cameraAngle: string;
   mood: string;
+  action: string;
   // Image generation tracking
   generatedImageUrl?: string;
   isGenerating?: boolean;
@@ -141,6 +149,8 @@ export interface StoryTimeline {
   id: string;
   title: string;
   totalDuration: number;
+  characterDescription?: string;
+  characterAnchor?: string | null;
   scenes: Scene[];
 }
 
@@ -174,16 +184,16 @@ export interface CreateStoryResponse {
   details?: string;
 }
 
-export type AspectRatio = '16:9' | '1:1' | '9:16';
+export type AspectRatio = "16:9" | "1:1" | "9:16";
 
 export const ProjectStatus = {
-  DRAFT: 'draft',
-  PROCESSING: 'processing',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  CANCELLED: 'cancelled',
-  AWAITING_REVIEW: 'awaiting_review',
+  DRAFT: "draft",
+  PROCESSING: "processing",
+  COMPLETED: "completed",
+  FAILED: "failed",
+  CANCELLED: "cancelled",
+  AWAITING_REVIEW: "awaiting_review",
 } as const;
 
-export type ProjectStatusType = typeof ProjectStatus[keyof typeof ProjectStatus];
-
+export type ProjectStatusType =
+  (typeof ProjectStatus)[keyof typeof ProjectStatus];

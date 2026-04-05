@@ -3,16 +3,18 @@ import { ScriptGenerator } from '../index';
 import { ScriptTemplateIds } from '../templates';
 import { ScriptGenerationContext, ScriptGenerationResult } from '../types';
 import { BaseScriptAgent } from './base-agent';
-import { YouTubeShortsAgent } from './youtube-shorts-agent';
+import { FacelessVideoAgent } from './faceless-video-agent';
 import { CharacterStoryAgent } from './character-story-agent';
 import { Skeleton3DShortsAgent } from './skeleton-3d-shorts-agent';
 import { BodyScienceShortsAgent } from './body-science-shorts-agent';
+import { ScriptToShortsAgent } from './script-to-shorts-agent';
 
 export { BaseScriptAgent } from './base-agent';
-export { YouTubeShortsAgent } from './youtube-shorts-agent';
+export { FacelessVideoAgent } from './faceless-video-agent';
 export { CharacterStoryAgent } from './character-story-agent';
 export { Skeleton3DShortsAgent } from './skeleton-3d-shorts-agent';
 export { BodyScienceShortsAgent } from './body-science-shorts-agent';
+export { ScriptToShortsAgent } from './script-to-shorts-agent';
 
 export class ScriptAgentRouter {
     private agents: Map<string, BaseScriptAgent>;
@@ -21,19 +23,21 @@ export class ScriptAgentRouter {
     constructor(model: LanguageModel) {
         const generator = new ScriptGenerator(model);
 
-        const youtubeAgent = new YouTubeShortsAgent(generator);
+        const facelessVideoAgent = new FacelessVideoAgent(generator);
         const characterAgent = new CharacterStoryAgent(generator);
         const skeleton3dAgent = new Skeleton3DShortsAgent(generator);
         const bodyScienceAgent = new BodyScienceShortsAgent(generator);
+        const scriptToShortsAgent = new ScriptToShortsAgent(generator);
 
         this.agents = new Map<string, BaseScriptAgent>([
-            [ScriptTemplateIds.YOUTUBE_SHORTS, youtubeAgent],
+            [ScriptTemplateIds.FACELESS_VIDEO, facelessVideoAgent],
             [ScriptTemplateIds.CHARACTER_STORY, characterAgent],
             [ScriptTemplateIds.SKELETON_3D_SHORTS, skeleton3dAgent],
             [ScriptTemplateIds.BODY_SCIENCE_SHORTS, bodyScienceAgent],
+            [ScriptTemplateIds.SCRIPT_TO_SHORTS, scriptToShortsAgent],
         ]);
 
-        this.defaultAgent = youtubeAgent;
+        this.defaultAgent = facelessVideoAgent;
     }
 
     route(templateId?: string): BaseScriptAgent {

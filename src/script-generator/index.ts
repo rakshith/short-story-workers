@@ -1,4 +1,5 @@
-import { generateText, Output, LanguageModel } from 'ai';
+import { generateText, Output, LanguageModel, jsonSchema } from 'ai';
+import * as z from 'zod';
 import { ScriptGenerationContext, ScriptGenerationResult } from './types';
 import { getTemplate, ScriptTemplateIds } from './templates';
 
@@ -11,7 +12,7 @@ export class ScriptGenerator {
 
     async generate(
         context: ScriptGenerationContext,
-        templateName: string = ScriptTemplateIds.YOUTUBE_SHORTS
+        templateName: string = ScriptTemplateIds.FACELESS_VIDEO
     ): Promise<ScriptGenerationResult> {
         const template = getTemplate(templateName);
 
@@ -23,8 +24,19 @@ export class ScriptGenerator {
             };
         }
 
+        // Ensure duration is always present
+        if (!context.duration || context.duration <= 0) {
+            return {
+                success: false,
+                error: 'context.duration is required and must be a positive number',
+            };
+        }
+
         const systemPrompt = template.getSystemPrompt(context);
         const schema: any = template.getSchema(context);
+
+        const jsonSchemaObj = z.toJSONSchema(schema);
+        const openAiSchema = jsonSchema(jsonSchemaObj);
 
         const systemWithJson = `You must respond with a single valid JSON object only. Do not include markdown or any text outside the JSON.\n\n${systemPrompt}`;
 
@@ -35,7 +47,7 @@ export class ScriptGenerator {
                 model: this.model,
                 system: systemWithJson,
                 prompt: context.prompt,
-                output: Output.object({ schema }),
+                output: Output.object({ schema: openAiSchema }),
                 ...(hasTools && {
                     tools: context.tools,
                     maxSteps: context.maxSteps ?? 3,

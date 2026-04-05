@@ -34,23 +34,55 @@ const narrationDescribe = (base: string, mediaType?: 'image' | 'video') =>
         ? `Word count must match scene duration: duration=5 → ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words; duration=10 → ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Adjust so narration fits the scene. ${base}`
         : base;
 
-const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => z.object({
-    sceneNumber: z.number().describe('Scene number in sequence'),
-    duration: sceneDurationSchema(mediaType),
-    narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene. Write naturally — the narration length DETERMINES the scene duration via text-to-speech. Fill the scene fully. No dead air.', mediaType)),
-    imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English. Include: dramatic lighting, vivid colors, emotional expressions, dynamic composition, atmospheric elements. Scene 1 must be the MOST visually striking.'),
-    cameraAngle: z.string().nullable().describe('Camera angle or shot type (e.g., close-up, wide shot, birds eye view)'),
-    mood: z.string().nullable().describe('Emotional tone or atmosphere of the scene')
-});
+const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => {
+    if (mediaType === 'video') {
+        return z.object({
+            sceneNumber: z.number().describe('Scene number in sequence'),
+            duration: sceneDurationSchema(mediaType),
+            narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene. Write naturally — the narration length DETERMINES the scene duration via text-to-speech. Fill the scene fully. No dead air.', mediaType)),
+            imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English. Include: dramatic lighting, vivid colors, emotional expressions, dynamic composition, atmospheric elements. Scene 1 must be the MOST visually striking.'),
+            cameraAngle: z.string().nullable().describe('Camera angle or shot type (e.g., close-up, wide shot, tracking shot, slow push-in)'),
+            mood: z.string().nullable().describe('Emotional tone or atmosphere of the scene (e.g., tense, mysterious, ominous)'),
+            action: z.string().describe('Character action for video animation - what is happening in the scene (e.g., running toward camera, looking around)'),
+            videoPrompt: z.string().describe('Detailed image-to-video animation prompt: cinematic motion, camera movement, subject action, secondary motion (particles, wind, light flicker), pace and energy, smooth cinematic motion'),
+        });
+    }
+    
+    return z.object({
+        sceneNumber: z.number().describe('Scene number in sequence'),
+        duration: sceneDurationSchema(mediaType),
+        narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene. Write naturally — the narration length DETERMINES the scene duration via text-to-speech. Fill the scene fully. No dead air.', mediaType)),
+        imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English. Include: dramatic lighting, vivid colors, emotional expressions, dynamic composition, atmospheric elements. Scene 1 must be the MOST visually striking.'),
+        cameraAngle: z.string().nullable().describe('Camera angle or shot type (e.g., close-up, wide shot, tracking shot, slow push-in)'),
+        mood: z.string().nullable().describe('Emotional tone or atmosphere of the scene (e.g., tense, mysterious, ominous)'),
+        action: z.string().describe('Character action for video animation - what is happening in the scene (e.g., running toward camera, looking around)'),
+    });
+};
 
-const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => z.object({
-    sceneNumber: z.number().describe('Scene number in sequence'),
-    duration: sceneDurationSchema(mediaType),
-    narration: z.string().describe(narrationDescribe('Voiceover narration. Write naturally — narration length DETERMINES scene duration via TTS. Emotionally engaging, character-focused.', mediaType)),
-    imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description. The main character MUST be the focal point. Describe: character action/pose, emotional expression, environment, lighting, camera angle.'),
-    cameraAngle: z.enum(['close-up', 'medium shot', 'wide shot', 'birds-eye', 'low angle', 'over-the-shoulder']).describe('Camera angle for this scene'),
-    mood: z.enum(['tense', 'hopeful', 'melancholic', 'triumphant', 'mysterious', 'peaceful', 'dramatic', 'romantic']).describe('Emotional tone of the scene')
-});
+const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => {
+    if (mediaType === 'video') {
+        return z.object({
+            sceneNumber: z.number().describe('Scene number in sequence'),
+            duration: sceneDurationSchema(mediaType),
+            narration: z.string().describe(narrationDescribe('Voiceover narration. Write naturally — narration length DETERMINES scene duration via TTS. Emotionally engaging, character-focused.', mediaType)),
+            imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description. The main character MUST be the focal point. Describe: character action/pose, emotional expression, environment, lighting, camera angle.'),
+            cameraAngle: z.string().describe('Camera angle for this scene (e.g., tracking shot, slow push-in, wide shot)'),
+            mood: z.string().describe('Emotional tone of the scene (e.g., tense, mysterious, melancholic)'),
+            action: z.string().describe('Character action for video animation - what the character is doing (e.g., running toward camera, looking around)'),
+            videoPrompt: z.string().describe('Detailed image-to-video animation prompt: cinematic motion, camera movement, subject action, secondary motion (particles, wind, light flicker), pace and energy, smooth cinematic motion'),
+        });
+    }
+    
+    return z.object({
+        sceneNumber: z.number().describe('Scene number in sequence'),
+        duration: sceneDurationSchema(mediaType),
+        narration: z.string().describe(narrationDescribe('Voiceover narration. Write naturally — narration length DETERMINES scene duration via TTS. Emotionally engaging, character-focused.', mediaType)),
+        imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description. The main character MUST be the focal point. Describe: character action/pose, emotional expression, environment, lighting, camera angle.'),
+        cameraAngle: z.string().describe('Camera angle for this scene (e.g., tracking shot, slow push-in, wide shot)'),
+        mood: z.string().describe('Emotional tone of the scene (e.g., tense, mysterious, melancholic)'),
+        action: z.string().describe('Character action for video animation - what the character is doing (e.g., running toward camera, looking around)'),
+    });
+};
 
 // ═══════════════════════════════════════════════════════════════
 // METADATA SCHEMA (YouTube SEO + monetization signals)

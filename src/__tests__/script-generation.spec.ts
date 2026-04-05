@@ -3,7 +3,7 @@
  * Run with: npx tsx src/__tests__/script-generation.spec.ts
  *
  * Requires .dev.vars (or env vars):
- *   CF_AIG_TOKEN, CF_AI_GATEWAY_URL, OPENAI_API_KEY (unused but required by Env type)
+ *   CLOUDFLARE_ACCOUNT_ID, CF_AI_GATEWAY_ID, CF_AIG_TOKEN, OPENAI_API_KEY
  */
 
 import { generateScript } from '../services/script-generation';
@@ -12,16 +12,21 @@ import type { Env } from '../types/env';
 declare const process: { env: Record<string, string | undefined>; exit(code: number): never };
 
 function buildEnv(): Env {
-  const token = process.env.CF_AIG_TOKEN;
-  const gatewayUrl = process.env.CF_AI_GATEWAY_URL;
+  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+  const gatewayId = process.env.CF_AI_GATEWAY_ID;
+  const aigToken = process.env.CF_AIG_TOKEN;
+  const openaiKey = process.env.OPENAI_API_KEY;
 
-  if (!token) throw new Error('Missing CF_AIG_TOKEN');
-  if (!gatewayUrl) throw new Error('Missing CF_AI_GATEWAY_URL');
+  if (!accountId) throw new Error('Missing CLOUDFLARE_ACCOUNT_ID');
+  if (!gatewayId) throw new Error('Missing CF_AI_GATEWAY_ID');
+  if (!aigToken) throw new Error('Missing CF_AIG_TOKEN');
+  if (!openaiKey) throw new Error('Missing OPENAI_API_KEY');
 
   return {
-    CF_AIG_TOKEN: token,
-    CF_AI_GATEWAY_URL: gatewayUrl,
-    OPENAI_API_KEY: process.env.OPENAI_API_KEY ?? '',
+    CLOUDFLARE_ACCOUNT_ID: accountId,
+    CF_AI_GATEWAY_ID: gatewayId,
+    CF_AIG_TOKEN: aigToken,
+    OPENAI_API_KEY: openaiKey,
   } as unknown as Env;
 }
 

@@ -294,6 +294,20 @@ CINEMATIC TONE (violating ANY = FAIL):
 ✔ No YouTuber voice | no AI filler | no past tense | no summary endings
 ✔ Final scene = haunting line/image, not a lecture
 
+═══════════════════════════════════════════════════════════════════════
+                    OUTPUT FIELDS REQUIRED
+═══════════════════════════════════════════════════════════════════════
+For EVERY scene, output these EXACT fields (NOT embedded in imagePrompt):
+- sceneNumber: sequential number
+- duration: words ÷ 2.5, rounded
+- narration: voiceover text
+- imagePrompt: visual description (4-part: DNA + CONSISTENCY + ACTION + SCENE)
+- cameraAngle: specific camera movement (e.g., "tracking shot", "slow push-in", "low angle")
+- mood: emotional tone (e.g., "tense", "mysterious", "ominous")
+- action: character action for video animation (e.g., "running toward camera", "looking around")
+
+IMPORTANT: cameraAngle, mood, and action MUST be separate fields - NOT in imagePrompt!
+
 IMAGE PROMPTS (violating ANY = FAIL):
 ✔ 4-part structure: DNA + CONSISTENCY + ACTION + SCENE + CAMERA on every prompt
 ✔ ACTION = character-centric + facing direction, uses "the skeleton" (never you/your)

@@ -145,6 +145,10 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
  */
 export const MODEL_DURATION_OPTIONS: Record<string, number[]> = {
     'veo': [4, 6, 8],
+    'kling': [5, 10],
+    'wan': [5, 10],
+    'sora': [5, 10],
+    'default': [5, 10]
 };
 
 /**

@@ -1,6 +1,6 @@
-import { ScriptTemplateIds } from '../../lib/@artflicks/video-compiler/src/script-generator/templates';
+import { ScriptTemplateIds } from '../script-generator/templates';
 
-const TEMPLATES_SKIP_IMAGE_STEP = new Set<string>([ScriptTemplateIds.YOUTUBE_SHORTS]);
+const TEMPLATES_SKIP_IMAGE_STEP = new Set<string>([ScriptTemplateIds.FACELESS_VIDEO]);
 
 export function templateSkipsImageStep(templateId: string | undefined): boolean {
   if (!templateId) return false;

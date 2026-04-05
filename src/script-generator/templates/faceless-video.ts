@@ -6,14 +6,14 @@ import { VIDEO_NARRATION_WPS } from "../constants";
 import { createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from "../schema";
 import { ScriptTemplateIds } from "./index";
 
-export class YouTubeShortsTemplate extends BaseScriptTemplate {
+export class FacelessVideoTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
-    id: ScriptTemplateIds.YOUTUBE_SHORTS,
-    name: "YouTube Shorts",
-    version: "4.0.0",
+    id: ScriptTemplateIds.FACELESS_VIDEO,
+    name: "Faceless Video",
+    version: "2.0.0",
     description:
       "Cinematic fast-paced storytelling. ~3s per scene, flowing narration with rapid visual cuts.",
-    tags: ["youtube", "shorts", "viral", "cinematic", "fast-paced"],
+    tags: ["faceless", "shorts", "viral", "cinematic", "fast-paced"],
   };
 
   getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
