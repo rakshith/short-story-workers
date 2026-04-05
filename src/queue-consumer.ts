@@ -351,6 +351,21 @@ export async function syncStoryToSupabase(
     const jobStatus = hasErrors ? 'failed' : 'completed';
     const jobProgress = hasErrors ? 95 : 100;
 
+    // Collect error messages for user-friendly display
+    const errorDetails: string[] = [];
+    finalData.scenes?.forEach((scene: any, idx: number) => {
+      if (scene.generationError) {
+        errorDetails.push(`Scene ${idx + 1} image: ${scene.generationError}`);
+      }
+      if (scene.videoGenerationError) {
+        errorDetails.push(`Scene ${idx + 1} video: ${scene.videoGenerationError}`);
+      }
+      if (scene.audioGenerationError) {
+        errorDetails.push(`Scene ${idx + 1} audio: ${scene.audioGenerationError}`);
+      }
+    });
+    const errorMessage = hasErrors ? errorDetails.join('; ') : null;
+
     if (currentStory?.story && finalData.scenes) {
       updatedStory = { ...currentStory.story };
       // Merge each scene's generated content
@@ -363,28 +378,35 @@ export async function syncStoryToSupabase(
         }
       });
 
-      // Update only story, timeline, status — do NOT touch video_config so script stays the user's raw prompt
+      // Update story with appropriate status (failed if errors, draft if clean)
       await supabase
         .from('stories')
         .update({
           story: updatedStory,
           timeline: finalData.timeline || null,
-          status: 'draft',
+          status: hasErrors ? 'failed' : 'draft',
           updated_at: new Date().toISOString(),
         })
         .eq('id', data.storyId);
     }
 
     // Mark job with appropriate status (failed if errors, completed if clean)
+    const jobUpdate: any = {
+      status: jobStatus,
+      progress: jobProgress,
+      images_generated: finalData.imagesCompleted,
+      audio_generated: finalData.audioCompleted,
+      updated_at: new Date().toISOString(),
+    };
+    
+    // Add error message if there are failures
+    if (errorMessage) {
+      jobUpdate.error = errorMessage;
+    }
+    
     await supabase
       .from('story_jobs')
-      .update({
-        status: jobStatus,
-        progress: jobProgress,
-        images_generated: finalData.imagesCompleted,
-        audio_generated: finalData.audioCompleted,
-        updated_at: new Date().toISOString(),
-      })
+      .update(jobUpdate)
       .eq('job_id', data.jobId);
 
     queueLogger.info(`Story synced to database`, { jobId: data.jobId, storyId: data.storyId });
