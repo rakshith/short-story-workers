@@ -40,36 +40,18 @@ async function testScriptToShorts() {
   const env = buildEnv();
 
   const userScript = `
-    [Character: Targaryen queen in flowing silver-white hair, black dragon scale armor, violet eyes, red and black cape]
-    [Mood: epic, dark, mythic]
-
-    [Aerial drone shot, vast medieval kingdom at dawn, red sky] Before the kingdoms, there were dragons.
-
-    [slow push-in on iron throne, torchlight flickering] One family controlled them all. House Targaryen.
-
-    [tracking shot, three massive dragons flying over burning city] Their dragons didn't just win wars. They ended them.
-
-    [low angle tilt-up, Targaryen queen standing on dragon's back, wind whipping cape] For two hundred years, no house dared challenge them.
-
-    [dutch angle, shadowy lords gathered around map table, candles flickering] Then the dragons died. And the wolves smelled blood.
-
-    [crane shot pulling back, armies of five houses clashing on battlefield] Every great house wanted the throne. Only one could survive.
-
-    [close-up rack focus, queen's violet eyes watching city burn below] She didn't want the throne. She wanted them all to burn.
-
-    [slow motion push-in, dragon emerging through smoke and fire, wings spreading] War of thrones was never about power. It was about fear.
-
-    [pull-out, lone iron throne in empty ash-covered hall, silence] In the end, the throne survived. Everyone who sat on it didn't.`;
-
+  [Character: curious narrator exploring a vibrant world of wildlife]\n[Mood: educational, wondrous]\n\n[Wide shot of dense jungle] In vibrant forests, tigers reign supreme.\n[Close-up on an elephant's eye] Elephants, wise with every gentle step.\n[Medium shot of a soaring eagle] Eagles rise, mastering the skies.\n[Low angle of a tree with a sloth] Sloths embrace tranquility.\n[High angle of a bustling ant colony] Ants, the epitome of teamwork.\n[Aerial view of a whale in the ocean] Whales, vast as the endless sea.\n[Tracking shot of a cheetah running] Cheetahs, unmatched speed unleashed.\n[Slow push-in on a peacock's feathers] Peacocks, nature’s dazzling display.\n[Pull-out to reveal Arctic with polar bears] Polar bears, rulers of the ice.\n[Birds-eye view of a savanna with diverse wildlife] Earth’s tapestry, diversity in motion
+  `;
   console.log("Input:", userScript);
   console.log("\nCalling LLM...\n");
 
   const result = await generateScriptFromText(
     {
       scriptText: userScript,
-      duration: 15,
       language: "en",
-      mediaType: "image",
+      duration: 0,
+      minSceneDuration: 4, // this is working fine
+      maxSceneDuration: 6, // this is working fine
     },
     env,
   );

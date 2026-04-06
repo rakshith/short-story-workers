@@ -88,6 +88,12 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     // google/veo-3.1-fast
     'google/veo-3.1-fast': { singleField: 'image', defaultInputs: { generate_audio: false } },
 
+    // google/veo-3.1-lite
+    // 'google/veo-3.1-lite': { singleField: 'image', defaultInputs: { generate_audio: false } },
+
+    // google/veo-3.1-pro
+    'google/veo-3.1-pro': { singleField: 'image', defaultInputs: { generate_audio: false } },
+
     // bytedance/seedance-1-pro-fast
     'bytedance/seedance-1-pro-fast': { singleField: 'image' },
 

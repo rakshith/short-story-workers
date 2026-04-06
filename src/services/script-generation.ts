@@ -37,6 +37,8 @@ export interface ScriptFromTextParams {
   language?: string;
   model?: string;
   mediaType?: "image" | "video";
+  minSceneDuration?: number;
+  maxSceneDuration?: number;
 }
 
 export interface ScriptGenerationResult {
@@ -229,7 +231,7 @@ export async function generateScriptFromText(
   params: ScriptFromTextParams,
   env: Env,
 ): Promise<ScriptGenerationResult> {
-  const { scriptText, duration, language = "en", mediaType } = params;
+  const { scriptText, duration, language = "en", mediaType, minSceneDuration, maxSceneDuration } = params;
 
   try {
     const accountId = env.CLOUDFLARE_ACCOUNT_ID;
@@ -252,10 +254,12 @@ export async function generateScriptFromText(
 
     const result = await router.run("script-to-shorts", {
       prompt: scriptText,
-      duration,
+      duration: duration || 30,
       language,
       model: effectiveModel,
       mediaType,
+      minSceneDuration,
+      maxSceneDuration,
     });
 
     if (!result.success || !result.script) {

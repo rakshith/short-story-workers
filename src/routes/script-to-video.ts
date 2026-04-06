@@ -10,7 +10,10 @@ import {
   getPriorityForTier,
   getConcurrencyForTier,
 } from "../config/tier-config";
-import { orchestrateStoryCreation, orchestrateVideoResume } from "../services/story-orchestrator";
+import {
+  orchestrateStoryCreation,
+  orchestrateVideoResume,
+} from "../services/story-orchestrator";
 import { estimateDurationFromText } from "../services/script-parser";
 import { generateScriptFromText } from "../services/script-generation";
 
@@ -118,10 +121,29 @@ export async function handleScriptToVideo(
     );
 
     // Estimate duration from text if not provided
-    const estimatedDuration = body.duration || estimateDurationFromText(body.prompt);
+    const estimatedDuration =
+      body.duration || estimateDurationFromText(body.prompt);
     console.log(
-      `[Script To Video] Duration: ${estimatedDuration}s (provided: ${body.duration ? 'yes' : 'no'}, estimated: ${!body.duration ? 'yes' : 'no'})`,
+      `[Script To Video] Duration: ${estimatedDuration}s (provided: ${body.duration ? "yes" : "no"}, estimated: ${!body.duration ? "yes" : "no"})`,
     );
+
+    let minSceneDuration = 3;
+    let maxSceneDuration = 6;
+
+    /// This particular can a add pacing(screenplay-speed) in the image or in the video type for final video
+    if (body.videoConfig?.mediaType === "image") {
+      minSceneDuration = 4;
+      maxSceneDuration = 6;
+    } else {
+      const model = body.videoConfig?.model?.toLowerCase() || '';
+      if (model.includes('veo')) {
+        minSceneDuration = 4;
+        maxSceneDuration = 8;
+      } else {
+        minSceneDuration = 5;
+        maxSceneDuration = 8;
+      }
+    }
 
     // Generate script from text using AI
     const startTime = Date.now();
@@ -131,6 +153,8 @@ export async function handleScriptToVideo(
         duration: estimatedDuration,
         language: body.language || body.videoConfig?.language || "en",
         mediaType: body.videoConfig?.mediaType || "image",
+        minSceneDuration,
+        maxSceneDuration,
       },
       env,
     );
@@ -237,7 +261,7 @@ export async function handleScriptToVideo(
 async function handleResumeVideoGeneration(
   body: ScriptToVideoRequest,
   env: Env,
-  requestBaseUrl?: string
+  requestBaseUrl?: string,
 ): Promise<Response> {
   const { storyId, userId } = body;
 
@@ -252,7 +276,10 @@ async function handleResumeVideoGeneration(
 
   const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
   const priority = getPriorityForTier(userTier, env);
-  const webhookBaseUrl = requestBaseUrl || body.baseUrl || "https://create-story-worker.artflicks.workers.dev";
+  const webhookBaseUrl =
+    requestBaseUrl ||
+    body.baseUrl ||
+    "https://create-story-worker.artflicks.workers.dev";
 
   const result = await orchestrateVideoResume({
     storyId,
@@ -267,25 +294,27 @@ async function handleResumeVideoGeneration(
   });
 
   if (!result.success) {
-    const statusCode = result.error?.includes("not found") ? 404
-      : result.error?.includes("already been triggered") ? 400
-      : result.error?.includes("No scenes have generated images") ? 400
-      : result.error?.includes("invalid status") ? 400
-      : 500;
+    const statusCode = result.error?.includes("not found")
+      ? 404
+      : result.error?.includes("already been triggered")
+        ? 400
+        : result.error?.includes("No scenes have generated images")
+          ? 400
+          : result.error?.includes("invalid status")
+            ? 400
+            : 500;
 
     // Check if it's the "already have video" case which is actually success
     if (result.storyId && !result.error) {
       return jsonResponse({
         success: true,
         storyId: result.storyId,
-        message: "All scenes already have video (including manually generated). Nothing to generate.",
+        message:
+          "All scenes already have video (including manually generated). Nothing to generate.",
       });
     }
 
-    return jsonResponse(
-      { error: result.error },
-      statusCode,
-    );
+    return jsonResponse({ error: result.error }, statusCode);
   }
 
   return jsonResponse({

@@ -19,6 +19,8 @@ export interface ScriptGenerationContext {
     maxSteps?: number;
     speed?: number;
     anchors?: AnchorScene[];
+    minSceneDuration?: number;
+    maxSceneDuration?: number;
 }
 
 export interface ScriptGenerationResult {
