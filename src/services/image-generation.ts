@@ -84,6 +84,16 @@ export async function triggerReplicateGeneration(
     input.seed = params.seed;
   }
 
+  // Filter out excluded fields based on model config
+  if (modelConfig.excludeFields) {
+    for (const field of modelConfig.excludeFields) {
+      if (field in input) {
+        console.log(`[IMAGE-GEN] Excluding field '${field}' for model ${params.model}`);
+        delete input[field];
+      }
+    }
+  }
+
   // Create prediction with webhook - This returns immediately without waiting
   console.log(`[IMAGE-GENERATION] Creating prediction for image - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 

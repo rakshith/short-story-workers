@@ -18,6 +18,8 @@ export interface ModelImageConfig {
     defaultInputs?: Record<string, any>;
     /** If true, width and height will not be sent to the model */
     ignoreWidthHeight?: boolean;
+    /** Fields to exclude from the input (e.g., models that don't support certain params) */
+    excludeFields?: string[];
 }
 
 /**
@@ -70,10 +72,10 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'gemini-2.5-flash-image': { multiField: 'image_input' },
 
     //bytedance/seedream-4
-    'seedream-4': { multiField: 'image_input', defaultInputs: { size: '4K' }, ignoreWidthHeight: true },
+    'seedream-4': { multiField: 'image_input', defaultInputs: { size: '4K' }, ignoreWidthHeight: true, excludeFields: ['num_outputs', 'output_format', 'output_quality', 'seed'] },
 
     //bytedance/seedream-4.5
-    'seedream-4.5': { multiField: 'image_input', defaultInputs: { size: '4K' }, ignoreWidthHeight: true },
+    'seedream-4.5': { multiField: 'image_input', defaultInputs: { size: '4K' }, ignoreWidthHeight: true, excludeFields: ['num_outputs', 'output_format', 'output_quality', 'seed'] },
 
     //runwayml/gen4-image-pro
     'gen4-image-pro': { singleField: 'image' },
