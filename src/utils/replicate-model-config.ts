@@ -42,7 +42,7 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'flux-dev': { singleField: 'image' },
 
     // black-forest-labs/flux-2-dev (newer dev model)
-    'flux-2-dev': { multiField: 'input_images' },
+    'flux-2-dev': { multiField: 'input_images', defaultInputs:{disable_safety_checker: false} },
 
     //black-forest-labs/flux-redux-dev
     'flux-redux-dev': { singleField: 'redux_image' },
