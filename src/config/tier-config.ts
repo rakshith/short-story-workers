@@ -7,6 +7,7 @@ export interface TierConfig {
   maxConcurrentJobs: number;           // Max concurrent jobs to control compute costs
   maxBatchSize: number;                // Batch size for efficient queue processing
   priority: number;                    // Priority level (higher = processed first)
+  maxConcurrencyWindowMinutes?: number; // Time window for rate limiting (default: 10 min)
 }
 
 // Default values - Used if not overridden in wrangler.toml
@@ -15,21 +16,25 @@ export const TIER_CONFIGS: Record<UserTier, TierConfig> = {
     maxConcurrentJobs: 2,
     maxBatchSize: 3,
     priority: 1,
+    maxConcurrencyWindowMinutes: 10,
   },
   tier2: {
     maxConcurrentJobs: 5,
     maxBatchSize: 5,
     priority: 2,
+    maxConcurrencyWindowMinutes: 10,
   },
   tier3: {
     maxConcurrentJobs: 10,
     maxBatchSize: 10,
     priority: 3,
+    maxConcurrencyWindowMinutes: 10,
   },
   tier4: {
     maxConcurrentJobs: 20,
     maxBatchSize: 15,
     priority: 4,
+    maxConcurrencyWindowMinutes: 10,
   },
 };
 
@@ -45,6 +50,7 @@ export function getTierConfig(tier: UserTier, env?: any): TierConfig {
     maxConcurrentJobs: env[`${prefix}_CONCURRENCY`] ? parseInt(env[`${prefix}_CONCURRENCY`], 10) : defaults.maxConcurrentJobs,
     maxBatchSize: env[`${prefix}_BATCH_SIZE`] ? parseInt(env[`${prefix}_BATCH_SIZE`], 10) : defaults.maxBatchSize,
     priority: env[`${prefix}_PRIORITY`] ? parseInt(env[`${prefix}_PRIORITY`], 10) : defaults.priority,
+    maxConcurrencyWindowMinutes: env[`${prefix}_CONCURRENCY_WINDOW`] ? parseInt(env[`${prefix}_CONCURRENCY_WINDOW`], 10) : defaults.maxConcurrencyWindowMinutes,
   };
 }
 
@@ -84,4 +90,11 @@ export function getConcurrencyForTier(tier: UserTier, env?: any): number {
  */
 export function getPriorityForTier(tier: UserTier, env?: any): number {
   return getTierConfig(tier, env).priority;
+}
+
+/**
+ * Helper: Get concurrency window in minutes for tier
+ */
+export function getConcurrencyWindowForTier(tier: UserTier, env?: any): number {
+  return getTierConfig(tier, env).maxConcurrencyWindowMinutes || 10;
 }

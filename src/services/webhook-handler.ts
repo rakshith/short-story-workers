@@ -7,6 +7,7 @@ import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { updateCoordinatorImage, updateCoordinatorVideo, getCoordinatorProgress } from '../utils/coordinator';
 import { calcVideoDelaySeconds } from '../utils/queue-batch';
+import { getTemplateConfig } from '../config/template-config';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -233,6 +234,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                         userTier: videoConfig.userTier,
                         priority: 3,
                         generatedImageUrl: resultUrl,
+                        templateConfig: getTemplateConfig(templateId),
                         sceneDuration: (status.sceneAudioDuration && status.sceneAudioDuration > 0)
                             ? status.sceneAudioDuration
                             : undefined,

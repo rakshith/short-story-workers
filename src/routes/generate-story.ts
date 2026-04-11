@@ -5,7 +5,7 @@ import { StoryTimeline, VideoConfig } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
-import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
+import { parseTier, getPriorityForTier, getConcurrencyForTier, getConcurrencyWindowForTier } from '../config/tier-config';
 import { orchestrateStoryCreation, orchestrateVideoResume } from '../services/story-orchestrator';
 import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
 import { estimateGenerationSeconds } from '../services/estimation';
@@ -55,6 +55,7 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         const userTier = parseTier(body.userTier || body.videoConfig.userTier);
         const priority = getPriorityForTier(userTier, env);
         const maxConcurrency = getConcurrencyForTier(userTier, env);
+        const windowMinutes = getConcurrencyWindowForTier(userTier, env);
 
         // Ensure audioModel has a default value
         if (!body.videoConfig.audioModel) {
@@ -65,15 +66,17 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
         }
 
-        // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
+        // UPFRONT CONCURRENCY CHECK - Prevents retry overhead (within time window)
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
 
+        const windowCutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
         const { data: activeJobs, error: checkError } = await supabase
             .from('story_jobs')
             .select('job_id')
             .eq('user_id', body.userId)
-            .eq('status', 'processing');
+            .eq('status', 'processing')
+            .gte('created_at', windowCutoff);
 
         if (checkError) {
             console.error('[Generate Story] Failed to check concurrency:', checkError);
@@ -81,13 +84,14 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
         } else {
             const activeCount = activeJobs?.length || 0;
             if (activeCount >= maxConcurrency) {
-                console.log(`[Generate Story] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency})`);
+                console.log(`[Generate Story] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency}) within ${windowMinutes} min window`);
                 return jsonResponse({
                     error: 'Concurrency limit reached',
-                    message: `You have ${activeCount} active story generations. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
+                    message: `You have ${activeCount} active story generations in the last ${windowMinutes} minutes. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
                     activeJobs: activeCount,
                     maxConcurrency,
                     tier: userTier,
+                    windowMinutes,
                 }, 429);
             }
         }
@@ -141,6 +145,7 @@ export async function handleGenerateAndCreateStory(request: Request, env: Env): 
             usageData,
             durationSeconds,
             env,
+            templateConfig: (scriptResult as any).templateConfig,
         });
 
         if (!result.success) {
@@ -177,7 +182,7 @@ async function generateAIScript(
     jobId: string,
     body: GenerateStoryRequest,
     env: Env
-): Promise<{ story: StoryTimeline; usage?: any } | Response> {
+): Promise<{ story: StoryTimeline; usage?: any; templateConfig?: any } | Response> {
     console.log(`[Generate Story] Generating script from prompt: "${body.prompt.substring(0, 50)}..."`);
 
     const { generateScript } = await import('../services/script-generation');
@@ -218,7 +223,8 @@ async function generateAIScript(
     console.log(`[Generate Story] Script generated successfully with ${scriptResult.story.scenes.length} scenes`);
     return {
         story: scriptResult.story,
-        usage: scriptResult.usage
+        usage: scriptResult.usage,
+        templateConfig: scriptResult.templateConfig
     };
 }
 

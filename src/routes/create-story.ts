@@ -5,7 +5,7 @@ import { CreateStoryRequest, StoryTimeline } from '../types';
 import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from '../services/queue-processor';
 import { jsonResponse } from '../utils/response';
-import { parseTier, getPriorityForTier, getConcurrencyForTier } from '../config/tier-config';
+import { parseTier, getPriorityForTier, getConcurrencyForTier, getConcurrencyWindowForTier } from '../config/tier-config';
 import { orchestrateStoryCreation } from '../services/story-orchestrator';
 
 /**
@@ -42,16 +42,19 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
         const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
         const priority = getPriorityForTier(userTier, env);
         const maxConcurrency = getConcurrencyForTier(userTier, env);
+        const windowMinutes = getConcurrencyWindowForTier(userTier, env);
 
-        // UPFRONT CONCURRENCY CHECK - Prevents retry overhead
+        // UPFRONT CONCURRENCY CHECK - Prevents retry overhead (within time window)
         const { createClient } = await import('@supabase/supabase-js');
         const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
         
+        const windowCutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
         const { data: activeJobs, error: checkError } = await supabase
             .from('story_jobs')
             .select('job_id')
             .eq('user_id', body.userId)
-            .eq('status', 'processing');
+            .eq('status', 'processing')
+            .gte('created_at', windowCutoff);
 
         if (checkError) {
             console.error('[Create Story] Failed to check concurrency:', checkError);
@@ -59,13 +62,14 @@ export async function handleCreateStory(request: Request, env: Env): Promise<Res
         } else {
             const activeCount = activeJobs?.length || 0;
             if (activeCount >= maxConcurrency) {
-                console.log(`[Create Story] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency})`);
+                console.log(`[Create Story] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency}) within ${windowMinutes} min window`);
                 return jsonResponse({
                     error: 'Concurrency limit reached',
-                    message: `You have ${activeCount} active story generations. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
+                    message: `You have ${activeCount} active story generations in the last ${windowMinutes} minutes. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
                     activeJobs: activeCount,
                     maxConcurrency,
                     tier: userTier,
+                    windowMinutes,
                 }, 429);
             }
         }

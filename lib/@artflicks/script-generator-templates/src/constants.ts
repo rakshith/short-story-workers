@@ -37,6 +37,21 @@ export const VIDEO_NARRATION_WPS = {
     minWords10s: 15,
 } as const;
 
+export const TALKING_CHARACTER_3D_NARRATION_WPS = {
+    wps4s: 2.0,
+    wps6s: 2.0,
+    wps8s: 2.0,
+    minWords4s: 5,
+    maxWords4s: 8,
+    targetWords4s: 6,
+    minWords6s: 8,
+    maxWords6s: 12,
+    targetWords6s: 10,
+    minWords8s: 10,
+    maxWords8s: 16,
+    targetWords8s: 12,
+} as const;
+
 export const VIDEO_SCENE_DURATION_GUIDE = {
     min: 5,
     target: 5,

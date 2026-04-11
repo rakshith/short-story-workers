@@ -9,6 +9,7 @@ import { updateCoordinatorImage, updateCoordinatorVideo, updateCoordinatorAudio,
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 import { calcVideoDelaySeconds } from './utils/queue-batch';
+import { getTemplateConfig } from './config/template-config';
 
 /**
  * Dead-letter queue handler - Logs and acks messages that exhausted retries or were sent for audit.
@@ -197,6 +198,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
             userTier: data.userTier,
             priority: 3,
             generatedImageUrl: status.sceneImageUrl,
+            templateConfig: getTemplateConfig(data.videoConfig?.templateId),
             sceneDuration: result.audioDuration > 0 ? result.audioDuration : undefined,
           };
           await env.STORY_QUEUE.send(videoQueueMessage, {

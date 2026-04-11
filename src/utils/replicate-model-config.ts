@@ -5,6 +5,8 @@
  * Add new model patterns here to support additional models.
  */
 
+import { TemplatePipelineConfig } from '../config/template-config';
+
 export interface ModelImageConfig {
     /** Field name for single image input */
     singleField?: string;
@@ -91,7 +93,7 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'google/veo-3.1-fast': { singleField: 'image', defaultInputs: { generate_audio: false } },
 
     // google/veo-3.1-lite
-    // 'google/veo-3.1-lite': { singleField: 'image', defaultInputs: { generate_audio: false } },
+    'google/veo-3.1-lite': { singleField: 'image' },
 
     // google/veo-3.1-pro
     'google/veo-3.1-pro': { singleField: 'image', defaultInputs: { generate_audio: false } },
@@ -175,8 +177,9 @@ export function getNearestDuration(requestedDuration: number, modelName: string)
  * Detects model type from model name and returns appropriate config
  * @param modelName - The model name
  * @param enableImmersiveAudio - Optional flag to enable audio generation for supported models
+ * @param templateConfig - Optional template config to override model settings
  */
-export function getModelImageConfig(modelName: string, enableImmersiveAudio?: boolean): ModelImageConfig {
+export function getModelImageConfig(modelName: string, enableImmersiveAudio?: boolean, templateConfig?: TemplatePipelineConfig): ModelImageConfig {
     const lowerModel = modelName.toLowerCase();
 
     for (const [pattern, config] of Object.entries(MODEL_IMAGE_CONFIGS)) {
@@ -192,6 +195,18 @@ export function getModelImageConfig(modelName: string, enableImmersiveAudio?: bo
                     }
                 };
             }
+            
+            // Override generate_audio if template wants narration in video prompt (e.g., Veo for embedded audio)
+            if (templateConfig?.includeNarrationInVideoPrompt && !lowerModel.includes('veo-3.1-lite')) {
+                return {
+                    ...config,
+                    defaultInputs: {
+                        ...config.defaultInputs,
+                        generate_audio: true,
+                    }
+                };
+            }
+            
             return config;
         }
     }

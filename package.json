@@ -20,6 +20,9 @@
     "monitor:stg": "npx wrangler tail --env staging --format pretty",
     "monitor:prod": "npx wrangler tail --env production --format pretty",
     "type-check": "npx tsc --noEmit",
+    "build:credit-tracker": "cd lib/@artflicks/credit-tracker && npm run build",
+    "build:script-generator": "cd lib/@artflicks/script-generator-templates && npm run build",
+    "build:all": "npm run build:credit-tracker && npm run build:script-generator",
     "unused": "knip"
   },
   "keywords": [

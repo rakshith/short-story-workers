@@ -1,6 +1,7 @@
 // Queue processor for async story generation
 
 import { Env, QueueMessage } from '../types/env';
+import { TemplatePipelineConfig } from '../config/template-config';
 import { generateSceneAudio } from './audio-generation';
 import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
@@ -20,11 +21,18 @@ function buildFinalPrompt(
   scene: Scene,
   mediaType: 'image' | 'video',
   stylePrompt: string,
-  characterAnchor?: string | null
+  characterAnchor?: string | null,
+  templateConfig?: TemplatePipelineConfig
 ): string {
   // For video: use videoPrompt directly if available (comprehensive video-specific prompt)
   if (mediaType === 'video' && scene.videoPrompt) {
     const parts = [scene.videoPrompt];
+    
+    // Append narration if template wants it (e.g., Veo for embedded audio)
+    if (templateConfig?.includeNarrationInVideoPrompt && scene.narration) {
+      parts.push(`Dialogue: ${scene.narration}`);
+    }
+    
     if (stylePrompt) parts.push(stylePrompt);
     if (characterAnchor) parts.push(characterAnchor);
     return parts.filter(p => p).join(', ');
@@ -232,7 +240,7 @@ export async function processSceneVideo(
   }
 
   try {
-    const modelToUse = scene.model || videoConfig.model;
+    const modelToUse = scene.model || videoConfig.model || message.templateConfig?.videoModel;
     const selectedModel = getModelForTier(modelToUse);
 
     processorLogger.debug(`Video generation starting`, {
@@ -241,7 +249,7 @@ export async function processSceneVideo(
       userId,
     });
 
-    const prompt = buildFinalPrompt(scene, 'video', videoConfig.preset.stylePrompt, storyData?.characterAnchor);
+    const prompt = buildFinalPrompt(scene, 'video', videoConfig.preset.stylePrompt, storyData?.characterAnchor, message.templateConfig);
     processorLogger.debug(`Video prompt for scene ${sceneIndex}`, {
       sceneIndex,
       prompt: prompt.substring(0, 100),
@@ -271,6 +279,7 @@ export async function processSceneVideo(
         seed: videoConfig.preset.seed,
         videoConfig: videoConfig,
         referenceImageUrl: message.generatedImageUrl,
+        templateConfig: message.templateConfig,
       },
       {
         userId: userId!,

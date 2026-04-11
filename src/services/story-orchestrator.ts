@@ -4,6 +4,7 @@ import { updateJobStatus } from "./queue-processor";
 import { initCoordinator } from "../utils/coordinator";
 import { sendQueueBatch } from "../utils/queue-batch";
 import { templateSkipsImageStep } from "../config/template-video-config";
+import { TemplatePipelineConfig, getTemplateConfig } from "../config/template-config";
 import {
   trackAIUsageInternal,
   trackAndDeductCredits,
@@ -29,6 +30,7 @@ export interface StoryOrchestratorInput {
   };
   durationSeconds?: number;
   env: Env;
+  templateConfig?: TemplatePipelineConfig;
 }
 
 export interface StoryOrchestratorResult {
@@ -73,6 +75,7 @@ export async function orchestrateStoryCreation(
     usageData,
     durationSeconds,
     env,
+    templateConfig,
   } = input;
 
   try {
@@ -144,6 +147,7 @@ export async function orchestrateStoryCreation(
         teamId,
         title,
         env,
+        templateConfig,
       });
     } catch (error) {
       console.error("[Story Orchestrator] Error in coordinator/queue:", error);
@@ -323,6 +327,7 @@ export async function orchestrateVideoResume(
         userTier,
         priority,
         generatedImageUrl: scene.generatedImageUrl,
+        templateConfig: getTemplateConfig((videoConfig || (story.video_config as VideoConfig))?.templateId),
       })
     );
 
@@ -422,7 +427,7 @@ async function createStoryRecord(
     );
 
     // Calculate cost
-    const costResponse = calculateGenerationCost(videoConfig, storyData);
+    const costResponse = calculateGenerationCost(videoConfig);
     console.log(`[Story Orchestrator] Calculated cost:`, costResponse);
 
     // Track and deduct credits
@@ -485,13 +490,12 @@ async function createStoryRecord(
 }
 
 function calculateGenerationCost(
-  videoConfig: VideoConfig,
-  storyData: StoryTimeline
+  videoConfig: VideoConfig
 ): CostResponse {
   try {
     const mediaType = videoConfig?.mediaType;
     let modelTier = videoConfig?.mediaTier || "basic";
-    const duration = storyData.totalDuration || 15;
+    const duration = videoConfig.duration || 15;
 
     const mediaTypeStr = String(mediaType || "video");
     const isImage = mediaTypeStr === "ai-images" || mediaTypeStr === "image";
@@ -503,7 +507,7 @@ function calculateGenerationCost(
       duration,
       modelTier,
       mediaType: mediaTypeForCalc,
-      enableImmersiveAudio: videoConfig?.enableImmersiveAudio,
+      enableImmersiveAudio: videoConfig?.enableImmersiveAudio
     });
 
     return {
@@ -560,6 +564,7 @@ interface QueueGenerationJobsInput {
   teamId?: string;
   title?: string;
   env: Env;
+  templateConfig?: TemplatePipelineConfig;
 }
 
 async function queueGenerationJobs(
@@ -578,6 +583,7 @@ async function queueGenerationJobs(
     teamId,
     title,
     env,
+    templateConfig,
   } = input;
 
   const mediaType = videoConfig?.mediaType === "video" ? "video" : "image";
@@ -587,6 +593,12 @@ async function queueGenerationJobs(
   const shouldQueueVideos =
     mediaType === "image" || (mediaType === "video" && skipsImageStep);
 
+  // When template has generateAudio: false, disable voice over so video can proceed without audio
+  const skipAudioFromTemplate = input.templateConfig?.generateAudio === false;
+  const videoConfigForQueue = skipAudioFromTemplate
+    ? { ...videoConfig, enableVoiceOver: false }
+    : videoConfig;
+
   // Queue visual generation jobs
   const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
     jobId,
@@ -594,7 +606,7 @@ async function queueGenerationJobs(
     seriesId,
     storyId,
     title: storyData.title || title || "",
-    videoConfig,
+    videoConfig: videoConfigForQueue,
     sceneIndex: index,
     type: shouldQueueVideos
       ? ((mediaType === "video" ? "video" : "image") as QueueMessage["type"])
@@ -603,6 +615,7 @@ async function queueGenerationJobs(
     teamId,
     userTier,
     priority,
+    templateConfig,
   }));
 
   await sendQueueBatch(env.STORY_QUEUE, visualMessages);
@@ -624,10 +637,10 @@ async function queueGenerationJobs(
     console.log(`[Story Orchestrator] Template uses direct text-to-video`);
   }
 
-  // Queue audio generation jobs (only if enableVoiceOver is not false)
+  // Queue audio generation jobs (only if enableVoiceOver is not false AND template allows audio)
   const enableVoiceOver = videoConfig?.enableVoiceOver !== false;
 
-  if (enableVoiceOver) {
+  if (enableVoiceOver && !skipAudioFromTemplate) {
     const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
       jobId,
       userId,
@@ -641,12 +654,15 @@ async function queueGenerationJobs(
       teamId,
       userTier,
       priority,
+      templateConfig,
     }));
 
     await sendQueueBatch(env.STORY_QUEUE, audioMessages);
     console.log(
       `[Story Orchestrator] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`
     );
+  } else if (skipAudioFromTemplate) {
+    console.log(`[Story Orchestrator] Audio generation skipped (template config: generateAudio=false)`);
   } else {
     console.log(`[Story Orchestrator] Audio generation skipped (enableVoiceOver=false)`);
   }

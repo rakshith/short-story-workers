@@ -9,6 +9,7 @@ import {
   parseTier,
   getPriorityForTier,
   getConcurrencyForTier,
+  getConcurrencyWindowForTier,
 } from "../config/tier-config";
 import {
   orchestrateStoryCreation,
@@ -63,6 +64,7 @@ export async function handleScriptToVideo(
     const userTier = parseTier(body.userTier || body.videoConfig?.userTier);
     const priority = getPriorityForTier(userTier, env);
     const maxConcurrency = getConcurrencyForTier(userTier, env);
+    const windowMinutes = getConcurrencyWindowForTier(userTier, env);
 
     const { createClient } = await import("@supabase/supabase-js");
     const supabase = createClient(
@@ -70,11 +72,13 @@ export async function handleScriptToVideo(
       env.SUPABASE_SERVICE_ROLE_KEY,
     );
 
+    const windowCutoff = new Date(Date.now() - windowMinutes * 60 * 1000).toISOString();
     const { data: activeJobs, error: checkError } = await supabase
       .from("story_jobs")
       .select("job_id")
       .eq("user_id", body.userId)
-      .eq("status", "processing");
+      .eq("status", "processing")
+      .gte("created_at", windowCutoff);
 
     if (checkError) {
       console.error(
@@ -85,15 +89,16 @@ export async function handleScriptToVideo(
       const activeCount = activeJobs?.length || 0;
       if (activeCount >= maxConcurrency) {
         console.log(
-          `[Script To Video] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency})`,
+          `[Script To Video] Concurrency limit reached for user ${body.userId} (${activeCount}/${maxConcurrency}) within ${windowMinutes} min window`,
         );
         return jsonResponse(
           {
             error: "Concurrency limit reached",
-            message: `You have ${activeCount} active story generations. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
+            message: `You have ${activeCount} active story generations in the last ${windowMinutes} minutes. Your tier (${userTier}) allows maximum ${maxConcurrency} concurrent jobs. Please wait for a job to complete.`,
             activeJobs: activeCount,
             maxConcurrency,
             tier: userTier,
+            windowMinutes,
           },
           429,
         );

@@ -2,6 +2,7 @@
 
 import { R2Bucket, Queue, DurableObjectNamespace } from '@cloudflare/workers-types';
 import { StoryTimeline, VideoConfig } from '.';
+import { TemplatePipelineConfig } from '../config/template-config';
 
 // Forward declare QueueMessage to avoid circular dependency
 // Using any for storyData to avoid circular imports - it will be properly typed at usage sites
@@ -22,6 +23,8 @@ export interface QueueMessage {
   generatedImageUrl?: string; // For video generation - use generated image as reference
   /** Real clip duration derived from ElevenLabs audioDuration; overrides scene.duration when present */
   sceneDuration?: number;
+  /** Template-specific configuration for pipeline (audio, models, etc.) */
+  templateConfig?: TemplatePipelineConfig;
 }
 
 /** Webhook queue: durable processing so Replicate always gets 200 without waitUntil eviction */

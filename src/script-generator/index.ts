@@ -1,4 +1,4 @@
-import { generateText, Output, LanguageModel, jsonSchema } from 'ai';
+import { generateText, Output, LanguageModel, jsonSchema, stepCountIs } from 'ai';
 import * as z from 'zod';
 
 import {
@@ -70,7 +70,7 @@ export class ScriptGenerator {
                 output: Output.object({ schema: openAiSchema }),
                 ...(hasTools && {
                     tools: context.tools,
-                    maxSteps: context.maxSteps ?? 3,
+                    stopWhen: stepCountIs(context.maxSteps ?? 3),
                 }),
             }) as Awaited<ReturnType<typeof generateText>>;
 

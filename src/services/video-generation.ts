@@ -4,8 +4,8 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
-import { ScriptTemplateIds } from '../script-generator';
 import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
+import { TemplatePipelineConfig } from '../config/template-config';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -19,6 +19,7 @@ export interface VideoGenerationParams {
     seed?: number;
     videoConfig: VideoConfig;
     referenceImageUrl?: string; // The generated image to use as reference for video
+    templateConfig?: TemplatePipelineConfig;
 }
 
 export interface VideoGenerationResult {
@@ -52,25 +53,25 @@ export async function triggerVideoGeneration(
         prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
     };
 
-    const modelConfig = getModelImageConfig(params.model, params.videoConfig?.enableImmersiveAudio);
+    const modelConfig = getModelImageConfig(params.model, params.videoConfig?.enableImmersiveAudio, params.templateConfig);
     if (modelConfig.defaultInputs) {
         Object.assign(input, modelConfig.defaultInputs);
     }
 
-    // Attach image inputs - priority: generated image > character references
-    const isSpecialTemplate = params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY ||
-        params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
-        params.videoConfig.templateId === 'skeleton-3d-shorts';
+    // Attach image inputs - priority: characterReferenceImages > generated image
+    // Uses template config to determine which to use
+    const usesGeneratedImage = params.templateConfig?.usesGeneratedImage === true;
+    const characterRefs = params.videoConfig?.characterReferenceImages;
+    const hasCharacterRefs = characterRefs && characterRefs.length > 0;
 
-    if (params.referenceImageUrl) {
-        // Use the generated image as reference (image-to-video) - highest priority
+    if (hasCharacterRefs && characterRefs) {
+        // Priority 1: Use character reference images from request
+        console.log('[VIDEO-GEN] Using character reference images:', params.videoConfig.templateId);
+        attachImageInputs(input, params.model, characterRefs);
+    } else if (params.referenceImageUrl && usesGeneratedImage) {
+        // Priority 2: Use generated image from imagePrompt (for templates that use generated image)
         console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
-        attachImageInputs(input, params.model, params.referenceImageUrl ? [params.referenceImageUrl] : undefined);
-    } else if (isSpecialTemplate && params.videoConfig?.characterReferenceImages?.length) {
-        // Fall back to character reference images for special templates
-        console.log('[VIDEO-GEN] Template ID:', params.videoConfig.templateId);
-        console.log('[VIDEO-GEN] Character References:', params.videoConfig?.characterReferenceImages);
-        attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
+        attachImageInputs(input, params.model, [params.referenceImageUrl]);
     }
 
     // Scene duration — snap to model-allowed values (e.g. Veo: 4, 6, 8) when applicable
