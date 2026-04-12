@@ -17,6 +17,7 @@ export const TEMPLATE_CONFIGS: Record<string, TemplatePipelineConfig> = {
   },
   "character-story": {
     generateAudio: true,// Caption/Voiceover narration 
+    usesGeneratedImage: true,
   },
   "skeleton-3d-shorts": {
     generateAudio: true // Caption/Voiceover narration 

@@ -111,10 +111,10 @@ export async function processSceneImage(
       videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
       videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS
     ) && videoConfig.mediaType === 'video';
-    const defaultImageModel = isSkeletonVideoRefs ? 'xai/grok-imagine-image' : 'black-forest-labs/flux-schnell';
+    const defaultImageModel = 'xai/grok-imagine-image';
     const imageModel = isSkeletonVideoRefs
       ? (videoConfig.imageModel || defaultImageModel)
-      : (videoConfig.imageModel || videoConfig.model || defaultImageModel);
+      : (videoConfig.imageModel || defaultImageModel);
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,
@@ -179,6 +179,7 @@ export async function processSceneImage(
         storyId,
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
+        falApiToken: env.CF_AIG_TOKEN,
         webhookUrl,
       }
     );
@@ -287,6 +288,7 @@ export async function processSceneVideo(
         storyId: storyId!,
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
+        falApiToken: (env as any).FAL_KEY || (env as any).FAL_API_KEY,
         webhookUrl,
       }
     );

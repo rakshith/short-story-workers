@@ -1,12 +1,12 @@
-// Image generation service using Replicate SDK
+// Image generation service using Model Provider
 
 import { R2Bucket } from '@cloudflare/workers-types';
-import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
-import {video_output_format } from '../config/table-config';
+import { video_output_format } from '../config/table-config';
 import { VideoConfig } from '../types';
 import { attachImageInputs } from '../utils/replicate-model-config';
 import { ScriptTemplateIds } from '../script-generator';
+import { ModelProviderFactory, PROVIDER_NAMES, type ProviderType } from '@artflicks/model-provider';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -26,6 +26,19 @@ export interface ImageGenerationResult {
   status: string;
 }
 
+/**
+ * Determine provider type based on model ID
+ * Supports automatic provider switching between Replicate and Fal.ai
+ */
+function getProviderType(model: string): ProviderType {
+  // Fal.ai models start with 'fal-ai/'
+  if (model.startsWith('fal-ai/')) {
+    return PROVIDER_NAMES.FALAI;
+  }
+  // Default to Replicate for all other models
+  return PROVIDER_NAMES.REPLICATE;
+}
+
 export async function triggerReplicateGeneration(
   params: ImageGenerationParams,
   options: {
@@ -34,17 +47,23 @@ export async function triggerReplicateGeneration(
     storyId: string;
     sceneIndex: number;
     replicateApiToken: string;
+    falApiToken?: string;  // Optional Fal.ai API token
     webhookUrl: string;
   }
 ): Promise<ImageGenerationResult> {
-  const { replicateApiToken, webhookUrl } = options;
+  const { replicateApiToken, falApiToken, webhookUrl } = options;
 
-  // Initialize Replicate client
-  const replicate = new Replicate({
-    auth: replicateApiToken,
-  });
+  // Determine which provider to use based on model
+  const providerType = getProviderType(params.model);
+  console.log(`[IMAGE-GENERATION] Using provider: ${providerType} for model: ${params.model}`);
 
-  // Prepare input for Replicate
+  // Get the appropriate API key
+  const apiKey = providerType === PROVIDER_NAMES.FALAI ? (falApiToken || replicateApiToken) : replicateApiToken;
+
+  // Initialize provider using Model Provider Factory
+  const provider = ModelProviderFactory.createProvider(providerType, { apiKey });
+
+  // Prepare input for generation
   const input: any = {
     prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt}`,
     width: params.width,
@@ -97,33 +116,34 @@ export async function triggerReplicateGeneration(
   // Create prediction with webhook - This returns immediately without waiting
   console.log(`[IMAGE-GENERATION] Creating prediction for image - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 
-  // Handle both versioned models (owner/name:version) and model names (owner/name)
-  const hasVersion = params.model.includes(':');
-
   // Append model to webhook for tracking
   const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
 
-  const predictionParams: any = {
-    input,
-    webhook: webhookWithModel,
-    webhook_events_filter: ["completed"],
-  };
-
-  if (hasVersion) {
-    // If model includes version hash, use version parameter
-    predictionParams.version = params.model.split(':')[1];
-  } else {
-    // Otherwise use the model parameter (owner/name format)
-    predictionParams.model = params.model;
+  // Use Model Provider's async generation method
+  // Note: generateImageAsync is available on ReplicateProvider for webhook-based async generation
+  if (!provider.generateImageAsync) {
+    throw new Error(`Provider ${providerType} does not support async image generation`);
   }
+  
+  const result = await provider.generateImageAsync(params.model, {
+    prompt: input.prompt,
+    negativePrompt: input.negative_prompt,
+    imageUrl: input.image || input.input_image || input.redux_image,
+  }, {
+    width: input.width,
+    height: input.height,
+    aspect_ratio: input.aspect_ratio,
+    guidance: input.guidance_scale,
+    seed: input.seed,
+    webhookUrl: webhookWithModel,
+    webhookEvents: ["completed"],
+  });
 
-  const prediction = await replicate.predictions.create(predictionParams);
-
-  console.log(`[REPLICATE-ASYNC] Prediction created: ${prediction.id}`);
+  console.log(`[REPLICATE-ASYNC] Prediction created: ${result.predictionId}`);
 
   return {
-    predictionId: prediction.id,
-    status: prediction.status,
+    predictionId: result.predictionId,
+    status: result.status,
   };
 }
 

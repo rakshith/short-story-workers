@@ -41,15 +41,15 @@ export const TALKING_CHARACTER_3D_NARRATION_WPS = {
     wps4s: 2.0,
     wps6s: 2.0,
     wps8s: 2.0,
-    minWords4s: 5,
+    minWords4s: 6,
     maxWords4s: 8,
-    targetWords4s: 6,
-    minWords6s: 8,
+    targetWords4s: 7,
+    minWords6s: 9,
     maxWords6s: 12,
-    targetWords6s: 10,
-    minWords8s: 10,
+    targetWords6s: 11,
+    minWords8s: 11,
     maxWords8s: 16,
-    targetWords8s: 12,
+    targetWords8s: 13,
 } as const;
 
 export const VIDEO_SCENE_DURATION_GUIDE = {
@@ -72,6 +72,14 @@ export const VIDEO_SCENE_COUNT_GUIDE: Record<number, { min: number; target: numb
     60: { min: 6, target: 9, max: 12 },
     120: { min: 12, target: 17, max: 20 },
     180: { min: 18, target: 26, max: 28 },
+};
+
+export const TALKING_CHARACTER_3D_SCENE_COUNT_GUIDE: Record<number, { min: number; max: number }> = {
+    15: { min: 2, max: 3 },
+    30: { min: 2, max: 4 },
+    60: { min: 4, max: 6 },
+    120: { min: 6, max: 9 },
+    180: { min: 9, max: 12 },
 };
 
 export const SCENE_WORD_LIMITS = {

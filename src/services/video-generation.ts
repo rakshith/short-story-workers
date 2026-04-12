@@ -1,11 +1,11 @@
-// Video generation service using Replicate SDK
+// Video generation service using Model Provider
 
 import { R2Bucket } from '@cloudflare/workers-types';
-import Replicate from 'replicate';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
 import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
 import { TemplatePipelineConfig } from '../config/template-config';
+import { ModelProviderFactory, PROVIDER_NAMES, type ProviderType } from '@artflicks/model-provider';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -28,7 +28,20 @@ export interface VideoGenerationResult {
 }
 
 /**
- * Trigger async video generation via Replicate
+ * Determine provider type based on model ID
+ * Supports automatic provider switching between Replicate and Fal.ai
+ */
+function getProviderType(model: string): ProviderType {
+  // Fal.ai models start with 'fal-ai/'
+  if (model.startsWith('fal-ai/')) {
+    return PROVIDER_NAMES.FALAI;
+  }
+  // Default to Replicate for all other models
+  return PROVIDER_NAMES.REPLICATE;
+}
+
+/**
+ * Trigger async video generation via Model Provider
  */
 export async function triggerVideoGeneration(
     params: VideoGenerationParams,
@@ -38,15 +51,21 @@ export async function triggerVideoGeneration(
         storyId: string;
         sceneIndex: number;
         replicateApiToken: string;
+        falApiToken?: string;  // Optional Fal.ai API token
         webhookUrl: string;
     }
 ): Promise<VideoGenerationResult> {
-    const { replicateApiToken, webhookUrl } = options;
+    const { replicateApiToken, falApiToken, webhookUrl } = options;
 
-    // Initialize Replicate client
-    const replicate = new Replicate({
-        auth: replicateApiToken,
-    });
+    // Determine which provider to use based on model
+    const providerType = getProviderType(params.model);
+    console.log(`[VIDEO-GENERATION] Using provider: ${providerType} for model: ${params.model}`);
+
+    // Get the appropriate API key
+    const apiKey = providerType === PROVIDER_NAMES.FALAI ? (falApiToken || replicateApiToken) : replicateApiToken;
+
+    // Initialize provider using Model Provider Factory
+    const provider = ModelProviderFactory.createProvider(providerType, { apiKey });
 
     // Prepare input for Replicate video models
     const input: any = {
@@ -58,20 +77,20 @@ export async function triggerVideoGeneration(
         Object.assign(input, modelConfig.defaultInputs);
     }
 
-    // Attach image inputs - priority: characterReferenceImages > generated image
+    // Attach image inputs - priority: generated image (for templates that use it) > characterReferenceImages
     // Uses template config to determine which to use
     const usesGeneratedImage = params.templateConfig?.usesGeneratedImage === true;
     const characterRefs = params.videoConfig?.characterReferenceImages;
     const hasCharacterRefs = characterRefs && characterRefs.length > 0;
 
-    if (hasCharacterRefs && characterRefs) {
-        // Priority 1: Use character reference images from request
-        console.log('[VIDEO-GEN] Using character reference images:', params.videoConfig.templateId);
-        attachImageInputs(input, params.model, characterRefs);
-    } else if (params.referenceImageUrl && usesGeneratedImage) {
-        // Priority 2: Use generated image from imagePrompt (for templates that use generated image)
+    if (params.referenceImageUrl && usesGeneratedImage) {
+        // Priority 1: Use generated image from imagePrompt (for templates that use generated image)
         console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
         attachImageInputs(input, params.model, [params.referenceImageUrl]);
+    } else if (hasCharacterRefs && characterRefs) {
+        // Priority 2: Use character reference images from request
+        console.log('[VIDEO-GEN] Using character reference images:', params.videoConfig.templateId);
+        attachImageInputs(input, params.model, characterRefs);
     }
 
     // Scene duration — snap to model-allowed values (e.g. Veo: 4, 6, 8) when applicable
@@ -88,31 +107,33 @@ export async function triggerVideoGeneration(
 
     console.log(`[VIDEO-GENERATION] Creating prediction for video - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 
-    // Handle both versioned models (owner/name:version) and model names (owner/name)
-    const hasVersion = params.model.includes(':');
-
     // Append model to webhook for tracking
     const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
 
-    const predictionParams: any = {
-        input,
-        webhook: webhookWithModel,
-        webhook_events_filter: ["completed"],
-    };
-
-    if (hasVersion) {
-        predictionParams.version = params.model.split(':')[1];
-    } else {
-        predictionParams.model = params.model;
+    // Use Model Provider's async generation method
+    // Note: generateVideoAsync is available on ReplicateProvider for webhook-based async generation
+    if (!provider.generateVideoAsync) {
+      throw new Error(`Provider ${providerType} does not support async video generation`);
     }
-    console.log(`[VIDEO-GENERATION] Prediction params:`, predictionParams);
-    const prediction = await replicate.predictions.create(predictionParams);
 
-    console.log(`[VIDEO-GENERATION] Prediction created: ${prediction.id}`);
+    const result = await provider.generateVideoAsync(params.model, {
+      prompt: input.prompt,
+      imageUrl: input.image || input.first_image,
+      firstImageUrl: input.first_frame,
+      audioUrl: input.audio,
+      duration: input.duration,
+      negativePrompt: input.negative_prompt,
+      aspect_ratio: input.aspect_ratio,
+    }, {
+      webhookUrl: webhookWithModel,
+      webhookEvents: ["completed"],
+    });
+
+    console.log(`[VIDEO-GENERATION] Prediction created: ${result.predictionId}`);
 
     return {
-        predictionId: prediction.id,
-        status: prediction.status,
+      predictionId: result.predictionId,
+      status: result.status,
     };
 }
 

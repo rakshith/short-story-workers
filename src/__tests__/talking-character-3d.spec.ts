@@ -27,8 +27,11 @@ async function testTalkingCharacter3D() {
     CF_AIG_TOKEN: getEnv("CF_AIG_TOKEN"),
     OPENAI_API_KEY: getEnv("OPENAI_API_KEY"),
   } as unknown as Env;
-
-  const userPrompt = "How smoking destroys lungs step by step, with a talking character in 3D animation";
+// Meet the gut clean-up crew — foods that remove toxins from your intestines naturally
+// Create a video about the benefits of 4 fruits: banana, apple, mango, orange. Each fruit talks about itself.
+// 3D animated gym equipment (dumbbell, treadmill, yoga mat) talking about how they help you get fit.
+// Dumbbell showing how it builds muscle inside the body
+  const userPrompt = "Turmeric destroying inflammation in joints";
   console.log("Input:", userPrompt);
   console.log("\nCalling generateSceneAdapter with talking-character-3d template...\n");
 
@@ -59,7 +62,8 @@ async function testTalkingCharacter3D() {
 
   // Validate title (required field)
   if (!output.title) throw new Error("Response missing title");
-  if (output.title.length < 3 || output.title.length > 40) throw new Error(`Title length invalid: ${output.title.length} (expected 3-20)`);
+  const titleWords = output.title.trim().split(/\s+/).length;
+  if (titleWords < 4 || titleWords > 15) throw new Error(`Title word count invalid: ${titleWords} (expected 4-15 words)`);
 
   if (!output.scenes || output.scenes.length === 0) {
     throw new Error("No scenes in output");
@@ -90,6 +94,32 @@ async function testTalkingCharacter3D() {
     if (!scene.character?.traits) throw new Error(`Scene ${scene.id} missing character.traits`);
     if (!scene.camera?.type) throw new Error(`Scene ${scene.id} missing camera.type`);
     if (!scene.camera?.movement) throw new Error(`Scene ${scene.id} missing camera.movement`);
+
+    // Validate biological visualization for health/food items
+    const healthKeywords = ['digestion', 'gut', 'health', 'nutrient', 'vitamin', 'mineral', 'fiber', 'probiotic', 'immune', 'energy'];
+    const isHealthRelated = healthKeywords.some(kw => userPrompt.toLowerCase().includes(kw));
+    if (isHealthRelated) {
+      // Check for internal biological environment
+      const biologicalKeywords = ['intestine', 'bloodstream', 'cell', 'tissue', 'organ', 'villi', 'microbiome', 'neuron', 'mitochondria'];
+      const hasBiologicalEnvironment = biologicalKeywords.some(kw => scene.environment?.toLowerCase().includes(kw) || scene.imagePrompt?.toLowerCase().includes(kw));
+      if (!hasBiologicalEnvironment) {
+        throw new Error(`Scene ${scene.id}: Health-related item missing biological visualization (internal body environment required)`);
+      }
+
+      // Check for biological action system (crew, transformation, action words)
+      const actionKeywords = ['cleaning', 'repairing', 'absorbing', 'dissolving', 'boosting', 'attacking', 'healing', 'transforming'];
+      const hasAction = actionKeywords.some(kw => scene.imagePrompt?.toLowerCase().includes(kw) || scene.videoPrompt?.toLowerCase().includes(kw));
+      if (!hasAction) {
+        throw new Error(`Scene ${scene.id}: Health-related item missing biological action (must show cleaning/repairing/absorbing)`);
+      }
+
+      // Check for transformation (before/after)
+      const transformationKeywords = ['before', 'after', 'dark', 'bright', 'glow', 'clean', 'healthy', 'improvement'];
+      const hasTransformation = transformationKeywords.some(kw => scene.imagePrompt?.toLowerCase().includes(kw));
+      if (!hasTransformation) {
+        throw new Error(`Scene ${scene.id}: Health-related item missing visible transformation`);
+      }
+    }
   }
 
   if (result.usage) {

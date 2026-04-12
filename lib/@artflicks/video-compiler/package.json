@@ -18,7 +18,7 @@
   "license": "MIT",
   "dependencies": {
     "ai": "^6.0.3",
-    "zod": "^3.22.4"
+    "zod": "^4.2.1"
   },
   "devDependencies": {
     "typescript": "^5.3.3"

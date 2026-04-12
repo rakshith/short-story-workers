@@ -68,7 +68,7 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     'nano-banana': { multiField: 'image_input' },
 
     //google/nano-banana-pro
-    'nano-banana-pro': { multiField: 'image_input' },
+    'nano-banana-pro': { multiField: 'image_input', defaultInputs:{resolution: '2K'} },
 
     //google/gemini-2.5-flash-image
     'gemini-2.5-flash-image': { multiField: 'image_input' },

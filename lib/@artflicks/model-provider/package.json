@@ -1,0 +1,43 @@
+{
+  "name": "@artflicks/model-provider",
+  "version": "1.0.0",
+  "description": "Unified model provider abstraction layer - supports Replicate, Fal.ai, and Cloudflare AI Gateway",
+  "main": "dist/index.js",
+  "module": "dist/index.mjs",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch"
+  },
+  "dependencies": {
+    "replicate": "^1.0.1",
+    "@fal-ai/client": "^1.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.6.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.0.0"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "model",
+    "provider",
+    "ai",
+    "video",
+    "image",
+    "audio",
+    "replicate",
+    "fal"
+  ],
+  "author": "ArtFlicks",
+  "license": "MIT"
+}

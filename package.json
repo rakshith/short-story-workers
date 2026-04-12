@@ -41,6 +41,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.1",
+    "@artflicks/model-provider": "file:./lib/@artflicks/model-provider",
     "@supabase/supabase-js": "^2.39.3",
     "ai": "^6.0.3",
     "ai-gateway-provider": "^3.1.1",
