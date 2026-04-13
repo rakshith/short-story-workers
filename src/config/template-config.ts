@@ -20,7 +20,8 @@ export const TEMPLATE_CONFIGS: Record<string, TemplatePipelineConfig> = {
     usesGeneratedImage: true,
   },
   "skeleton-3d-shorts": {
-    generateAudio: true // Caption/Voiceover narration 
+    generateAudio: true,// Caption/Voiceover narration 
+    usesGeneratedImage: true,
   },
   "body-science-shorts": {
     generateAudio: true, // Caption/Voiceover narration 

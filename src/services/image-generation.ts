@@ -84,13 +84,14 @@ export async function triggerReplicateGeneration(
     delete input.height;
   }
 
+  let attachedImageFields: import('../utils/replicate-model-config').AttachedImageFields = {};
   if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY || 
       params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
       params.videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS) {
     // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
     console.log('[IMAGE-GEN] Template ID:', params.videoConfig.templateId);
     console.log('[IMAGE-GEN] Character References:', params.videoConfig?.characterReferenceImages);
-    attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
+    attachedImageFields = attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
   }
 
   if (params.output_quality) {
@@ -124,17 +125,26 @@ export async function triggerReplicateGeneration(
   if (!provider.generateImageAsync) {
     throw new Error(`Provider ${providerType} does not support async image generation`);
   }
-  
+
+  // Build replicateInput with only image fields from replicate-model-config
+  const replicateInput: Record<string, unknown> = {};
+  if (attachedImageFields.singleField) {
+    replicateInput[attachedImageFields.singleField] = input[attachedImageFields.singleField];
+  }
+  if (attachedImageFields.multiField) {
+    replicateInput[attachedImageFields.multiField] = input[attachedImageFields.multiField];
+  }
+
   const result = await provider.generateImageAsync(params.model, {
     prompt: input.prompt,
     negativePrompt: input.negative_prompt,
-    imageUrl: input.image || input.input_image || input.redux_image,
   }, {
     width: input.width,
     height: input.height,
     aspect_ratio: input.aspect_ratio,
     guidance: input.guidance_scale,
     seed: input.seed,
+    input: replicateInput,
     webhookUrl: webhookWithModel,
     webhookEvents: ["completed"],
   });

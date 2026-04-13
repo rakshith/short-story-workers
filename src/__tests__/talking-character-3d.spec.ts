@@ -30,7 +30,7 @@ async function testTalkingCharacter3D() {
 // Meet the gut clean-up crew — foods that remove toxins from your intestines naturally
 // Create a video about the benefits of 4 fruits: banana, apple, mango, orange. Each fruit talks about itself.
 // 3D animated gym equipment (dumbbell, treadmill, yoga mat) talking about how they help you get fit.
-// Dumbbell showing how it builds muscle inside the body
+// 
   const userPrompt = "Turmeric destroying inflammation in joints";
   console.log("Input:", userPrompt);
   console.log("\nCalling generateSceneAdapter with talking-character-3d template...\n");

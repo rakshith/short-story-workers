@@ -42,6 +42,7 @@ export interface ImageGenerationOptions extends GenerationOptions {
   aspect_ratio?: string;
   guidance?: number;
   seed?: number;
+  input?: Record<string, unknown>;
 }
 
 export interface VideoGenerationOptions extends GenerationOptions {
@@ -49,6 +50,7 @@ export interface VideoGenerationOptions extends GenerationOptions {
   fps?: number;
   guidance?: number;
   seed?: number;
+  input?: Record<string, unknown>;
 }
 
 export interface AudioGenerationOptions extends GenerationOptions {

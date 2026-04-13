@@ -148,12 +148,12 @@ export class ReplicateProvider extends HealthyProviderWrapper {
     const inputData: Record<string, unknown> = {
       prompt: input.prompt,
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.imageUrl && { image: input.imageUrl }),
       ...(options?.width && { width: options.width }),
       ...(options?.height && { height: options.height }),
       ...(options?.aspect_ratio && { aspect_ratio: options.aspect_ratio }),
       ...(options?.guidance && { guidance: options.guidance }),
       ...(options?.seed && { seed: options.seed }),
+      ...(options?.input),
     };
     
     return this.createPrediction(model, inputData, options);
@@ -172,14 +172,13 @@ export class ReplicateProvider extends HealthyProviderWrapper {
     
     const inputData: Record<string, unknown> = {
       ...(input.prompt && { prompt: input.prompt }),
-      ...(input.imageUrl && { image: input.imageUrl }),
-      ...(input.firstImageUrl && { first_image: input.firstImageUrl }),
+      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.audioUrl && { audio: input.audioUrl }),
       ...(input.duration && { duration: input.duration }),
-      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
       ...(options?.guidance && { guidance: options.guidance }),
       ...(options?.fps && { fps: options.fps }),
+      ...(options?.input),
     };
     
     return this.createPrediction(model, inputData, options);

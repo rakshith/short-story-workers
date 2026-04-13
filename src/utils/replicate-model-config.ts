@@ -220,19 +220,29 @@ export function getModelImageConfig(modelName: string, enableImmersiveAudio?: bo
  * @param input - The Replicate input object to modify
  * @param model - The model name (e.g., "black-forest-labs/flux-kontext-pro")
  * @param images - Array of image URLs to attach
+ * @returns Object with field names that were set (singleField and/or multiField)
  */
+export interface AttachedImageFields {
+    /** The single image field that was set, if any */
+    singleField?: string;
+    /** The multi-image field that was set, if any */
+    multiField?: string;
+}
+
 export function attachImageInputs(
     input: Record<string, any>,
     model: string,
     images: string[] | undefined
-): void {
-    if (!images || images.length === 0) return;
+): AttachedImageFields {
+    if (!images || images.length === 0) return {};
 
     const config = getModelImageConfig(model);
+    const result: AttachedImageFields = {};
 
     // Attach multi-image field if configured
     if (config.multiField) {
         input[config.multiField] = images;
+        result.multiField = config.multiField;
     }
 
     // Attach single image field
@@ -240,6 +250,9 @@ export function attachImageInputs(
         // Use first image for single field, or set if setSingleFromFirst is true
         if (images.length === 1 || config.setSingleFromFirst) {
             input[config.singleField] = images[0];
+            result.singleField = config.singleField;
         }
     }
+
+    return result;
 }

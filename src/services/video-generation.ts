@@ -83,14 +83,15 @@ export async function triggerVideoGeneration(
     const characterRefs = params.videoConfig?.characterReferenceImages;
     const hasCharacterRefs = characterRefs && characterRefs.length > 0;
 
+    let attachedImageFields: import('../utils/replicate-model-config').AttachedImageFields = {};
     if (params.referenceImageUrl && usesGeneratedImage) {
         // Priority 1: Use generated image from imagePrompt (for templates that use generated image)
         console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
-        attachImageInputs(input, params.model, [params.referenceImageUrl]);
+        attachedImageFields = attachImageInputs(input, params.model, [params.referenceImageUrl]);
     } else if (hasCharacterRefs && characterRefs) {
         // Priority 2: Use character reference images from request
         console.log('[VIDEO-GEN] Using character reference images:', params.videoConfig.templateId);
-        attachImageInputs(input, params.model, characterRefs);
+        attachedImageFields = attachImageInputs(input, params.model, characterRefs);
     }
 
     // Scene duration — snap to model-allowed values (e.g. Veo: 4, 6, 8) when applicable
@@ -116,15 +117,23 @@ export async function triggerVideoGeneration(
       throw new Error(`Provider ${providerType} does not support async video generation`);
     }
 
+    // Build replicateInput with only image fields from replicate-model-config
+    const replicateInput: Record<string, unknown> = {};
+    if (attachedImageFields.singleField) {
+      replicateInput[attachedImageFields.singleField] = input[attachedImageFields.singleField];
+    }
+    if (attachedImageFields.multiField) {
+      replicateInput[attachedImageFields.multiField] = input[attachedImageFields.multiField];
+    }
+
     const result = await provider.generateVideoAsync(params.model, {
       prompt: input.prompt,
-      imageUrl: input.image || input.first_image,
-      firstImageUrl: input.first_frame,
       audioUrl: input.audio,
       duration: input.duration,
       negativePrompt: input.negative_prompt,
       aspect_ratio: input.aspect_ratio,
     }, {
+      input: replicateInput,
       webhookUrl: webhookWithModel,
       webhookEvents: ["completed"],
     });
