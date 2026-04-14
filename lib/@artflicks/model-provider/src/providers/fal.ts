@@ -169,9 +169,10 @@ export class FalProvider extends HealthyProviderWrapper {
         // Extract data from result - follows existing provider-lib pattern
         if (result?.data?.images) return result.data.images;
         if (result?.data?.image) return [result.data.image];
-        if (result?.data?.video?.url) return [result.data.video.url];
-        if (result?.data?.audio?.url) return [result.data.audio.url];
-        
+        // Return full result for video/audio so extractVideoUrl can find data.data.video.url
+        if (result?.data?.video?.url) return result;
+        if (result?.data?.audio?.url) return result;
+
         return result?.data || result;
       } catch (error) {
         lastError = error as Error;
