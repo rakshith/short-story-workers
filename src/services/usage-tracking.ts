@@ -43,9 +43,9 @@ export async function deductCredits(
       return { success: false, error: error.message };
     }
 
-    if (!data) {
+    if (!data || (typeof data === 'object' && !(data as any).success)) {
       console.error('[Usage Tracking] Insufficient credits or deduction failed');
-      return { success: false, error: 'Insufficient credits' };
+      return { success: false, error: typeof data === 'object' && (data as any).error ? (data as any).error : 'Insufficient credits' };
     }
 
     console.log(`[Usage Tracking] Successfully deducted ${credits} credits for user ${userId} (env: ${envType})`);
