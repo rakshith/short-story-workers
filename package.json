@@ -38,7 +38,7 @@
     "@types/node": "^22.0.0",
     "knip": "^5.78.0",
     "typescript": "^5.3.3",
-    "wrangler": "^4.51.0"
+    "wrangler": "^4.97.0"
   },
   "dependencies": {
     "@ai-sdk/openai": "^3.0.1",

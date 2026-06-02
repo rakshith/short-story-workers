@@ -34,6 +34,7 @@ export interface GenerationOptions {
   retries?: number;
   webhookUrl?: string;
   webhookEvents?: string[];  // Defaults to ["completed"] if not specified
+  webhookMetadata?: Record<string, string>;  // Extra query params appended to webhook URL
 }
 
 export interface ImageGenerationOptions extends GenerationOptions {
@@ -104,6 +105,8 @@ export interface VideoResult {
   duration?: number;
   width?: number;
   height?: number;
+  seed?: number;
+  fileSize?: number;
 }
 
 export interface AudioResult {
@@ -186,6 +189,8 @@ export interface FactoryConfig {
     falai: ProviderConfig;
     gateway: ProviderConfig;
   };
+  seedanceProvider?: ProviderType;
+  seedanceGenerationType?: 'text-to-video' | 'image-to-video' | 'reference-to-video';
 }
 
 // ============================================================================

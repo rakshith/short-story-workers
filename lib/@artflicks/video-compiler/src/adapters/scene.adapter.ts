@@ -151,7 +151,7 @@ export class SceneAdapter implements StoryAdapter {
     }
 
     const finalDuration = Math.max(
-      story.totalDuration ?? 0,
+      currentTime,
       audioEndTime,
       ...visual.map(v => v.end)
     );

@@ -19,13 +19,19 @@ export const ENV_KEYS = {
   USE_GATEWAY: 'USE_GATEWAY',
   GATEWAY_URL: 'GATEWAY_URL',
   
+  // Seedance 2.0 specific config
+  SEEDANCE_PROVIDER: 'SEEDANCE_PROVIDER',
+  SEEDANCE_GENERATION_TYPE: 'SEEDANCE_GENERATION_TYPE',
+  
   // Replicate
   REPLICATE_API_KEY: 'REPLICATE_API_KEY',
+  NEXT_PUBLIC_REPLICATE_API_KEY: 'NEXT_PUBLIC_REPLICATE_API_KEY', // Public fallback
   REPLICATE_WEBHOOK_URL: 'REPLICATE_WEBHOOK_URL',
   
   // Fal.ai
   FAL_API_KEY: 'FAL_API_KEY',
   FAL_KEY: 'FAL_KEY', // Alias for FAL_API_KEY
+  FAL_WEBHOOK_URL: 'FAL_WEBHOOK_URL',
   
   // Cloudflare
   CF_API_TOKEN: 'CF_API_TOKEN',
@@ -63,12 +69,17 @@ export function getApiKeys(): Record<string, string | undefined> {
     USE_GATEWAY: env?.[ENV_KEYS.USE_GATEWAY],
     GATEWAY_URL: env?.[ENV_KEYS.GATEWAY_URL],
     
-    // Replicate
-    REPLICATE_API_KEY: env?.[ENV_KEYS.REPLICATE_API_KEY],
+    // Seedance 2.0 specific config
+    SEEDANCE_PROVIDER: env?.[ENV_KEYS.SEEDANCE_PROVIDER],
+    SEEDANCE_GENERATION_TYPE: env?.[ENV_KEYS.SEEDANCE_GENERATION_TYPE],
+    
+    // Replicate (supports REPLICATE_API_KEY and NEXT_PUBLIC_REPLICATE_API_KEY)
+    REPLICATE_API_KEY: env?.[ENV_KEYS.REPLICATE_API_KEY] || env?.[ENV_KEYS.NEXT_PUBLIC_REPLICATE_API_KEY],
     REPLICATE_WEBHOOK_URL: env?.[ENV_KEYS.REPLICATE_WEBHOOK_URL],
     
     // Fal.ai (supports both FAL_API_KEY and FAL_KEY)
     FAL_API_KEY: env?.[ENV_KEYS.FAL_API_KEY] || env?.[ENV_KEYS.FAL_KEY],
+    FAL_WEBHOOK_URL: env?.[ENV_KEYS.FAL_WEBHOOK_URL],
     
     // Cloudflare
     CF_API_TOKEN: env?.[ENV_KEYS.CF_API_TOKEN],
@@ -100,6 +111,13 @@ export function getReplicateKey(): string | undefined {
  */
 export function getFalKey(): string | undefined {
   return getApiKeys().FAL_API_KEY;
+}
+
+/**
+ * Get Fal.ai webhook URL
+ */
+export function getFalWebhookUrl(): string | undefined {
+  return getApiKeys().FAL_WEBHOOK_URL;
 }
 
 /**

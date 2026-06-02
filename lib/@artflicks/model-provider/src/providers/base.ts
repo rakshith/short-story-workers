@@ -210,10 +210,16 @@ export function parseVideoResponse(data: any): VideoResult {
   if (!url) {
     throw new Error('No video URL in response');
   }
-  
+
+  // Extract seed and file_size from Fal.ai response structure
+  const seed = data?.seed ?? data?.data?.seed ?? undefined;
+  const fileSize = data?.data?.video?.file_size ?? data?.video?.file_size ?? undefined;
+
   return {
     videoUrl: url,
     url,
+    seed,
+    fileSize,
   };
 }
 

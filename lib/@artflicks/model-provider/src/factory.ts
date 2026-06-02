@@ -28,9 +28,11 @@ import { PROVIDER_NAMES } from './types';
 import { 
   getFactoryConfig,
   getProviderForModel,
+  getActualModelId,
   DEFAULT_PROVIDER,
   DEFAULT_FALLBACK_PROVIDER,
   DEFAULT_RETRY_ATTEMPTS,
+  SeedanceGenerationType,
 } from './config';
 
 import { ReplicateProvider } from './providers/replicate';
@@ -155,17 +157,25 @@ export class ModelProviderFactory {
   }
   
   /**
- * Get provider for a specific model
- * Uses config to determine primary and fallback
+ * Get provider for a specific model with resolved model ID
+ * Handles Seedance 2.0 model ID mapping for FAL provider
  */
   static getProviderForModel(
     modelId: string,
     mediaType: 'video' | 'image' | 'audio',
-    config?: Partial<FactoryConfig>
+    config?: Partial<FactoryConfig>,
+    generationType?: SeedanceGenerationType
   ): ModelProvider {
     const cfg = config || getFactoryConfig();
     
-    const resolvedProviderType = getProviderForModel(modelId, mediaType) ?? cfg.primary;
+    let resolvedProviderType = getProviderForModel(modelId, mediaType) ?? cfg.primary;
+    
+    // Override provider for Seedance models based on config
+    const isSeedance = modelId.startsWith('bytedance/seedance');
+    if (isSeedance && cfg.seedanceProvider) {
+      resolvedProviderType = cfg.seedanceProvider;
+    }
+    
     const fallbackType = cfg.fallback;
     
     // Ensure resolvedProviderType is valid
@@ -184,6 +194,37 @@ export class ModelProviderFactory {
     }
     
     return primary;
+  }
+  
+  /**
+   * Get both provider and resolved model ID for a model
+   * Returns the actual model ID to use based on provider and generation type
+   */
+  static getProviderAndModelId(
+    modelId: string,
+    mediaType: 'video' | 'image' | 'audio',
+    generationType?: SeedanceGenerationType
+  ): { provider: ModelProvider; actualModelId: string } {
+    const cfg = getFactoryConfig();
+    
+    let resolvedProviderType = getProviderForModel(modelId, mediaType) ?? cfg.primary;
+    
+    // Override provider for Seedance models based on config
+    const isSeedance = modelId.startsWith('bytedance/seedance');
+    if (isSeedance && cfg.seedanceProvider) {
+      resolvedProviderType = cfg.seedanceProvider;
+    }
+    
+    // Get the actual model ID to use
+    const actualModelId = getActualModelId(modelId, resolvedProviderType, generationType);
+    
+    // Get the provider (with fallback if configured)
+    const provider = this.getProviderForModel(modelId, mediaType, undefined, generationType);
+    
+    return {
+      provider,
+      actualModelId,
+    };
   }
   
   /**
@@ -251,3 +292,10 @@ export const getProviderForAudio = (modelId: string) =>
 
 // Health check
 export const checkProviderHealth = () => ModelProviderFactory.getHealthStatus();
+
+// Get provider and resolved model ID for Seedance models
+export const getProviderAndModelId = (
+  modelId: string,
+  mediaType: 'video' | 'image' | 'audio',
+  generationType?: SeedanceGenerationType
+) => ModelProviderFactory.getProviderAndModelId(modelId, mediaType, generationType);

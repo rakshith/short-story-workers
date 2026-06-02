@@ -24,6 +24,10 @@ import {
 
 // Video models (from existing Replicate config)
 export const VIDEO_MODEL_PROVIDER_MAP: Record<string, ProviderType> = {
+  // Seedance 2.0 models (default provider: FAL, fallback: Replicate)
+  'bytedance/seedance-2.0': PROVIDER_NAMES.FALAI,
+  'bytedance/seedance-2.0-fast': PROVIDER_NAMES.FALAI,
+
   // Fal.ai video models
   'fal-ai/kling-video-v2': PROVIDER_NAMES.FALAI,
   'fal-ai/kling-video-v3': PROVIDER_NAMES.FALAI,
@@ -74,6 +78,7 @@ export const IMAGE_MODEL_PROVIDER_MAP: Record<string, ProviderType> = {
   'black-forest-labs/flux-redux-dev': PROVIDER_NAMES.REPLICATE,
   'black-forest-labs/flux-1.1-pro-ultra': PROVIDER_NAMES.REPLICATE,
   'black-forest-labs/flux-2-dev': PROVIDER_NAMES.REPLICATE,
+  'black-forest-labs/flux-2-pro': PROVIDER_NAMES.REPLICATE,
   
   // Replicate image models (Others)
   'xai/grok-imagine-image': PROVIDER_NAMES.REPLICATE,
@@ -94,6 +99,49 @@ export const AUDIO_MODEL_PROVIDER_MAP: Record<string, ProviderType> = {
   // Fal.ai audio (if available)
   'fal-ai/tts': PROVIDER_NAMES.FALAI,
 };
+
+// ============================================================================
+// Seedance 2.0 FAL Model ID Mapping
+// ============================================================================
+
+export type SeedanceGenerationType = 'text-to-video' | 'image-to-video' | 'reference-to-video';
+
+export const SEEDANCE_FAL_MODEL_MAP: Record<SeedanceGenerationType, string> = {
+  'text-to-video': 'bytedance/seedance-2.0/text-to-video',
+  'image-to-video': 'bytedance/seedance-2.0/image-to-video',
+  'reference-to-video': 'bytedance/seedance-2.0/reference-to-video',
+};
+
+export const SEEDANCE_FAST_FAL_MODEL_MAP: Record<SeedanceGenerationType, string> = {
+  'text-to-video': 'bytedance/seedance-2.0/fast/text-to-video',
+  'image-to-video': 'bytedance/seedance-2.0/fast/image-to-video',
+  'reference-to-video': 'bytedance/seedance-2.0/fast/reference-to-video',
+};
+
+/**
+ * Get the actual model ID to use based on provider and generation type
+ * For FAL: maps to specific endpoint (text-to-video, image-to-video, etc.)
+ * For Replicate: returns original model ID
+ */
+export function getActualModelId(
+  modelId: string,
+  provider: ProviderType,
+  generationType?: SeedanceGenerationType
+): string {
+  if (!generationType) {
+    return modelId;
+  }
+
+  const isSeedance = modelId.startsWith('bytedance/seedance');
+  const isFast = modelId.includes('fast');
+
+  if (isSeedance && provider === PROVIDER_NAMES.FALAI) {
+    const modelMap = isFast ? SEEDANCE_FAST_FAL_MODEL_MAP : SEEDANCE_FAL_MODEL_MAP;
+    return modelMap[generationType];
+  }
+
+  return modelId;
+}
 
 // ============================================================================
 // Helper Functions
@@ -148,6 +196,10 @@ export function getFactoryConfig(): FactoryConfig {
   const retryAttemptsStr = isBrowser ? env?.retryAttempts : keys.RETRY_ATTEMPTS;
   const retryAttempts = parseInt(retryAttemptsStr || '2', 10);
   
+  // Seedance specific config
+  const seedanceProvider = (isBrowser ? env?.seedanceProvider : keys.SEEDANCE_PROVIDER) as ProviderType | undefined;
+  const seedanceGenerationType = isBrowser ? env?.seedanceGenerationType : keys.SEEDANCE_GENERATION_TYPE as 'text-to-video' | 'image-to-video' | 'reference-to-video' | undefined;
+  
   // Get provider configurations
   const replicateEnabled = isProviderConfigured(PROVIDER_NAMES.REPLICATE);
   const falaiEnabled = isProviderConfigured(PROVIDER_NAMES.FALAI);
@@ -158,6 +210,8 @@ export function getFactoryConfig(): FactoryConfig {
     primary: primary || (falaiEnabled ? PROVIDER_NAMES.FALAI : replicateEnabled ? PROVIDER_NAMES.REPLICATE : PROVIDER_NAMES.FALAI),
     fallback: fallback || (replicateEnabled ? PROVIDER_NAMES.REPLICATE : PROVIDER_NAMES.FALAI),
     retryAttempts: retryAttempts || 2,
+    seedanceProvider: seedanceProvider || PROVIDER_NAMES.FALAI,
+    seedanceGenerationType,
     providers: {
       replicate: { enabled: replicateEnabled },
       falai: { enabled: falaiEnabled },
@@ -182,6 +236,8 @@ export function setFactoryConfig(config: Partial<FactoryConfig>): void {
       fallback: config.fallback,
       retryAttempts: config.retryAttempts?.toString(),
       gatewayUrl: config.providers?.gateway?.apiUrl,
+      seedanceProvider: config.seedanceProvider,
+      seedanceGenerationType: config.seedanceGenerationType,
     };
   }
 }

@@ -41,6 +41,7 @@ export * from './ENV_KEYS';
 // ============================================================================
 
 export * from './config';
+export type { SeedanceGenerationType } from './config';
 
 // ============================================================================
 // Factory
@@ -56,6 +57,7 @@ export {
   getProviderForImage,
   getProviderForAudio,
   checkProviderHealth,
+  getProviderAndModelId,
 } from './factory';
 
 // ============================================================================
@@ -72,6 +74,19 @@ export {
 export { ReplicateProvider, createReplicateProvider } from './providers/replicate';
 export { FalProvider, createFalProvider } from './providers/fal';
 export { GatewayProvider, createGatewayProvider } from './providers/gateway';
+
+// ============================================================================
+// Video Pricing (Shared with Cloudflare Workers)
+// ============================================================================
+
+export {
+  getVideoModelConfig,
+  getResolutionCreditCost,
+  getVideoCreditCost,
+  getAllVideoModels,
+  isVideoModel,
+} from './video-pricing';
+export type { VideoModelConfig } from './video-pricing';
 
 // ============================================================================
 // Convenience Types

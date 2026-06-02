@@ -1,0 +1,254 @@
+{
+  "models": [
+    {
+      "id": "bytedance/seedance-2.0",
+      "name": "Seedance 2.0",
+      "provider": "Fal AI",
+      "providerId": "falai",
+      "enabled": true,
+      "defaultConfig": {
+        "type": "object",
+        "title": "Input",
+        "required": ["prompt"],
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "title": "Seed",
+            "x-order": 10,
+            "nullable": true,
+            "description": "Random seed. Set for reproducible generation"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "format": "uri",
+            "x-order": 1,
+            "nullable": true,
+            "description": "Input image for image-to-video generation (start frame)."
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt",
+            "x-order": 0,
+            "description": "Text prompt for video generation"
+          },
+          "duration": {
+            "type": "integer",
+            "title": "Duration",
+            "default": 5,
+            "maximum": 15,
+            "minimum": 4,
+            "x-order": 6,
+            "description": "Video duration in seconds. Set to -1 for intelligent duration (model picks the best length)."
+          },
+          "resolution": {
+            "enum": ["480p", "720p", "1080p"],
+            "type": "string",
+            "title": "resolution",
+            "description": "Video resolution.",
+            "default": "720p",
+            "x-order": 7
+          },
+          "aspect_ratio": {
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ],
+            "type": "string",
+            "title": "aspect_ratio",
+            "description": "Video aspect ratio. Set to 'adaptive' to let the model choose the best ratio based on inputs.",
+            "default": "16:9",
+            "x-order": 8
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "title": "Generate Audio",
+            "default": true,
+            "x-order": 9,
+            "description": "Generate audio synchronized with the video. When enabled, the model outputs a video with native audio including dialogue, sound effects, and ambient sounds."
+          },
+          "last_frame_image": {
+            "type": "string",
+            "title": "Last Frame Image",
+            "format": "uri",
+            "x-order": 2,
+            "nullable": true,
+            "description": "Input image for last frame generation. Only works if an image start frame is also provided."
+          },
+          "reference_audios": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Audios",
+            "default": [],
+            "x-order": 5,
+            "description": "Reference audio files (up to 3, max 15s each) for audio-visual synchronization, lip-sync, and beat matching."
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Images",
+            "default": [],
+            "x-order": 3,
+            "description": "Reference images (up to 9) for character consistency, style guidance, and scene composition. Cannot be used together with first frame or last frame images."
+          },
+          "reference_videos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Videos",
+            "default": [],
+            "x-order": 4,
+            "description": "Reference videos (up to 3, max 15s each) for motion transfer, camera movement guidance, and style reference."
+          }
+        }
+      },
+      "description": "8Cr/sec. 480p: 2Cr/s, 720p: 5Cr/s, 1080p: 10Cr/s",
+      "costPerImage": "For every second of 720p video you generated, you will be charged $0.2419/second. Your request will cost $0.0112 per 1000 tokens. The number of tokens is given by (height of output video * width of output video * duration * 24) / 1024.",
+      "creditCost": 8,
+      "paid": true,
+      "pixelsPerSecond": 2,
+      "resPerSecond": {
+        "480p": 4,
+        "720p": 8,
+        "1080p": 12
+      }
+    },
+    {
+      "id": "bytedance/seedance-2.0-fast",
+      "name": "Seedance 2.0 Fast",
+      "provider": "Fal AI",
+      "providerId": "falai",
+      "enabled": true,
+      "defaultConfig": {
+        "type": "object",
+        "title": "Input",
+        "required": ["prompt"],
+        "properties": {
+          "seed": {
+            "type": "integer",
+            "title": "Seed",
+            "x-order": 10,
+            "nullable": true,
+            "description": "Random seed. Set for reproducible generation"
+          },
+          "image": {
+            "type": "string",
+            "title": "Image",
+            "format": "uri",
+            "x-order": 1,
+            "nullable": true,
+            "description": "Input image for image-to-video generation (start frame)."
+          },
+          "prompt": {
+            "type": "string",
+            "title": "Prompt",
+            "x-order": 0,
+            "description": "Text prompt for video generation"
+          },
+          "duration": {
+            "type": "integer",
+            "title": "Duration",
+            "default": 5,
+            "maximum": 15,
+            "minimum": -1,
+            "x-order": 6,
+            "description": "Video duration in seconds. Set to -1 for intelligent duration (model picks the best length)."
+          },
+          "resolution": {
+            "enum": ["480p", "720p"],
+            "type": "string",
+            "title": "resolution",
+            "description": "Video resolution.",
+            "default": "720p",
+            "x-order": 7
+          },
+          "aspect_ratio": {
+            "enum": [
+              "16:9",
+              "4:3",
+              "1:1",
+              "3:4",
+              "9:16",
+              "21:9"
+            ],
+            "type": "string",
+            "title": "aspect_ratio",
+            "description": "Video aspect ratio. Set to 'adaptive' to let the model choose the best ratio based on inputs.",
+            "default": "16:9",
+            "x-order": 8
+          },
+          "generate_audio": {
+            "type": "boolean",
+            "title": "Generate Audio",
+            "default": true,
+            "x-order": 9,
+            "description": "Generate audio synchronized with the video. When enabled, the model outputs a video with native audio including dialogue, sound effects, and ambient sounds."
+          },
+          "last_frame_image": {
+            "type": "string",
+            "title": "Last Frame Image",
+            "format": "uri",
+            "x-order": 2,
+            "nullable": true,
+            "description": "Input image for last frame generation. Only works if an image start frame is also provided."
+          },
+          "reference_audios": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Audios",
+            "default": [],
+            "x-order": 5,
+            "description": "Reference audio files (up to 3, max 15s each) for audio-visual synchronization, lip-sync, and beat matching."
+          },
+          "reference_images": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Images",
+            "default": [],
+            "x-order": 3,
+            "description": "Reference images (up to 9) for character consistency, style guidance, and scene composition. Cannot be used together with first frame or last frame images."
+          },
+          "reference_videos": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uri"
+            },
+            "title": "Reference Videos",
+            "default": [],
+            "x-order": 4,
+            "description": "Reference videos (up to 3, max 15s each) for motion transfer, camera movement guidance, and style reference."
+          }
+        }
+      },
+      "description": "6Cr/sec. 480p: 2Cr/s, 720p: 5Cr/s",
+      "costPerImage": "For every second of 720p video you generated, you will be charged $0.2419/second. Your request will cost $0.0112 per 1000 tokens. The number of tokens is given by (height of output video * width of output video * duration * 24) / 1024.",
+      "creditCost": 6,
+      "paid": true,
+      "pixelsPerSecond": 2,
+      "resPerSecond": {
+        "480p": 3,
+        "720p": 6,
+        "1080p": 10
+      }
+    }
+  ]
+}
