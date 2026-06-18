@@ -3,6 +3,7 @@
 
 import { Env } from '../types/env';
 import { compile } from '../../lib/@artflicks/video-compiler';
+import { isVideoMediaType } from '../utils/media-type';
 
 interface SceneUpdate {
   sceneIndex: number;
@@ -189,7 +190,7 @@ export class StoryCoordinator {
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isImageOnlyStory = this.storyState.videoConfig?.mediaType !== 'video';
+    const isImageOnlyStory = !isVideoMediaType(this.storyState.videoConfig?.mediaType);
 
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
     const allDone = isImageOnlyStory
@@ -368,7 +369,7 @@ export class StoryCoordinator {
     const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isImageOnlyStory = this.storyState.videoConfig?.mediaType !== 'video';
+    const isImageOnlyStory = !isVideoMediaType(this.storyState.videoConfig?.mediaType);
 
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
     const allDone = isImageOnlyStory

@@ -8,4 +8,6 @@ logs/
 .dev.vars
 .DS_Store
 .agent/
+.agents/
 .cursor/
+.skills-lock.json

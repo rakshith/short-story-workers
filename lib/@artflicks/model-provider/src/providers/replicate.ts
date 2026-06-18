@@ -173,6 +173,7 @@ export class ReplicateProvider extends HealthyProviderWrapper {
     const inputData: Record<string, unknown> = {
       ...(input.prompt && { prompt: input.prompt }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...(input.imageUrl && { image: input.imageUrl }),
       ...(input.audioUrl && { audio: input.audioUrl }),
       ...(input.duration && { duration: input.duration }),
       ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),

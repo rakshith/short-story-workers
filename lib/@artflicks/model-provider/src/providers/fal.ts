@@ -108,6 +108,7 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(input.audioUrl && { audio_url: input.audioUrl }),
       ...(input.duration && { duration: input.duration }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
       ...(options?.guidance && { guidance_scale: options.guidance }),
       ...(options?.fps && { fps: options.fps }),
     });
@@ -135,6 +136,46 @@ export class FalProvider extends HealthyProviderWrapper {
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseAudioResponse(result);
+  }
+  
+  /**
+   * Async video generation via Fal.ai queue (returns request_id for webhook callback)
+   * Uses fal.queue.submit() for non-blocking submission with webhook URL.
+   */
+  async generateVideoAsync(
+    model: string,
+    input: VideoInput,
+    options?: VideoGenerationOptions
+  ): Promise<{ predictionId: string; status: string }> {
+    this.validateEnabled();
+    
+    const cleanedInput = this.cleanInput({
+      ...(input.prompt && { prompt: input.prompt }),
+      ...(input.imageUrl && { image_url: input.imageUrl }),
+      ...(input.firstImageUrl && { first_image_url: input.firstImageUrl }),
+      ...(input.audioUrl && { audio_url: input.audioUrl }),
+      ...(input.duration && { duration: input.duration }),
+      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
+      ...(options?.guidance && { guidance_scale: options.guidance }),
+      ...(options?.fps && { fps: options.fps }),
+      ...(options?.input || {}),
+    });
+
+    const webhookUrl = options?.webhookUrl;
+    if (!webhookUrl) {
+      throw new Error('[FalProvider] webhookUrl is required for async generation');
+    }
+
+    const submission = await fal.queue.submit(model, {
+      input: cleanedInput,
+      webhookUrl,
+    });
+
+    return {
+      predictionId: submission.request_id,
+      status: 'queued',
+    };
   }
   
   /**

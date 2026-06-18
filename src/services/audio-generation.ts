@@ -173,7 +173,8 @@ async function generateElevenLabsAudio(
   elevenLabsApiKey: string,
   defaultVoiceId?: string,
   narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE,
-  elevenLabsModel: string = ELEVENLABS_MODEL
+  elevenLabsModel: string = ELEVENLABS_MODEL,
+  enableCaptions: boolean = true
 ): Promise<{ audioBuffer: ArrayBuffer; alignment: ElevenLabsAlignment; audioDuration: number }> {
   const validatedSpeed = validateSpeed(requestedSpeed);
   const finalVoiceId = voiceId === 'alloy' ? (defaultVoiceId || voiceId) : voiceId;
@@ -182,11 +183,16 @@ async function generateElevenLabsAudio(
   const styleConfig = NARRATION_STYLES[narrationStyle];
   const audioSettings = styleConfig.audioSettings;
 
-  // Use the text-to-speech endpoint with alignment data
   // Clamp stability to valid TTD values for models like eleven_turbo_v2_5
   const validStability = clampToValidTTDStability(audioSettings.stability);
 
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}/with-timestamps`, {
+  // When captions are disabled, use the cheaper/faster endpoint without timestamps.
+  // This skips the character-alignment computation on ElevenLabs' side.
+  const endpoint = enableCaptions
+    ? `https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}/with-timestamps`
+    : `https://api.elevenlabs.io/v1/text-to-speech/${finalVoiceId}`;
+
+  const response = await fetch(endpoint, {
     method: 'POST',
     headers: {
       'xi-api-key': elevenLabsApiKey,
@@ -211,33 +217,45 @@ async function generateElevenLabsAudio(
     throw new Error(`ElevenLabs API error: ${error}`);
   }
 
-  const responseData = await response.json() as {
-    audio_base64: string;
-    alignment: {
-      characters: string[];
-      character_start_times_seconds: number[];
-      character_end_times_seconds: number[];
+  let audioBuffer: ArrayBuffer;
+  let alignment: ElevenLabsAlignment;
+  let audioDuration: number;
+
+  if (enableCaptions) {
+    const responseData = await response.json() as {
+      audio_base64: string;
+      alignment: {
+        characters: string[];
+        character_start_times_seconds: number[];
+        character_end_times_seconds: number[];
+      };
     };
-  };
 
-  // Convert base64 audio to ArrayBuffer
-  const audioBase64 = responseData.audio_base64;
-  const binaryString = atob(audioBase64);
-  const bytes = new Uint8Array(binaryString.length);
-  for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+    // Convert base64 audio to ArrayBuffer
+    const audioBase64 = responseData.audio_base64;
+    const binaryString = atob(audioBase64);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    audioBuffer = bytes.buffer;
+
+    // Get actual alignment data from ElevenLabs
+    alignment = {
+      characters: responseData.alignment.characters,
+      character_start_times_seconds: responseData.alignment.character_start_times_seconds,
+      character_end_times_seconds: responseData.alignment.character_end_times_seconds,
+    };
+
+    // Calculate actual audio duration from alignment
+    audioDuration = alignment.character_end_times_seconds[alignment.character_end_times_seconds.length - 1] || 0;
+  } else {
+    // No alignment data — decode MP3 binary directly and estimate duration
+    audioBuffer = await response.arrayBuffer();
+    alignment = { characters: [], character_start_times_seconds: [], character_end_times_seconds: [] };
+    // Rough estimate: sceneDuration is a fine placeholder; exact duration can be measured later if needed
+    audioDuration = sceneDuration;
   }
-  const audioBuffer = bytes.buffer;
-
-  // Get actual alignment data from ElevenLabs
-  const alignment: ElevenLabsAlignment = {
-    characters: responseData.alignment.characters,
-    character_start_times_seconds: responseData.alignment.character_start_times_seconds,
-    character_end_times_seconds: responseData.alignment.character_end_times_seconds,
-  };
-
-  // Calculate actual audio duration from alignment
-  const audioDuration = alignment.character_end_times_seconds[alignment.character_end_times_seconds.length - 1] || 0;
 
   return {
     audioBuffer,
@@ -259,7 +277,9 @@ export async function generateSceneAudio(
   openAiApiKey: string,
   defaultVoiceId?: string,
   narrationStyle: NarrationStyle = DEFAULT_NARRATION_STYLE,
-  elevenLabsModel?: string
+  elevenLabsModel?: string,
+  folderOverride?: string,
+  enableCaptions: boolean = true,
 ): Promise<AudioGenerationResult> {
   // Always use ElevenLabs for all voices with character alignment
   const startTime = Date.now();
@@ -271,63 +291,17 @@ export async function generateSceneAudio(
     elevenLabsApiKey,
     defaultVoiceId,
     narrationStyle,
-    elevenLabsModel
+    elevenLabsModel,
+    enableCaptions
   );
   const latencySeconds = (Date.now() - startTime) / 1000;
-
-  // Track AI Usage
-  const { trackAIUsageInternal } = await import('./usage-tracking');
-  // We need env here. It's not passed directly to generateSceneAudio but we can't easily get it without refactoring.
-  // Wait, generateSceneAudio takes args individually, it doesn't take 'env'.
-  // But wait, the caller 'processSceneAudio' in queue-processor.ts HAS env.
-
-  // Checking generateSceneAudio signature:
-  // export async function generateSceneAudio(..., audioBucket: R2Bucket, ...)
-  // It does NOT take 'env'. It takes specific keys.
-
-  // Check queue-processor.ts to see how it calls generateSceneAudio.
-  // I need to either pass 'env' to generateSceneAudio or track it in queue-processor.ts.
-  // Tracking in queue-processor.ts seems better to avoid changing signature of generateSceneAudio too much, 
-  // BUT generateSceneAudio is where the API call happens.
-
-  // Let's modify generateSceneAudio to take optional Env or just track it in the caller?
-  // Caller 'processSceneAudio' in 'src/services/queue-processor.ts' calls this.
-  // Let's modify 'src/services/queue-processor.ts' instead? 
-  // Implementation plan said "MODIFY audio-generation.ts".
-  // If I modify audio-generation.ts I need to pass Env.
-  // Let's look at audio-generation.ts signature again.
-  // It takes elevenLabsApiKey, openAiApiKey.
-
-  // It's cleaner to return usage metrics or track it in the caller.
-  // However, for consistency, let's track it here if we can pass valid credentials.
-  // But trackAIUsageInternal needs 'Env' object mainly for AI_METER_INGEST_KEY.
-  // I don't see AI_METER_INGEST_KEY passed to generateSceneAudio.
-
-  // Correct approach: Update 'processSceneAudio' in 'src/services/queue-processor.ts' to track usage.
-  // OR update generateSceneAudio to take 'env' instead of just keys.
-  // Updating generateSceneAudio signature is cleaner for future.
-
-  // BUT, I can't easily change the signature without updating all callers.
-  // Let's check callers. Only 'processSceneAudio' is likely calling it.
-
-  // I'll stick to the plan but realize I need to modify queue-processor.ts to track audio usage 
-  // OR modify generateSceneAudio to accept env.
-  // Let's modify generateSceneAudio to take 'env' as a last optional parameter or part of options if possible.
-  // Actually, let's look at `processSceneAudio` in `queue-processor.ts`. I haven't read that file yet.
-  // I read `queue-consumer.ts`, which imports `processSceneAudio`.
-
-  // Let's read `src/services/queue-processor.ts` first to see where `generateSceneAudio` is called.
-  // Then I will decide.
-
-  // For now, I will pause this Edit to AudioGeneration and read queue-processor.ts.
-
 
   const audioBuffer = result.audioBuffer;
   const audioDuration = result.audioDuration;
   let captions: Caption[] = [];
 
-  // Generate captions from ElevenLabs character alignment
-  if (result.alignment.characters.length > 0) {
+  // Generate captions from ElevenLabs character alignment (skipped when captions disabled)
+  if (enableCaptions && result.alignment.characters.length > 0) {
     const wordCaptions = convertCharacterTimestampsToWords(
       result.alignment.characters,
       result.alignment.character_start_times_seconds,
@@ -345,7 +319,8 @@ export async function generateSceneAudio(
     .replace(/[^a-z0-9-]/g, '');
 
   const fileName = `${cleanNarration}-${sceneNumber}-${generateUUID()}.${audio_output_format}`;
-  const key = `${FOLDER_NAMES.VOICE_OVERS}/${userId}/${fileName}`;
+  const folder = folderOverride || FOLDER_NAMES.VOICE_OVERS;
+  const key = `${folder}/${userId}/${fileName}`;
 
   await audioBucket.put(key, audioBuffer, {
     httpMetadata: {
@@ -364,5 +339,71 @@ export async function generateSceneAudio(
     audioDuration,
     captions,
   };
+}
+
+/**
+ * Transcribe an audio file using ElevenLabs STT (scribe_v2)
+ * Uses the @elevenlabs/elevenlabs-js SDK for proper integration
+ */
+export async function transcribeUploadedAudio(
+  audioUrl: string,
+  elevenLabsApiKey: string,
+): Promise<Caption[]> {
+  console.log(`[STT] Transcribing audio: ${audioUrl}`);
+
+  // Download the audio file
+  const audioResponse = await fetch(audioUrl);
+  if (!audioResponse.ok) {
+    throw new Error(`Failed to download audio for transcription: ${audioResponse.statusText}`);
+  }
+  const audioBlob = await audioResponse.blob();
+  const audioFile = new File([audioBlob], 'audio.mp3', {
+    type: audioResponse.headers.get('content-type') || 'audio/mpeg',
+  });
+
+  // Use ElevenLabs SDK for transcription
+  const { ElevenLabsClient } = await import('@elevenlabs/elevenlabs-js');
+  const client = new ElevenLabsClient({ apiKey: elevenLabsApiKey });
+
+  const result = await client.speechToText.convert({
+    file: audioFile,
+    modelId: 'scribe_v2',
+    timestampsGranularity: 'word',
+  });
+
+  console.log(`[STT] Transcription complete: ${result.text.substring(0, 100)}...`);
+
+  // Convert to Caption[] format (same as TTS alignment output)
+  const captions = convertSTTWordsToCaptions(result.words);
+  return captions;
+}
+
+/**
+ * Convert ElevenLabs STT word output to Caption[] format
+ * Matches the format used by convertCharacterTimestampsToWords from TTS alignment
+ */
+function convertSTTWordsToCaptions(
+  words: Array<{ text: string; start?: number; end?: number; type?: string }>
+): Caption[] {
+  const captions: Caption[] = [];
+
+  for (const word of words) {
+    if (word.type === 'spacing' || word.start == null || word.end == null) continue; // Skip spacing tokens
+
+    captions.push({
+      text: word.text,
+      startTime: word.start / 1000, // ElevenLabs returns ms, convert to seconds
+      endTime: word.end / 1000,
+      timestampMs: word.start,
+      confidence: null,
+      tokens: [{
+        text: word.text,
+        startTime: word.start / 1000,
+        endTime: word.end / 1000,
+      }],
+    });
+  }
+
+  return captions;
 }
 

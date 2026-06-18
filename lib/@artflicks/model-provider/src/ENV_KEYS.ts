@@ -23,14 +23,14 @@ export const ENV_KEYS = {
   SEEDANCE_PROVIDER: 'SEEDANCE_PROVIDER',
   SEEDANCE_GENERATION_TYPE: 'SEEDANCE_GENERATION_TYPE',
   
-  // Replicate
+  // Replicate (Cloudflare Workers use REPLICATE_API_TOKEN, Next.js apps use REPLICATE_API_KEY)
   REPLICATE_API_KEY: 'REPLICATE_API_KEY',
+  REPLICATE_API_TOKEN: 'REPLICATE_API_TOKEN',
   NEXT_PUBLIC_REPLICATE_API_KEY: 'NEXT_PUBLIC_REPLICATE_API_KEY', // Public fallback
   REPLICATE_WEBHOOK_URL: 'REPLICATE_WEBHOOK_URL',
   
   // Fal.ai
   FAL_API_KEY: 'FAL_API_KEY',
-  FAL_KEY: 'FAL_KEY', // Alias for FAL_API_KEY
   FAL_WEBHOOK_URL: 'FAL_WEBHOOK_URL',
   
   // Cloudflare
@@ -52,14 +52,14 @@ export const ENV_KEYS = {
 
 /**
  * Get all API keys from environment
+ * @param workerEnv - Optional env object for Cloudflare Workers (bypasses process.env)
  */
-export function getApiKeys(): Record<string, string | undefined> {
-  // Use dynamic import for environment access
-  // In Node.js: process.env
-  // In browser: window.__ENV__
-  const env = typeof window !== 'undefined' 
-    ? (window as any).__ENV__ 
-    : (typeof process !== 'undefined' ? process.env : {});
+export function getApiKeys(workerEnv?: Record<string, any>): Record<string, string | undefined> {
+  // Priority: explicit workerEnv > browser window.__ENV__ > Node.js process.env
+  const env = workerEnv
+    ?? (typeof window !== 'undefined'
+      ? (window as any).__ENV__
+      : (typeof process !== 'undefined' ? process.env : {}));
   
   return {
     // Primary config
@@ -73,12 +73,12 @@ export function getApiKeys(): Record<string, string | undefined> {
     SEEDANCE_PROVIDER: env?.[ENV_KEYS.SEEDANCE_PROVIDER],
     SEEDANCE_GENERATION_TYPE: env?.[ENV_KEYS.SEEDANCE_GENERATION_TYPE],
     
-    // Replicate (supports REPLICATE_API_KEY and NEXT_PUBLIC_REPLICATE_API_KEY)
-    REPLICATE_API_KEY: env?.[ENV_KEYS.REPLICATE_API_KEY] || env?.[ENV_KEYS.NEXT_PUBLIC_REPLICATE_API_KEY],
+    // Replicate (supports REPLICATE_API_KEY, REPLICATE_API_TOKEN, and NEXT_PUBLIC_REPLICATE_API_KEY)
+    REPLICATE_API_KEY: env?.[ENV_KEYS.REPLICATE_API_KEY] || env?.[ENV_KEYS.REPLICATE_API_TOKEN] || env?.[ENV_KEYS.NEXT_PUBLIC_REPLICATE_API_KEY],
     REPLICATE_WEBHOOK_URL: env?.[ENV_KEYS.REPLICATE_WEBHOOK_URL],
     
-    // Fal.ai (supports both FAL_API_KEY and FAL_KEY)
-    FAL_API_KEY: env?.[ENV_KEYS.FAL_API_KEY] || env?.[ENV_KEYS.FAL_KEY],
+    // Fal.ai
+    FAL_API_KEY: env?.[ENV_KEYS.FAL_API_KEY],
     FAL_WEBHOOK_URL: env?.[ENV_KEYS.FAL_WEBHOOK_URL],
     
     // Cloudflare
@@ -102,34 +102,34 @@ export function getApiKeys(): Record<string, string | undefined> {
 /**
  * Get Replicate API key
  */
-export function getReplicateKey(): string | undefined {
-  return getApiKeys().REPLICATE_API_KEY;
+export function getReplicateKey(env?: Record<string, any>): string | undefined {
+  return getApiKeys(env).REPLICATE_API_KEY;
 }
 
 /**
- * Get Fal.ai API key (supports FAL_API_KEY and FAL_KEY)
+ * Get Fal.ai API key
  */
-export function getFalKey(): string | undefined {
-  return getApiKeys().FAL_API_KEY;
+export function getFalKey(env?: Record<string, any>): string | undefined {
+  return getApiKeys(env).FAL_API_KEY;
 }
 
 /**
  * Get Fal.ai webhook URL
  */
-export function getFalWebhookUrl(): string | undefined {
-  return getApiKeys().FAL_WEBHOOK_URL;
+export function getFalWebhookUrl(env?: Record<string, any>): string | undefined {
+  return getApiKeys(env).FAL_WEBHOOK_URL;
 }
 
 /**
  * Get Cloudflare API keys
  */
-export function getCloudflareKeys(): {
+export function getCloudflareKeys(env?: Record<string, any>): {
   apiToken?: string;
   accountId?: string;
   gatewayUrl?: string;
   auth?: string;
 } {
-  const keys = getApiKeys();
+  const keys = getApiKeys(env);
   return {
     apiToken: keys.CF_API_TOKEN,
     accountId: keys.CF_ACCOUNT_ID,
@@ -141,8 +141,8 @@ export function getCloudflareKeys(): {
 /**
  * Get ElevenLabs API key
  */
-export function getElevenLabsKey(): string | undefined {
-  return getApiKeys().ELEVENLABS_API_KEY;
+export function getElevenLabsKey(env?: Record<string, any>): string | undefined {
+  return getApiKeys(env).ELEVENLABS_API_KEY;
 }
 
 // ============================================================================
@@ -152,8 +152,8 @@ export function getElevenLabsKey(): string | undefined {
 /**
  * Get list of configured API keys
  */
-export function getConfiguredKeys(): string[] {
-  const keys = getApiKeys();
+export function getConfiguredKeys(env?: Record<string, any>): string[] {
+  const keys = getApiKeys(env);
   return Object.entries(keys)
     .filter(([_, value]) => value && value !== '' && value !== undefined)
     .map(([key]) => key);
@@ -162,8 +162,8 @@ export function getConfiguredKeys(): string[] {
 /**
  * Check if a specific provider has its API key configured
  */
-export function isProviderConfigured(provider: ProviderType): boolean {
-  const keys = getApiKeys();
+export function isProviderConfigured(provider: ProviderType, env?: Record<string, any>): boolean {
+  const keys = getApiKeys(env);
   
   switch (provider) {
     case PROVIDER_NAMES.REPLICATE:
@@ -184,8 +184,8 @@ export function isProviderConfigured(provider: ProviderType): boolean {
 /**
  * Validate required keys for a provider
  */
-export function validateProviderKeys(provider: ProviderType): { valid: boolean; missing: string[] } {
-  const keys = getApiKeys();
+export function validateProviderKeys(provider: ProviderType, env?: Record<string, any>): { valid: boolean; missing: string[] } {
+  const keys = getApiKeys(env);
   const missing: string[] = [];
   
   switch (provider) {
@@ -208,11 +208,11 @@ export function validateProviderKeys(provider: ProviderType): { valid: boolean; 
 /**
  * Validate all provider keys
  */
-export function validateAllKeys(): Record<ProviderType, { valid: boolean; missing: string[] }> {
+export function validateAllKeys(env?: Record<string, any>): Record<ProviderType, { valid: boolean; missing: string[] }> {
   return {
-    replicate: validateProviderKeys(PROVIDER_NAMES.REPLICATE),
-    falai: validateProviderKeys(PROVIDER_NAMES.FALAI),
-    gateway: validateProviderKeys(PROVIDER_NAMES.GATEWAY),
+    replicate: validateProviderKeys(PROVIDER_NAMES.REPLICATE, env),
+    falai: validateProviderKeys(PROVIDER_NAMES.FALAI, env),
+    gateway: validateProviderKeys(PROVIDER_NAMES.GATEWAY, env),
   };
 }
 

@@ -33,12 +33,13 @@ export interface WebhookQueueMessage {
   metadata: {
     storyId: string;
     sceneIndex: number;
-    type: 'image' | 'video';
+    type: 'image' | 'video' | 'avatar';
     userId: string;
     seriesId: string;
     jobId: string;
     model: string;
     sceneReviewRequired?: boolean;
+    source?: 'replicate' | 'fal';
   };
   origin?: string;
 }
@@ -66,6 +67,7 @@ export interface Env {
   REPLICATE_API_TOKEN: string;
   OPENAI_API_KEY: string;
   CF_AIG_TOKEN: string;
+  FAL_API_KEY: string;
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_DEFAULT_VOICE_ID?: string;
   ELEVENLABS_MODEL_ID?: string;

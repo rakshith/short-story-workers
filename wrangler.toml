@@ -217,4 +217,10 @@ APP_URL = "https://artflicks.app"
 # CF_AIG_TOKEN
 # CF_AI_GATEWAY_URL
 # AI_METER_INGEST_KEY
+# FAL_API_KEY — required for the FAL-first provider path in talking-avatar.
+# Set per environment with:
+#   wrangler secret put FAL_API_KEY --env staging
+#   wrangler secret put FAL_API_KEY --env production
+# Without this, the FAL branch in talking-avatar-pipeline is skipped and only
+# Replicate runs (the FAL-first / Replicate-fallback design degrades gracefully).
 

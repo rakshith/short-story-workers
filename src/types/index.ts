@@ -72,7 +72,7 @@ export interface StoryCompositionProps {
   watermark?: WatermarkConfig; // Watermark configuration object
 }
 
-export type MediaType = "image" | "video";
+export type MediaType = "image" | "video" | "ai-images" | "ai-videos";
 
 export type UserTier = "tier1" | "tier2" | "tier3" | "tier4";
 
@@ -113,6 +113,10 @@ export interface VideoConfig {
   videoGenerationTriggered?: boolean; // Track if videos have been initiated
   enableImmersiveAudio?: boolean; // Enable audio generation for supported video models (e.g. Kling, Wan)
   speed?: number; // TTS playback speed (0.7–1.2), default 1.0 — affects scene count calculation
+  // Talking avatar fields
+  avatarImageUrl?: string; // Face photo URL for avatar video generation
+  avatarModel?: string; // Avatar model ID (e.g., 'fal-ai/kling-video/ai-avatar/v2/standard')
+  isAvatarGeneration?: boolean; // Flag to indicate this is an avatar video (not a story)
 }
 
 export interface Scene {

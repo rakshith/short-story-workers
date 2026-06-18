@@ -5,11 +5,12 @@ import { initCoordinator } from "../utils/coordinator";
 import { sendQueueBatch } from "../utils/queue-batch";
 import { templateSkipsImageStep } from "../config/template-video-config";
 import { TemplatePipelineConfig, getTemplateConfig } from "../config/template-config";
+import { normalizeMediaType, isVideoMediaType } from "../utils/media-type";
 import {
   trackAIUsageInternal,
   trackAndDeductCredits,
 } from "./usage-tracking";
-import { estimateVideoGeneration } from "@artflicks/credit-tracker";
+import { estimateGeneration } from "@artflicks/credit-tracker";
 import type { CostResponse } from "@artflicks/credit-tracker";
 
 export interface StoryOrchestratorInput {
@@ -393,6 +394,10 @@ async function createStoryRecord(
       mediaType: videoConfig?.mediaType ?? "image",
     } as VideoConfig;
 
+    // Calculate cost BEFORE story creation — independent of frontend
+    const costResponse = calculateGenerationCost(videoConfig, videoConfig.script);
+    console.log(`[Story Orchestrator] Calculated cost:`, costResponse);
+
     const createdStory = await storyService.createStory({
       userId,
       seriesId,
@@ -401,7 +406,7 @@ async function createStoryRecord(
       story: storyData,
       status: ProjectStatus.PROCESSING,
       videoConfig: videoConfigToPersist,
-      storyCost: videoConfig?.estimatedCredits,
+      storyCost: costResponse.valid ? costResponse.credits : undefined,
       teamId,
     });
 
@@ -425,10 +430,6 @@ async function createStoryRecord(
       },
       env
     );
-
-    // Calculate cost
-    const costResponse = calculateGenerationCost(videoConfig);
-    console.log(`[Story Orchestrator] Calculated cost:`, costResponse);
 
     // Track and deduct credits
     let creditsDeducted = false;
@@ -490,7 +491,8 @@ async function createStoryRecord(
 }
 
 function calculateGenerationCost(
-  videoConfig: VideoConfig
+  videoConfig: VideoConfig,
+  script?: string
 ): CostResponse {
   try {
     const mediaType = videoConfig?.mediaType;
@@ -498,16 +500,24 @@ function calculateGenerationCost(
     const duration = videoConfig.duration || 15;
 
     const mediaTypeStr = String(mediaType || "video");
-    const isImage = mediaTypeStr === "ai-images" || mediaTypeStr === "image";
+    const isImage = !isVideoMediaType(videoConfig?.mediaType);
     const mediaTypeForCalc: "ai-images" | "ai-videos" = isImage
       ? "ai-images"
       : "ai-videos";
 
-    const result = estimateVideoGeneration({
+    // Calculate script character count for voice pricing
+    const scriptCharCount = script?.length || 0;
+
+    const result = estimateGeneration({
+      model: modelTier,
       duration,
-      modelTier,
       mediaType: mediaTypeForCalc,
-      enableImmersiveAudio: videoConfig?.enableImmersiveAudio
+      operations: [
+        { type: 'voice', charCount: scriptCharCount },
+        { type: 'music' },
+        { type: 'script' },
+        ...(videoConfig?.enableImmersiveAudio ? [{ type: 'immersive-audio' }] : []),
+      ],
     });
 
     return {
@@ -586,10 +596,10 @@ async function queueGenerationJobs(
     templateConfig,
   } = input;
 
-  const mediaType = videoConfig?.mediaType === "video" ? "video" : "image";
+  const mediaType = normalizeMediaType(videoConfig?.mediaType);
   const sceneReviewRequired = videoConfig?.sceneReviewRequired === true;
   const templateId = videoConfig?.templateId;
-  const skipsImageStep = templateSkipsImageStep(templateId);
+  const skipsImageStep = templateSkipsImageStep(templateId, videoConfig?.videoType);
   const shouldQueueVideos =
     mediaType === "image" || (mediaType === "video" && skipsImageStep);
 

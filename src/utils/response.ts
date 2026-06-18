@@ -37,10 +37,11 @@ export function notFoundResponse(method: string, path: string): Response {
         method,
         path,
         availableEndpoints: {
-            'POST /create-story': 'Create a new story (queued for async processing)',
-            'POST /generate-and-create-story': 'Generate script and create story',
+            'POST /workflow/:type': 'Start a generation workflow (faceless-video, character-video, talking-avatar)',
+            'POST /cancel-generation': 'Cancel a currently running generation job',
             'GET /status?jobId=<jobId>': 'Check the status of a story generation job',
             'POST /webhooks/replicate': 'Webhook for Replicate callbacks',
+            'POST /webhooks/fal': 'Webhook for FAL.ai callbacks',
         },
     }, 404);
 }

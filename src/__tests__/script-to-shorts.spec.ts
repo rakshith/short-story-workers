@@ -9,7 +9,7 @@
  *   CLOUDFLARE_ACCOUNT_ID=... CF_AI_GATEWAY_ID=... CF_AIG_TOKEN=... OPENAI_API_KEY=... npx tsx src/__tests__/script-to-shorts.spec.ts
  */
 
-import { generateScriptFromText } from "../services/script-generation";
+import { generateScript } from "../services/script-generation";
 import type { Env } from "../types/env";
 
 declare const process: {
@@ -45,13 +45,12 @@ async function testScriptToShorts() {
   console.log("Input:", userScript);
   console.log("\nCalling LLM...\n");
 
-  const result = await generateScriptFromText(
+  const result = await generateScript(
     {
-      scriptText: userScript,
+      prompt: userScript,
       language: "en",
       duration: 0,
-      minSceneDuration: 4, // this is working fine
-      maxSceneDuration: 6, // this is working fine
+      templateId: "script-to-shorts",
     },
     env,
   );
@@ -63,7 +62,7 @@ async function testScriptToShorts() {
     throw new Error("No story returned");
   }
 
-  console.log("✓ generateScriptFromText returned success");
+  console.log("✓ generateScript returned success");
   console.log(`  title: ${result.story.title}`);
   console.log(`  totalDuration: ${result.story.totalDuration}s`);
   console.log(`  scenes: ${result.story.scenes.length}`);

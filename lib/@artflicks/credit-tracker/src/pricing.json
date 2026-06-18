@@ -32,10 +32,21 @@
   "operations": {
     "script-generation": 12,
     "voice-generation": 2,
+    "voice-generation-per-char": 0.002,
+    "speech-to-text": 1,
     "background-music": 1,
     "immersive-audio": 5,
     "story-export": 2,
     "youtube-extract": 5
+  },
+  "voiceModels": {
+    "eleven_multilingual_v2": 0.002,
+    "eleven_flash_v2_5": 0.001,
+    "eleven_turbo_v2_5": 0.001,
+    "eleven_v3": 0.002
+  },
+  "sttModels": {
+    "scribe_v2": 0.001
   },
   "imageTiers": {
     "basic": 1,
@@ -68,10 +79,18 @@
     "max": "kwaivgi/kling-v3-video"
   },
   "scriptVideoTierModels": {
-    "basic": "wan-video/wan-2.5-t2v-fast",
+    "basic": "google/veo-3.1-lite",
     "pro": "wan-video/wan-2.5-t2v",
     "ultra": "kwaivgi/kling-v2.6",
     "max": "kwaivgi/kling-v3-video"
+  },
+  "avatarTiers": {
+   "standard": 15,
+    "pro": 25
+  },
+  "avatarTierModels": {
+    "standard": "kling-avatar-v2/standard",
+    "pro": "kling-avatar-v2/pro"
   },
   "migrations": {
     "1.0.0": {

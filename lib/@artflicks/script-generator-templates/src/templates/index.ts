@@ -6,6 +6,7 @@ import { BodyScienceShortsTemplate } from './body-science-shorts';
 import { ScriptToShortsTemplate } from './script-to-shorts';
 import { ScreenplayGeneratorTemplate } from './screenplay-generator';
 import { TalkingCharacter3DTemplate } from './talking-character-3d';
+import { TalkingAvatarTemplate } from './talking-avatar';
 import { registry } from '../registry';
 export * from './base';
 export * from './skeleton-3d-shorts-defaults';
@@ -18,6 +19,7 @@ export const ScriptTemplateIds = {
     SCRIPT_TO_SHORTS: 'script-to-shorts',
     SCREENPLAY_GENERATOR: 'screenplay-generator',
     TALKING_CHARACTER_3D: 'talking-character-3d',
+    TALKING_AVATAR: 'talking-avatar',
 } as const;
 
 export type ScriptTemplateId = typeof ScriptTemplateIds[keyof typeof ScriptTemplateIds];
@@ -34,6 +36,7 @@ function initializeTemplates() {
     registry.register(new ScriptToShortsTemplate());
     registry.register(new ScreenplayGeneratorTemplate());
     registry.register(new TalkingCharacter3DTemplate());
+    registry.register(new TalkingAvatarTemplate());
     
     templatesInitialized = true;
 }

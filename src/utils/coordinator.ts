@@ -144,7 +144,11 @@ export async function finalizeCoordinator(
     coordinator: any
 ): Promise<CoordinatorFinalizeResult> {
     const res = await coordinator.fetch(new Request('http://do/finalize', { method: 'POST' }));
-    return res.json() as Promise<CoordinatorFinalizeResult>;
+    const result = await res.json() as CoordinatorFinalizeResult;
+    if (!res.ok || (result as any).error) {
+        console.error(`[Coordinator] Finalize failed:`, { status: res.status, error: (result as any).error });
+    }
+    return result;
 }
 
 export async function cancelCoordinator(

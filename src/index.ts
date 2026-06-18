@@ -4,10 +4,8 @@ import { Env, QueueMessage, WebhookQueueMessage } from './types/env';
 import { handleQueue, handleWebhookQueue, handleDlqQueue } from './queue-consumer';
 import { handleStatus } from './routes/status';
 import { handleCancelStory } from './routes/cancel-story';
-import { handleCreateStory } from './routes/create-story';
-import { handleGenerateAndCreateStory } from './routes/generate-story';
-import { handleScriptToVideo } from './routes/script-to-video';
-import { handleReplicateWebhook, handleReplicateWebhookRecover } from './services/webhook-handler';
+import { handleWorkflow } from './routes/workflow';
+import { handleReplicateWebhook, handleReplicateWebhookRecover, handleFALWebhook } from './services/webhook-handler';
 import { jsonResponse, corsResponse, notFoundResponse } from './utils/response';
 
 // Export Durable Object class
@@ -28,6 +26,12 @@ export default {
 
     // Route requests to handlers
     switch (true) {
+      // ─── New Workflow Registry Route ─────────────────────────────────
+      // POST /workflow/:type — dispatches to registered workflow
+      case method === 'POST' && pathname.startsWith('/workflow/'):
+        const workflowId = pathname.split('/')[2];
+        return handleWorkflow(request, env, workflowId);
+
       // GET /status - Check job progress
       case method === 'GET' && pathname === '/status':
         return handleStatus(request, env);
@@ -48,25 +52,17 @@ export default {
       case method === 'POST' && pathname === '/webhooks/replicate':
         return handleReplicateWebhook(request, env, ctx);
 
+      // POST /webhooks/fal - FAL.ai callback webhook (fire-and-forget when ctx provided)
+      case method === 'POST' && pathname === '/webhooks/fal':
+        return handleFALWebhook(request, env, ctx);
+
       // POST /webhooks/replicate/recover - Recover missed webhook by prediction ID (fetch from Replicate, then process)
       case method === 'POST' && pathname === '/webhooks/replicate/recover':
         return handleReplicateWebhookRecover(request, env);
 
-      // POST /generate-and-create-story - AI script generation + story creation
-      case method === 'POST' && pathname === '/generate-and-create-story':
-        return handleGenerateAndCreateStory(request, env);
-
-      // POST /script-to-video - Generate from user script with hints [Visual] Narration
-      case method === 'POST' && pathname === '/script-to-video':
-        return handleScriptToVideo(request, env);
-
-      // POST /create-story - Create story from existing script
-      case method === 'POST' && pathname === '/create-story':
-        return handleCreateStory(request, env);
-
       // POST /create-story-sync - Deprecated synchronous endpoint
       case method === 'POST' && pathname === '/create-story-sync':
-        return jsonResponse({ error: 'Synchronous endpoint deprecated. Use /create-story instead.' }, 410);
+        return jsonResponse({ error: 'Synchronous endpoint deprecated. Use /workflow/:type instead.' }, 410);
 
       // Root path - Show available endpoints
       case pathname === '/':
@@ -74,9 +70,7 @@ export default {
           error: 'Invalid endpoint',
           message: `The root path '/' is not a valid endpoint. Please use one of the available endpoints:`,
           availableEndpoints: {
-            'POST /create-story': 'Create a new story (queued for async processing)',
-            'POST /generate-and-create-story': 'Generate script and create story',
-            'POST /script-to-video': 'Generate from user script with [Visual] Narration hints',
+            'POST /workflow/:type': 'Start a generation workflow (faceless-video, character-video, talking-avatar)',
             'POST /cancel-generation': 'Cancel a currently running generation job',
             'GET /status?jobId=<jobId>': 'Check the status of a story generation job',
           },

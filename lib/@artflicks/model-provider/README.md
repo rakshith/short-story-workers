@@ -71,7 +71,7 @@ setApiKeys({
 REPLICATE_API_KEY=your_replicate_key
 REPLICATE_WEBHOOK_URL=your_webhook_url
 
-# Fal.ai (supports both FAL_API_KEY and FAL_KEY)
+# Fal.ai
 FAL_API_KEY=your_fal_key
 
 # Cloudflare AI Gateway

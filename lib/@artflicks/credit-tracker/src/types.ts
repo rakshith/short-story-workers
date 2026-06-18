@@ -11,8 +11,8 @@ type PricingData = typeof pricingData;
 
 // Re-export types
 export type ModelCategory = 'image' | 'video' | 'chat' | 'inpaint' | 'upscaler';
-export type GenerationMediaType = 'ai-images' | 'ai-videos';
-export type TemplateType = 'character-video' | 'faceless-video' | 'image';
+export type GenerationMediaType = 'ai-images' | 'ai-videos' | 'avatar';
+export type TemplateType = 'character-video' | 'faceless-video' | 'image' | 'talking-avatar';
 
 // Pricing schema interface
 export interface ModelPricingSchema {
@@ -32,6 +32,8 @@ export interface ModelPricingSchema {
   videoTierModels: Record<string, string>;
   characterVideoTierModels: Record<string, string>;
   scriptVideoTierModels: Record<string, string>;
+  avatarTiers: Record<string, number>;
+  avatarTierModels: Record<string, string>;
 }
 
 // Cost breakdown components
@@ -75,6 +77,13 @@ export interface ImmersiveAudioCost {
   total: number;
 }
 
+export interface SpeechToTextCost {
+  type: 'speechToText';
+  perScene: number;
+  scenes: number;
+  total: number;
+}
+
 export interface YouTubeExtractCost {
   type: 'youtubeExtract';
   total: number;
@@ -98,6 +107,7 @@ export interface CostBreakdown {
   voiceGeneration?: VoiceGenerationCost;
   backgroundMusic?: BackgroundMusicCost;
   immersiveAudio?: ImmersiveAudioCost;
+  speechToText?: SpeechToTextCost;
   youtubeExtract?: YouTubeExtractCost;
 }
 
@@ -122,6 +132,28 @@ export interface VideoGenerationEstimate {
   totalCredits: number;
   breakdown: CostBreakdown;
   numberOfScenes: number;
+}
+
+// Unified generation operation
+export interface GenerationOperation {
+  type: string;         // 'tts' | 'voice' | 'music' | 'script' | 'immersive-audio'
+  charCount?: number;   // for TTS and voice (character-based pricing)
+  perCharCost?: number; // optional: override default per-character cost for voice
+}
+
+// Unified generation estimate params
+export interface GenerationEstimateParams {
+  model: string;           // tier name: 'basic', 'pro', 'standard', etc.
+  duration: number;        // seconds
+  mediaType: GenerationMediaType;  // routes to correct tier table
+  operations?: GenerationOperation[];
+}
+
+// Unified generation estimate result
+export interface GenerationEstimate {
+  totalCredits: number;
+  breakdown: CostBreakdown;
+  numberOfScenes?: number;
 }
 
 export interface CostOptions {

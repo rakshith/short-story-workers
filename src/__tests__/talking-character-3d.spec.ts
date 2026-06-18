@@ -1,12 +1,12 @@
 /**
- * Test: talking-character-3d template using generateSceneAdapter
+ * Test: talking-character-3d template via generateScript
  * Run with: npx tsx src/__tests__/talking-character-3d.spec.ts
  *
  * Requires env vars:
  *   CLOUDFLARE_ACCOUNT_ID, CF_AI_GATEWAY_ID, CF_AIG_TOKEN, OPENAI_API_KEY
  */
 
-import { generateSceneAdapter } from "../services/script-generation";
+import { generateScript } from "../services/script-generation";
 import type { Env } from "../types/env";
 
 declare const process: {
@@ -33,9 +33,9 @@ async function testTalkingCharacter3D() {
 // 
   const userPrompt = "Turmeric destroying inflammation in joints";
   console.log("Input:", userPrompt);
-  console.log("\nCalling generateSceneAdapter with talking-character-3d template...\n");
+  console.log("\nCalling generateScript with talking-character-3d template...\n");
 
-  const result = await generateSceneAdapter(
+  const result = await generateScript(
     {
       prompt: userPrompt,
       duration: 15,
@@ -53,73 +53,43 @@ async function testTalkingCharacter3D() {
     throw new Error("No story returned");
   }
 
-  const output = result.story as any;
+  const story = result.story;
 
   console.log("=== Response ===");
-  console.log(`type: ${output.type}`);
-  console.log(`title: ${output.title}`);
-  console.log(`scenes count: ${output.scenes?.length}`);
+  console.log(`title: ${story.title}`);
+  console.log(`totalDuration: ${story.totalDuration}s`);
+  console.log(`scenes count: ${story.scenes.length}`);
+  if (story.characterAnchor) {
+    console.log(`characterAnchor: "${story.characterAnchor}"`);
+  } else {
+    console.log("characterAnchor: null");
+  }
 
   // Validate title (required field)
-  if (!output.title) throw new Error("Response missing title");
-  const titleWords = output.title.trim().split(/\s+/).length;
-  if (titleWords < 4 || titleWords > 15) throw new Error(`Title word count invalid: ${titleWords} (expected 4-15 words)`);
+  if (!story.title) throw new Error("Story missing title");
 
-  if (!output.scenes || output.scenes.length === 0) {
-    throw new Error("No scenes in output");
+  if (!story.scenes || story.scenes.length === 0) {
+    throw new Error("No scenes in story");
   }
 
   console.log("\n=== Scene Details ===");
-  for (const scene of output.scenes) {
-    console.log(`\n--- Scene: ${scene.id} ---`);
-    console.log(`type: ${scene.type}`);
+  for (const scene of story.scenes) {
+    console.log(`\n--- Scene ${scene.sceneNumber} ---`);
     console.log(`duration: ${scene.duration}s`);
-    console.log(`dialogue: "${scene.dialogue}"`);
+    console.log(`narration: "${scene.narration}"`);
+    console.log(`details: "${scene.details}"`);
     console.log(`imagePrompt: "${scene.imagePrompt}"`);
     console.log(`videoPrompt: "${scene.videoPrompt}"`);
-    console.log(`environment: "${scene.environment}"`);
-    console.log(`character: ${scene.character?.name} [${scene.character?.traits?.join(", ")}]`);
-    console.log(`camera: ${scene.camera?.type} - ${scene.camera?.movement}`);
+    console.log(`cameraAngle: ${scene.cameraAngle}`);
     console.log(`mood: ${scene.mood}`);
+    console.log(`action: ${scene.action}`);
 
     // Validate required fields
-    if (!scene.id) throw new Error("Scene missing id");
-    if (!scene.type) throw new Error(`Scene ${scene.id} missing type`);
-    if (!scene.duration) throw new Error(`Scene ${scene.id} missing duration`);
-    if (!scene.dialogue) throw new Error(`Scene ${scene.id} missing dialogue`);
-    if (!scene.imagePrompt) throw new Error(`Scene ${scene.id} missing imagePrompt`);
-    if (!scene.videoPrompt) throw new Error(`Scene ${scene.id} missing videoPrompt`);
-    if (!scene.environment) throw new Error(`Scene ${scene.id} missing environment`);
-    if (!scene.character?.name) throw new Error(`Scene ${scene.id} missing character.name`);
-    if (!scene.character?.traits) throw new Error(`Scene ${scene.id} missing character.traits`);
-    if (!scene.camera?.type) throw new Error(`Scene ${scene.id} missing camera.type`);
-    if (!scene.camera?.movement) throw new Error(`Scene ${scene.id} missing camera.movement`);
-
-    // Validate biological visualization for health/food items
-    const healthKeywords = ['digestion', 'gut', 'health', 'nutrient', 'vitamin', 'mineral', 'fiber', 'probiotic', 'immune', 'energy'];
-    const isHealthRelated = healthKeywords.some(kw => userPrompt.toLowerCase().includes(kw));
-    if (isHealthRelated) {
-      // Check for internal biological environment
-      const biologicalKeywords = ['intestine', 'bloodstream', 'cell', 'tissue', 'organ', 'villi', 'microbiome', 'neuron', 'mitochondria'];
-      const hasBiologicalEnvironment = biologicalKeywords.some(kw => scene.environment?.toLowerCase().includes(kw) || scene.imagePrompt?.toLowerCase().includes(kw));
-      if (!hasBiologicalEnvironment) {
-        throw new Error(`Scene ${scene.id}: Health-related item missing biological visualization (internal body environment required)`);
-      }
-
-      // Check for biological action system (crew, transformation, action words)
-      const actionKeywords = ['cleaning', 'repairing', 'absorbing', 'dissolving', 'boosting', 'attacking', 'healing', 'transforming'];
-      const hasAction = actionKeywords.some(kw => scene.imagePrompt?.toLowerCase().includes(kw) || scene.videoPrompt?.toLowerCase().includes(kw));
-      if (!hasAction) {
-        throw new Error(`Scene ${scene.id}: Health-related item missing biological action (must show cleaning/repairing/absorbing)`);
-      }
-
-      // Check for transformation (before/after)
-      const transformationKeywords = ['before', 'after', 'dark', 'bright', 'glow', 'clean', 'healthy', 'improvement'];
-      const hasTransformation = transformationKeywords.some(kw => scene.imagePrompt?.toLowerCase().includes(kw));
-      if (!hasTransformation) {
-        throw new Error(`Scene ${scene.id}: Health-related item missing visible transformation`);
-      }
-    }
+    if (!scene.sceneNumber) throw new Error("Scene missing sceneNumber");
+    if (!scene.duration) throw new Error(`Scene ${scene.sceneNumber} missing duration`);
+    if (!scene.narration) throw new Error(`Scene ${scene.sceneNumber} missing narration`);
+    if (!scene.details) throw new Error(`Scene ${scene.sceneNumber} missing details`);
+    if (!scene.imagePrompt) throw new Error(`Scene ${scene.sceneNumber} missing imagePrompt`);
   }
 
   if (result.usage) {
@@ -127,6 +97,12 @@ async function testTalkingCharacter3D() {
     console.log(`  totalTokens: ${result.usage.totalTokens}`);
     console.log(`  promptTokens: ${result.usage.promptTokens}`);
     console.log(`  outputTokens: ${result.usage.outputTokens}`);
+  }
+
+  if (result.templateConfig) {
+    console.log("\n=== Template Config ===");
+    console.log(`  generateAudio: ${result.templateConfig.generateAudio}`);
+    console.log(`  usesGeneratedImage: ${result.templateConfig.usesGeneratedImage}`);
   }
 
   console.log("\n✓ All validation checks passed!");

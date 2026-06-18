@@ -1,11 +1,13 @@
 /**
  * Main estimation functions
- * Calculate total credits for video/image generation
+ * Calculate total credits for video/image/avatar generation
  */
 
 import { 
   VideoGenerationEstimateParams,
   VideoGenerationEstimate,
+  GenerationEstimateParams,
+  GenerationEstimate,
   CostBreakdown,
   GenerationMediaType
 } from './types';
@@ -15,14 +17,18 @@ import {
 import { 
   getTierCost,
   getVideoTierCost,
-  getImageTierCost
+  getImageTierCost,
+  getAvatarTierCost,
+  getAvatarTierModel
 } from './tiers';
 import { 
   SCRIPT_GENERATION_COST,
   VOICE_GENERATION_COST,
   BACKGROUND_MUSIC_COST,
   IMMERSIVE_AUDIO_COST,
-  BASE_DURATION_PER_CREDIT
+  BASE_DURATION_PER_CREDIT,
+  VOICE_GENERATION_COST_PER_CHAR,
+  SPEECH_TO_TEXT_COST
 } from './operations';
 import { 
   videoScenesFromDuration, 
@@ -53,72 +59,31 @@ function calculateScriptCost(durationSeconds: number): number {
 
 /**
  * Estimate total credits for video generation
- * Main function used by UI and Cloudflare
+ * Backward-compatible wrapper around estimateGeneration()
  */
 export function estimateVideoGeneration(
   params: VideoGenerationEstimateParams,
 ): VideoGenerationEstimate {
   const { duration, modelTier, mediaType, enableImmersiveAudio } = params;
-  
-  // Calculate number of scenes based on duration and media type
-  const numberOfScenes =
-    mediaType === 'ai-videos'
-      ? videoScenesFromDuration(duration)
-      : imageScenesFromDuration(duration);
-  
-  const costPerScene = getCostPerScene(modelTier, mediaType);
-  
-  // Calculate breakdown
-  const images = mediaType === 'ai-images' ? costPerScene * numberOfScenes : 0;
-  const videos = mediaType === 'ai-videos' ? costPerScene * numberOfScenes : 0;
-  const audio = VOICE_GENERATION_COST * numberOfScenes;
-  const music = BACKGROUND_MUSIC_COST;
-  const script = calculateScriptCost(duration);
-  const immersiveAudio = enableImmersiveAudio ? IMMERSIVE_AUDIO_COST * numberOfScenes : 0;
-  
-  const totalCredits = images + videos + audio + music + script + immersiveAudio;
-  
-  const breakdown: CostBreakdown = {
-    videoGeneration: videos > 0 ? {
-      type: 'videoGeneration',
-      model: modelTier,
-      perScene: costPerScene,
-      scenes: numberOfScenes,
-      total: videos,
-    } : undefined,
-    imageGeneration: images > 0 ? {
-      type: 'imageGeneration',
-      model: modelTier,
-      perImage: costPerScene,
-      images: numberOfScenes,
-      total: images,
-    } : undefined,
-    scriptGeneration: {
-      type: 'scriptGeneration',
-      total: script,
-    },
-    voiceGeneration: {
-      type: 'voiceGeneration',
-      perScene: VOICE_GENERATION_COST,
-      scenes: numberOfScenes,
-      total: audio,
-    },
-    backgroundMusic: {
-      type: 'backgroundMusic',
-      total: music,
-    },
-    immersiveAudio: enableImmersiveAudio ? {
-      type: 'immersiveAudio',
-      perScene: IMMERSIVE_AUDIO_COST,
-      scenes: numberOfScenes,
-      total: immersiveAudio,
-    } : undefined,
-  };
-  
+
+  const operations: { type: string }[] = [
+    { type: 'voice' },
+    { type: 'music' },
+    { type: 'script' },
+  ];
+  if (enableImmersiveAudio) operations.push({ type: 'immersive-audio' });
+
+  const result = estimateGeneration({
+    model: modelTier,
+    duration,
+    mediaType,
+    operations,
+  });
+
   return {
-    totalCredits,
-    breakdown,
-    numberOfScenes,
+    totalCredits: result.totalCredits,
+    breakdown: result.breakdown,
+    numberOfScenes: result.numberOfScenes ?? 0,
   };
 }
 
@@ -140,4 +105,158 @@ export function canAfford(
     return { canAfford: true };
   }
   return { canAfford: false, deficit: requiredCredits - availableCredits };
+}
+
+/**
+ * Unified generation estimator — single entry point for all workflows.
+ * Routes to the correct pricing table based on mediaType:
+ *   - 'ai-images' → imageTiers (per-scene)
+ *   - 'ai-videos' → videoTiers (per-scene)
+ *   - 'avatar'    → avatarTiers (per-second)
+ *
+ * Operations (TTS, voice, music, etc.) are added on top from pricing.json.
+ */
+export function estimateGeneration(params: GenerationEstimateParams): GenerationEstimate {
+  const { model, duration, mediaType, operations } = params;
+
+  let totalCredits = 0;
+  let numberOfScenes: number | undefined;
+  const breakdown: CostBreakdown = {};
+
+  if (mediaType === 'avatar') {
+    // Duration-based pricing: credits = costPerSecond × duration
+    const costPerSecond = getAvatarTierCost(model);
+    const videoCredits = Math.ceil(costPerSecond * duration);
+    totalCredits += videoCredits;
+    breakdown.videoGeneration = {
+      type: 'videoGeneration',
+      model: getAvatarTierModel(model),
+      perScene: videoCredits,
+      scenes: 1,
+      total: videoCredits,
+    };
+  } else {
+    // Scene-based pricing: credits = costPerScene × scenes
+    const scenes = mediaType === 'ai-videos'
+      ? videoScenesFromDuration(duration)
+      : imageScenesFromDuration(duration);
+    numberOfScenes = scenes;
+
+    const costPerScene = mediaType === 'ai-images'
+      ? getImageTierCost(model)
+      : getVideoTierCost(model);
+
+    if (mediaType === 'ai-images') {
+      const imageCredits = costPerScene * scenes;
+      totalCredits += imageCredits;
+      breakdown.imageGeneration = {
+        type: 'imageGeneration',
+        model,
+        perImage: costPerScene,
+        images: scenes,
+        total: imageCredits,
+      };
+    } else {
+      const videoCredits = costPerScene * scenes;
+      totalCredits += videoCredits;
+      breakdown.videoGeneration = {
+        type: 'videoGeneration',
+        model,
+        perScene: costPerScene,
+        scenes,
+        total: videoCredits,
+      };
+    }
+  }
+
+  // Process operations
+  if (operations) {
+    for (const op of operations) {
+      switch (op.type) {
+        case 'tts': {
+          const charCount = op.charCount ?? 0;
+          const ttsCredits = Math.ceil(charCount / 1000);
+          if (ttsCredits > 0) {
+            totalCredits += ttsCredits;
+            breakdown.voiceGeneration = {
+              type: 'voiceGeneration',
+              perScene: ttsCredits,
+              scenes: 1,
+              total: ttsCredits,
+            };
+          }
+          break;
+        }
+        case 'voice': {
+          // If charCount is provided, use per-character pricing
+          if (op.charCount !== undefined && op.charCount > 0) {
+            const perCharCost = op.perCharCost ?? VOICE_GENERATION_COST_PER_CHAR;
+            const voiceCredits = Math.ceil(op.charCount * perCharCost);
+            totalCredits += voiceCredits;
+            breakdown.voiceGeneration = {
+              type: 'voiceGeneration',
+              perScene: voiceCredits,
+              scenes: 1,
+              total: voiceCredits,
+            };
+          } else {
+            // Fallback to flat per-scene pricing
+            const scenes = numberOfScenes ?? 1;
+            const voiceCredits = VOICE_GENERATION_COST * scenes;
+            totalCredits += voiceCredits;
+            breakdown.voiceGeneration = {
+              type: 'voiceGeneration',
+              perScene: VOICE_GENERATION_COST,
+              scenes,
+              total: voiceCredits,
+            };
+          }
+          break;
+        }
+        case 'music': {
+          totalCredits += BACKGROUND_MUSIC_COST;
+          breakdown.backgroundMusic = {
+            type: 'backgroundMusic',
+            total: BACKGROUND_MUSIC_COST,
+          };
+          break;
+        }
+        case 'script': {
+          const scriptCredits = SCRIPT_GENERATION_COST * Math.ceil(duration / BASE_DURATION_PER_CREDIT);
+          totalCredits += scriptCredits;
+          breakdown.scriptGeneration = {
+            type: 'scriptGeneration',
+            total: scriptCredits,
+          };
+          break;
+        }
+        case 'immersive-audio': {
+          const scenes = numberOfScenes ?? 1;
+          const immersiveCredits = IMMERSIVE_AUDIO_COST * scenes;
+          totalCredits += immersiveCredits;
+          breakdown.immersiveAudio = {
+            type: 'immersiveAudio',
+            perScene: IMMERSIVE_AUDIO_COST,
+            scenes,
+            total: immersiveCredits,
+          };
+          break;
+        }
+        case 'stt': {
+          const charCount = op.charCount ?? 0;
+          const sttCredits = Math.ceil(charCount / 1000) || SPEECH_TO_TEXT_COST;
+          totalCredits += sttCredits;
+          breakdown.speechToText = {
+            type: 'speechToText',
+            perScene: sttCredits,
+            scenes: 1,
+            total: sttCredits,
+          };
+          break;
+        }
+      }
+    }
+  }
+
+  return { totalCredits, breakdown, numberOfScenes };
 }

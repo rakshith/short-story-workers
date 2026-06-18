@@ -116,9 +116,6 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     // wan-video/wan-2.5-t2v
     'wan-video/wan-2.5-t2v': { singleField: 'image' },
 
-    // wan-video/wan-2.5-t2v-fast
-    'wan-video/wan-2.5-t2v-fast': { singleField: 'image' },
-
     // wan-video/wan2.6-i2v-flash
     'wan-video/wan2.6-i2v-flash': { singleField: 'image', defaultInputs: { audio_enabled: false} },
 
@@ -140,6 +137,13 @@ export const MODEL_IMAGE_CONFIGS: Record<string, ModelImageConfig> = {
     //kwaivgi/kling-v3-video
     'kwaivgi/kling-v3-video': { singleField: 'start_image', defaultInputs: { generate_audio: false } },
 
+    // fal-ai/kling-video/ai-avatar - Talking Avatar models (image_url + audio_url for lip-sync)
+    'fal-ai/kling-video/ai-avatar/v2/standard': { singleField: 'image_url', defaultInputs: {} },
+    'fal-ai/kling-video/ai-avatar/v2/pro': { singleField: 'image_url', defaultInputs: {} },
+
+    // kwaivgi/kling-avatar-v2 - Replicate Talking Avatar (image + audio + mode for lip-sync)
+    'kwaivgi/kling-avatar-v2': { singleField: 'image', defaultInputs: {} },
+
     //runwayml/gen4-turbo
     'runwayml/gen4-turbo': { singleField: 'image' },
 
@@ -157,7 +161,9 @@ export const MODEL_DURATION_OPTIONS: Record<string, number[]> = {
     'veo': [4, 6, 8],
     'kling': [5, 10],
     'wan': [5, 10],
+    'seedance': [4, 5, 6, 7, 8, 9, 10, 11, 12],
     'sora': [5, 10],
+    'ai-avatar': [5, 10],
     'default': [5, 10]
 };
 

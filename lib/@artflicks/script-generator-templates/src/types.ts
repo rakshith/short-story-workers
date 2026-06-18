@@ -21,6 +21,7 @@ export interface ScriptGenerationContext {
     anchors?: AnchorScene[];
     minSceneDuration?: number;
     maxSceneDuration?: number;
+    motionInstructions?: string;
 }
 
 export interface ScriptGenerationResult {

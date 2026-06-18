@@ -38,6 +38,7 @@ export const VIDEO_MODEL_PROVIDER_MAP: Record<string, ProviderType> = {
   'kwaivgi/kling-v2': PROVIDER_NAMES.REPLICATE,
   'kwaivgi/kling-v2.5-turbo-pro': PROVIDER_NAMES.REPLICATE,
   'kwaivgi/kling-v3-video': PROVIDER_NAMES.REPLICATE,
+  'kwaivgi/kling-avatar-v2': PROVIDER_NAMES.REPLICATE,
   
   // Replicate video models (Wan)
   'wan-video/wan-2.5-i2v': PROVIDER_NAMES.REPLICATE,

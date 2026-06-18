@@ -10,6 +10,7 @@ import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 import { calcVideoDelaySeconds } from './utils/queue-batch';
 import { getTemplateConfig } from './config/template-config';
+import { isVideoMediaType } from './utils/media-type';
 
 /**
  * Dead-letter queue handler - Logs and acks messages that exhausted retries or were sent for audit.
@@ -181,7 +182,7 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
           result.success &&
           status.isSceneReadyForVideo &&
           status.sceneImageUrl &&
-          data.videoConfig?.mediaType === 'video' &&
+          isVideoMediaType(data.videoConfig?.mediaType) &&
           !data.videoConfig?.sceneReviewRequired
         ) {
           const videoQueueMessage = {
@@ -381,7 +382,7 @@ export async function syncStoryToSupabase(
       });
 
       // Update story with appropriate status (failed if errors, draft if clean)
-      await supabase
+      const { error: storyUpdateError } = await supabase
         .from('stories')
         .update({
           story: updatedStory,
@@ -390,6 +391,10 @@ export async function syncStoryToSupabase(
           updated_at: new Date().toISOString(),
         })
         .eq('id', data.storyId);
+
+      if (storyUpdateError) {
+        queueLogger.error(`Failed to update story in database`, { storyId: data.storyId, error: storyUpdateError.message });
+      }
     }
 
     // Mark job with appropriate status (failed if errors, completed if clean)
@@ -406,10 +411,14 @@ export async function syncStoryToSupabase(
       jobUpdate.error = errorMessage;
     }
     
-    await supabase
+    const { error: jobUpdateError } = await supabase
       .from('story_jobs')
       .update(jobUpdate)
       .eq('job_id', data.jobId);
+
+    if (jobUpdateError) {
+      queueLogger.error(`Failed to update job in database`, { jobId: data.jobId, error: jobUpdateError.message });
+    }
 
     queueLogger.info(`Story synced to database`, { jobId: data.jobId, storyId: data.storyId });
 
@@ -537,7 +546,7 @@ export async function syncPartialStory(
     const totalScenes = progressData.totalScenes || 1;
     const voiceOverEnabled = progressData.videoConfig?.enableVoiceOver !== false;
     const denominator = voiceOverEnabled ? totalScenes * 2 : totalScenes;
-    const useVideoProgress = progressData.videoConfig?.mediaType === 'video';
+    const useVideoProgress = isVideoMediaType(progressData.videoConfig?.mediaType);
     const numerator = useVideoProgress
       ? (progressData.videosCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0)
       : (progressData.imagesCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0);
@@ -562,7 +571,7 @@ export async function syncPartialStory(
 }
 
 /**
- * Webhook queue consumer - processes Replicate webhook payloads (R2 upload, DO update, sync).
+ * Webhook queue consumer - processes Replicate/FAL webhook payloads (R2 upload, DO update, sync).
  * Durable so work is not lost to Worker eviction; retries on failure.
  */
 export async function handleWebhookQueue(batch: MessageBatch<WebhookQueueMessage>, env: Env): Promise<void> {
@@ -570,7 +579,15 @@ export async function handleWebhookQueue(batch: MessageBatch<WebhookQueueMessage
     try {
       const { prediction, metadata, origin } = message.body;
       queueLogger.info(`Processing webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
-      await processWebhookInBackground(prediction as any, metadata, env, origin);
+
+      // Route FAL webhooks to the FAL handler, Replicate to the Replicate handler
+      if (metadata.source === 'fal') {
+        const { processFALWebhookInBackground } = await import('./services/webhook-handler');
+        await processFALWebhookInBackground(prediction, metadata, env, origin);
+      } else {
+        await processWebhookInBackground(prediction as any, metadata, env, origin);
+      }
+
       queueLogger.info(`Completed webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
       message.ack();
     } catch (error) {

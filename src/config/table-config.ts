@@ -43,7 +43,15 @@
     SHORT_STORIES: 'short-stories',
   
     // Voice overs
-    VOICE_OVERS: 'voice-overs'
+    VOICE_OVERS: 'voice-overs',
+
+    // Talking avatar voice overs
+    AVATAR_VOICE_OVERS: 'avatar-voice-overs',
+
+    // Talking avatar assets
+    AVATARS: 'avatars',
+    AVATAR_VIDEOS: 'avatar-videos',
+    AVATAR_AUDIO: 'avatar-audio'
   } as const;
   
   // Bucket types for type safety
@@ -130,6 +138,42 @@
       allowedMimeTypes: ['audio/mpeg', 'audio/mp3', 'audio/wav'],
       maxFileSize: 50 * 1024 * 1024, // 50MB
       folderStructure: ['voice-overs']
+    },
+
+    [FOLDER_NAMES.AVATARS]: {
+      name: 'avatars',
+      description: 'Pre-made avatar face images',
+      public: true,
+      allowedMimeTypes: ['image/jpeg', 'image/png', 'image/webp'],
+      maxFileSize: 5 * 1024 * 1024, // 5MB
+      folderStructure: []
+    },
+
+    [FOLDER_NAMES.AVATAR_VIDEOS]: {
+      name: 'avatar-videos',
+      description: 'Generated talking avatar videos',
+      public: true,
+      allowedMimeTypes: ['video/mp4'],
+      maxFileSize: 100 * 1024 * 1024, // 100MB
+      folderStructure: []
+    },
+
+    [FOLDER_NAMES.AVATAR_AUDIO]: {
+      name: 'avatar-audio',
+      description: 'Generated TTS audio for avatar videos',
+      public: true,
+      allowedMimeTypes: ['audio/mpeg', 'audio/mp3'],
+      maxFileSize: 50 * 1024 * 1024, // 50MB
+      folderStructure: []
+    },
+
+    [FOLDER_NAMES.AVATAR_VOICE_OVERS]: {
+      name: 'avatar-voice-overs',
+      description: 'Voice-over audio for talking avatar videos',
+      public: false,
+      allowedMimeTypes: ['audio/mpeg', 'audio/mp3', 'audio/wav', 'audio/x-m4a', 'audio/m4a', 'audio/aac', 'audio/ogg'],
+      maxFileSize: 50 * 1024 * 1024, // 50MB
+      folderStructure: []
     }
   
   } as const;

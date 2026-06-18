@@ -56,3 +56,20 @@ export function getTierModel(tier: string, templateType?: TemplateType): string 
 export function getAllTiers(): string[] {
   return Object.keys(pricingData.videoTiers);
 }
+
+/**
+ * Get avatar tier cost (credits per second for a model)
+ * Uses avatarTiers from pricing.json
+ */
+export function getAvatarTierCost(model: string): number {
+  const avatarTiers: Record<string, number> = pricingData.avatarTiers;
+  return avatarTiers[model] ?? avatarTiers.standard;
+}
+
+/**
+ * Get the model ID for an avatar tier
+ */
+export function getAvatarTierModel(tier: string): string {
+  const avatarTierModels: Record<string, string> = pricingData.avatarTierModels;
+  return avatarTierModels[tier] ?? avatarTierModels.standard;
+}

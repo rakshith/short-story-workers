@@ -7,6 +7,7 @@ import { Skeleton3DShortsAgent } from './skeleton-3d-shorts-agent';
 import { BodyScienceShortsAgent } from './body-science-shorts-agent';
 import { ScriptToShortsAgent } from './script-to-shorts-agent';
 import { TalkingCharacter3DAgent } from './talking-character-3d-agent';
+import { TalkingAvatarAgent } from './talking-avatar-agent';
 
 export { BaseScriptAgent } from './base-agent';
 export { FacelessVideoAgent } from './faceless-video-agent';
@@ -29,6 +30,7 @@ export class ScriptAgentRouter {
         const bodyScienceAgent = new BodyScienceShortsAgent(generator);
         const scriptToShortsAgent = new ScriptToShortsAgent(generator);
         const talkingCharacter3DAgent = new TalkingCharacter3DAgent(generator);
+        const talkingAvatarAgent = new TalkingAvatarAgent(generator);
 
         this.agents = new Map<string, BaseScriptAgent>([
             [ScriptTemplateIds.FACELESS_VIDEO, facelessVideoAgent],
@@ -37,6 +39,7 @@ export class ScriptAgentRouter {
             [ScriptTemplateIds.BODY_SCIENCE_SHORTS, bodyScienceAgent],
             [ScriptTemplateIds.SCRIPT_TO_SHORTS, scriptToShortsAgent],
             [ScriptTemplateIds.TALKING_CHARACTER_3D, talkingCharacter3DAgent],
+            [ScriptTemplateIds.TALKING_AVATAR, talkingAvatarAgent],
         ]);
 
         this.defaultAgent = facelessVideoAgent;

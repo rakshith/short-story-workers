@@ -3,12 +3,12 @@
 import { Env, QueueMessage } from '../types/env';
 import { TemplatePipelineConfig } from '../config/template-config';
 import { generateSceneAudio } from './audio-generation';
-import { getModelForTier } from '../utils/model-utils';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { ScriptTemplateIds } from '../script-generator';
 import { getSceneFromCoordinator } from '../utils/coordinator';
 import { Scene } from '../types';
+import { isVideoMediaType } from '../utils/media-type';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -110,7 +110,7 @@ export async function processSceneImage(
     const isSkeletonVideoRefs = (
       videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
       videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS
-    ) && videoConfig.mediaType === 'video';
+    ) && isVideoMediaType(videoConfig.mediaType);
     const defaultImageModel = 'xai/grok-imagine-image';
     const imageModel = isSkeletonVideoRefs
       ? (videoConfig.imageModel || defaultImageModel)
@@ -241,8 +241,7 @@ export async function processSceneVideo(
   }
 
   try {
-    const modelToUse = scene.model || videoConfig.model || message.templateConfig?.videoModel;
-    const selectedModel = getModelForTier(modelToUse);
+    const selectedModel = scene.model || videoConfig.model || message.templateConfig?.videoModel;
 
     processorLogger.debug(`Video generation starting`, {
       sceneIndex,
@@ -288,7 +287,7 @@ export async function processSceneVideo(
         storyId: storyId!,
         sceneIndex,
         replicateApiToken: env.REPLICATE_API_TOKEN,
-        falApiToken: (env as any).FAL_KEY || (env as any).FAL_API_KEY,
+        falApiToken: env.FAL_API_KEY,
         webhookUrl,
       }
     );

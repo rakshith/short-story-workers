@@ -52,6 +52,8 @@ export interface VideoConfig {
   captionStylePreset?: string;
   /** When true, LLM-generated video (e.g. Kling, Wan) embedded audio is played; runtime receives playEmbeddedAudio on visual items. */
   enableImmersiveAudio?: boolean;
+  /** When true, the video's embedded audio IS the voiceover (talking avatar). No separate voiceover track needed. */
+  enableAvatarAudio?: boolean;
   watermark?: {
     show: boolean;
     text: string;
@@ -60,6 +62,6 @@ export interface VideoConfig {
 }
 
 export interface StoryAdapter {
-  supports(story: any): boolean;
+  supports(story: any, videoConfig?: VideoConfig): boolean;
   toTimeline(story: Story, videoConfig: VideoConfig): Timeline;
 }

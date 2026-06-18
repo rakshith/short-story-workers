@@ -24,6 +24,9 @@ export type {
   CostResponse,
   VideoGenerationEstimateParams,
   VideoGenerationEstimate,
+  GenerationOperation,
+  GenerationEstimateParams,
+  GenerationEstimate,
   CostOptions,
   GenerationCostRequest,
   StoredCost,
@@ -47,12 +50,16 @@ export {
   getVideoTierCost,
   getTierModel,
   getAllTiers,
+  getAvatarTierCost,
+  getAvatarTierModel,
 } from './tiers';
 
 // Operation constants
 export {
   SCRIPT_GENERATION_COST,
   VOICE_GENERATION_COST,
+  VOICE_GENERATION_COST_PER_CHAR,
+  SPEECH_TO_TEXT_COST,
   BACKGROUND_MUSIC_COST,
   IMMERSIVE_AUDIO_COST,
   STORY_EXPORT_COST,
@@ -72,6 +79,7 @@ export {
 // Main estimation functions
 export {
   estimateVideoGeneration,
+  estimateGeneration,
   creditCostForModel,
   canAfford,
 } from './estimate';

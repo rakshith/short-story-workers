@@ -1,4 +1,6 @@
-// Scene adapter for stories with scenes array
+// Talking Avatar adapter — single-scene video where the video's embedded audio IS the voiceover.
+// The FAL/Kling video has lip-synced speech baked in, so no separate voiceover track is needed.
+// Captions sync to the video duration (audioDuration), not a separate audio file.
 import {
   StoryAdapter,
   Story,
@@ -7,13 +9,11 @@ import {
   TimelineItem,
 } from '../types';
 
-const MIN_SCENE_DURATION = 0.1; // prevents zero-length scenes
-const TRANSITION_BUFFER = 0.2; // small gap so next scene does not cut active narration/caption
-/** When voiceover is present, duck video embedded audio so voiceover stays high priority. */
-const DUCKED_VIDEO_VOLUME_WITH_VOICEOVER = 0.25;
+const MIN_SCENE_DURATION = 0.1;
+const DUCKED_MUSIC_VOLUME = 0.25;
+
 function getCaptionDuration(scene: Story['scenes'][number]): number {
   if (!Array.isArray(scene.captions) || scene.captions.length === 0) return 0;
-
   let maxEnd = 0;
   for (const caption of scene.captions) {
     const tokenEnd =
@@ -23,13 +23,13 @@ function getCaptionDuration(scene: Story['scenes'][number]): number {
     const captionEnd = Math.max(caption.endTime ?? 0, tokenEnd);
     if (captionEnd > maxEnd) maxEnd = captionEnd;
   }
-
   return maxEnd;
 }
 
-export class SceneAdapter implements StoryAdapter {
-  supports(story: any, _videoConfig?: VideoConfig): boolean {
+export class TalkingAvatarAdapter implements StoryAdapter {
+  supports(story: any, videoConfig?: VideoConfig): boolean {
     return (
+      videoConfig?.enableAvatarAudio === true &&
       story !== null &&
       typeof story === 'object' &&
       Array.isArray(story.scenes) &&
@@ -41,7 +41,6 @@ export class SceneAdapter implements StoryAdapter {
     const visual: TimelineItem[] = [];
     const audio: TimelineItem[] = [];
     const text: TimelineItem[] = [];
-    const effects: TimelineItem[] = [];
 
     let currentTime = 0;
     let lastVisualIndex = -1;
@@ -50,15 +49,14 @@ export class SceneAdapter implements StoryAdapter {
     for (let sceneIndex = 0; sceneIndex < story.scenes.length; sceneIndex++) {
       const scene = story.scenes[sceneIndex];
       const sceneDuration = scene.duration ?? 0;
-      const visualDuration = sceneDuration;
-      let resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
+      const resolvedAudioDuration = scene.audioDuration ?? scene.duration ?? 0;
       const captionDuration = getCaptionDuration(scene);
-
       const narrationDuration = Math.max(resolvedAudioDuration, captionDuration);
+
       const isLast = isLastScene(sceneIndex);
       const effectiveSceneDuration = Math.max(
-        visualDuration,
-        narrationDuration > 0 && !isLast ? narrationDuration + TRANSITION_BUFFER : narrationDuration,
+        sceneDuration,
+        narrationDuration > 0 && !isLast ? narrationDuration : narrationDuration,
         MIN_SCENE_DURATION
       );
 
@@ -67,14 +65,6 @@ export class SceneAdapter implements StoryAdapter {
 
       /* ---------------- Visual Track ---------------- */
       if (scene.generatedVideoUrl) {
-        // Video clip takes priority over still image.
-        // When enableImmersiveAudio is true, play the video's embedded audio (LLM-generated sound).
-        // Voiceover is high priority: when scene has voiceover, duck video embedded volume so it plays smooth underneath.
-        const playEmbeddedAudio = videoConfig.enableImmersiveAudio === true;
-        const hasVoiceover = Boolean(scene.audioUrl && resolvedAudioDuration > 0);
-        const videoVolume = playEmbeddedAudio
-          ? (hasVoiceover ? DUCKED_VIDEO_VOLUME_WITH_VOICEOVER : 1)
-          : undefined;
         visual.push({
           start: sceneStart,
           end: sceneEnd,
@@ -83,8 +73,8 @@ export class SceneAdapter implements StoryAdapter {
             url: scene.generatedVideoUrl,
             prompt: scene.imagePrompt ?? null,
             sceneNumber: scene.sceneNumber,
-            playEmbeddedAudio,
-            ...(playEmbeddedAudio && { videoVolume }),
+            playEmbeddedAudio: true,
+            videoVolume: 1,
           },
         });
         lastVisualIndex = visual.length - 1;
@@ -102,18 +92,7 @@ export class SceneAdapter implements StoryAdapter {
         lastVisualIndex = visual.length - 1;
       }
 
-      /* ---------------- Voiceover Track ---------------- */
-      if (scene.audioUrl && resolvedAudioDuration > 0) {
-        audio.push({
-          start: sceneStart,
-          end: sceneStart + resolvedAudioDuration,
-          payload: {
-            type: 'voiceover',
-            url: scene.audioUrl,
-            sceneNumber: scene.sceneNumber,
-          },
-        });
-      }
+      // NO voiceover track — the video's embedded audio handles speech
 
       /* ---------------- Caption Track ---------------- */
       if (
@@ -137,32 +116,19 @@ export class SceneAdapter implements StoryAdapter {
       currentTime = sceneEnd;
     }
 
-    // Find actual audio end time
-    const audioEndTime = audio.length > 0 
-      ? Math.max(...audio.map(item => item.end)) 
-      : 0;
-
-    // Extend last visual if audio extends beyond scene duration (prevents black frames)
-    if (lastVisualIndex >= 0 && audioEndTime > 0) {
-      const lastVisual = visual[lastVisualIndex];
-      if (audioEndTime > lastVisual.end) {
-        lastVisual.end = audioEndTime;
-      }
-    }
-
     const finalDuration = Math.max(
       currentTime,
-      audioEndTime,
       ...visual.map(v => v.end)
     );
 
-    /* ---------------- Background Music (full duration) ---------------- */
+    /* ---------------- Background Music (full duration, ducked) ---------------- */
     const musicUrl =
       typeof videoConfig.music === 'string' ? videoConfig.music.trim() : '';
     if (musicUrl && musicUrl !== 'none' && finalDuration > 0) {
       const rawVolume = videoConfig.musicVolume ?? 0.2;
       const volume =
         rawVolume > 1 ? Math.min(1, rawVolume / 100) : Math.max(0, Math.min(1, rawVolume));
+      const musicVolume = Math.min(volume, DUCKED_MUSIC_VOLUME);
       audio.push({
         start: 0,
         end: finalDuration,
@@ -170,20 +136,7 @@ export class SceneAdapter implements StoryAdapter {
           type: 'background-music',
           role: 'background',
           url: musicUrl,
-          volume,
-        },
-      });
-    }
-
-    /* ---------------- Watermark Effect ---------------- */
-    if (videoConfig.watermark?.show === true) {
-      effects.push({
-        start: 0,
-        end: finalDuration,
-        payload: {
-          type: 'watermark',
-          text: videoConfig.watermark.text ?? '',
-          variant: videoConfig.watermark.variant ?? 'minimal',
+          volume: musicVolume,
         },
       });
     }
@@ -192,9 +145,8 @@ export class SceneAdapter implements StoryAdapter {
       duration: Math.round(finalDuration),
       tracks: {
         visual,
-        audio, // voiceovers + optional background music
+        audio,
         text,
-        effects: effects.length > 0 ? effects : undefined,
       },
     };
   }
