@@ -20,7 +20,7 @@ import {
   AudioGenerationOptions,
 } from '../types';
 
-import { getFalKey } from '../ENV_KEYS';
+import { getFalKey, getFalWebhookUrl } from '../ENV_KEYS';
 
 /**
  * Fal.ai API client using official SDK
@@ -77,15 +77,15 @@ export class FalProvider extends HealthyProviderWrapper {
   ): Promise<ImageResult> {
     this.validateEnabled();
     
-    const cleanedInput = this.cleanInput({
-      prompt: input.prompt,
+    // Pass through ALL parameters from input
+    const inputData: Record<string, unknown> = {
+      ...input,
+      // Transform specific fields for Fal.ai format
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.imageUrl && { image_url: input.imageUrl }),
-      ...(options?.width && { width: options.width }),
-      ...(options?.height && { height: options.height }),
-      ...(options?.guidance && { guidance_scale: options.guidance }),
-      ...(options?.seed && { seed: options.seed }),
-    });
+    };
+    
+    const cleanedInput = this.cleanInput(inputData);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseImageResponse(result);
@@ -101,17 +101,17 @@ export class FalProvider extends HealthyProviderWrapper {
   ): Promise<VideoResult> {
     this.validateEnabled();
     
-    const cleanedInput = this.cleanInput({
-      ...(input.prompt && { prompt: input.prompt }),
+    // Pass through ALL parameters from input
+    const inputData: Record<string, unknown> = {
+      ...input,
+      // Transform specific fields for Fal.ai format
       ...(input.imageUrl && { image_url: input.imageUrl }),
       ...(input.firstImageUrl && { first_image_url: input.firstImageUrl }),
       ...(input.audioUrl && { audio_url: input.audioUrl }),
-      ...(input.duration && { duration: input.duration }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-      ...(options?.guidance && { guidance_scale: options.guidance }),
-      ...(options?.fps && { fps: options.fps }),
-    });
+    };
+    
+    const cleanedInput = this.cleanInput(inputData);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseVideoResponse(result);
@@ -127,20 +127,46 @@ export class FalProvider extends HealthyProviderWrapper {
   ): Promise<AudioResult> {
     this.validateEnabled();
     
-    const cleanedInput = this.cleanInput({
-      text: input.text,
-      ...(input.voice && { voice_id: input.voice }),
-      ...(input.language && { language: input.language }),
-      ...(input.speed && { speed: input.speed }),
-    });
+    // Pass through ALL parameters from input
+    const inputData: Record<string, unknown> = { ...input };
+    
+    const cleanedInput = this.cleanInput(inputData);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseAudioResponse(result);
   }
   
   /**
-   * Async video generation via Fal.ai queue (returns request_id for webhook callback)
-   * Uses fal.queue.submit() for non-blocking submission with webhook URL.
+   * Generate image asynchronously (for webhook/SSE pattern)
+   * Returns immediately with predictionId, webhook handles completion
+   */
+  async generateImageAsync(
+    model: string,
+    input: ImageInput,
+    options?: ImageGenerationOptions
+  ): Promise<{ predictionId: string; status: string }> {
+    this.validateEnabled();
+    
+    const webhookUrl = options?.webhookUrl || getFalWebhookUrl();
+    if (!webhookUrl) {
+      throw new Error('webhookUrl is required for async mode');
+    }
+    
+    const inputData: Record<string, unknown> = {
+      ...input,
+      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...(input.imageUrl && { image_url: input.imageUrl }),
+    };
+    
+    const cleanedInput = this.cleanInput(inputData);
+    
+    const result = await this.submitAsync(model, cleanedInput, webhookUrl);
+    return result;
+  }
+  
+  /**
+   * Generate video asynchronously (for webhook/SSE pattern)
+   * Returns immediately with predictionId, webhook handles completion
    */
   async generateVideoAsync(
     model: string,
@@ -149,29 +175,68 @@ export class FalProvider extends HealthyProviderWrapper {
   ): Promise<{ predictionId: string; status: string }> {
     this.validateEnabled();
     
-    const cleanedInput = this.cleanInput({
-      ...(input.prompt && { prompt: input.prompt }),
+    const webhookUrl = options?.webhookUrl || getFalWebhookUrl();
+    if (!webhookUrl) {
+      throw new Error('webhookUrl is required for async mode');
+    }
+    
+    const inputData: Record<string, unknown> = {
+      ...input,
       ...(input.imageUrl && { image_url: input.imageUrl }),
       ...(input.firstImageUrl && { first_image_url: input.firstImageUrl }),
       ...(input.audioUrl && { audio_url: input.audioUrl }),
-      ...(input.duration && { duration: input.duration }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-      ...(options?.guidance && { guidance_scale: options.guidance }),
-      ...(options?.fps && { fps: options.fps }),
-      ...(options?.input || {}),
-    });
-
-    const webhookUrl = options?.webhookUrl;
+    };
+    
+    const cleanedInput = this.cleanInput(inputData);
+    
+    const result = await this.submitAsync(model, cleanedInput, webhookUrl, options?.webhookMetadata);
+    return result;
+  }
+  
+  /**
+   * Generate audio asynchronously (for webhook/SSE pattern)
+   * Returns immediately with predictionId, webhook handles completion
+   */
+  async generateAudioAsync(
+    model: string,
+    input: AudioInput,
+    options?: AudioGenerationOptions
+  ): Promise<{ predictionId: string; status: string }> {
+    this.validateEnabled();
+    
+    const webhookUrl = options?.webhookUrl || getFalWebhookUrl();
     if (!webhookUrl) {
-      throw new Error('[FalProvider] webhookUrl is required for async generation');
+      throw new Error('webhookUrl is required for async mode');
     }
+    
+    const inputData: Record<string, unknown> = { ...input };
+    const cleanedInput = this.cleanInput(inputData);
+    
+    const result = await this.submitAsync(model, cleanedInput, webhookUrl);
+    return result;
+  }
+  
+  /**
+   * Submit a job to FAL queue asynchronously (non-blocking)
+   * Returns immediately with jobId for webhook tracking
+   */
+  private async submitAsync(
+    model: string,
+    input: Record<string, unknown>,
+    webhookUrl: string,
+    metadata?: Record<string, string>
+  ): Promise<{ predictionId: string; status: string }> {
+    const baseUrl = `${webhookUrl}/webhooks/fal`;
+    const webhookUrlWithMetadata = metadata
+      ? baseUrl + '?' + new URLSearchParams(metadata).toString()
+      : baseUrl;
 
     const submission = await fal.queue.submit(model, {
-      input: cleanedInput,
-      webhookUrl,
+      input,
+      webhookUrl: webhookUrlWithMetadata,
     });
-
+    
     return {
       predictionId: submission.request_id,
       status: 'queued',
@@ -179,13 +244,17 @@ export class FalProvider extends HealthyProviderWrapper {
   }
   
   /**
-   * Clean input - remove null/undefined values
+   * Clean input - remove null/undefined/false values for image references
    */
   private cleanInput(input: Record<string, unknown>): Record<string, unknown> {
     return Object.fromEntries(
-      Object.entries(input).filter(
-        ([, v]) => v !== null && v !== undefined
-      )
+      Object.entries(input).filter(([key, v]) => {
+        // Remove null/undefined
+        if (v === null || v === undefined) return false;
+        // Remove false values for image reference fields
+        if ((key.includes('image') || key.includes('match')) && v === false) return false;
+        return true;
+      })
     );
   }
   

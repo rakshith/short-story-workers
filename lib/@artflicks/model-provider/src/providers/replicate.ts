@@ -74,15 +74,27 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<ImageResult> {
     this.validateEnabled();
     
+    // Build input data - pass through ALL parameters from input
+    // Only transform specific field names for backward compatibility
     const inputData: Record<string, unknown> = {
-      prompt: input.prompt,
+      ...input, // Pass ALL input parameters
+      // Transform specific fields if present
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.imageUrl && { image: input.imageUrl }),
-      ...(options?.width && { width: options.width }),
-      ...(options?.height && { height: options.height }),
-      ...(options?.guidance && { guidance: options.guidance }),
-      ...(options?.seed && { seed: options.seed }),
     };
+    
+    // Clean up: remove undefined/null/false values for image references
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      // Remove false values for image reference fields
+      if ((key.includes('image') || key.includes('match')) && value === false) {
+        delete inputData[key];
+      }
+      // Remove undefined/null
+      if (value === undefined || value === null) {
+        delete inputData[key];
+      }
+    });
     
     const output = await this.runModel(model, inputData, options?.timeout, options?.retries, options);
     return parseImageResponse(output);
@@ -98,16 +110,23 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<VideoResult> {
     this.validateEnabled();
     
+    // Pass through ALL parameters from input
     const inputData: Record<string, unknown> = {
-      ...(input.prompt && { prompt: input.prompt }),
+      ...input,
+      // Transform specific fields
       ...(input.imageUrl && { image: input.imageUrl }),
       ...(input.firstImageUrl && { first_image: input.firstImageUrl }),
       ...(input.audioUrl && { audio: input.audioUrl }),
-      ...(input.duration && { duration: input.duration }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(options?.guidance && { guidance: options.guidance }),
-      ...(options?.fps && { fps: options.fps }),
     };
+    
+    // Clean up: remove undefined/null/false values
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      if (value === undefined || value === null || value === false) {
+        delete inputData[key];
+      }
+    });
     
     const output = await this.runModel(model, inputData, options?.timeout, options?.retries, options);
     return parseVideoResponse(output);
@@ -123,12 +142,16 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<AudioResult> {
     this.validateEnabled();
     
-    const inputData: Record<string, unknown> = {
-      text: input.text,
-      ...(input.voice && { voice: input.voice }),
-      ...(input.language && { language: input.language }),
-      ...(input.speed && { speed: input.speed }),
-    };
+    // Pass through ALL parameters from input
+    const inputData: Record<string, unknown> = { ...input };
+    
+    // Clean up: remove undefined/null/false values
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      if (value === undefined || value === null || value === false) {
+        delete inputData[key];
+      }
+    });
     
     const output = await this.runModel(model, inputData, options?.timeout, options?.retries, options);
     return parseAudioResponse(output);
@@ -145,16 +168,24 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<{ predictionId: string; status: string }> {
     this.validateEnabled();
     
+    // Build input data - pass through ALL parameters from input
     const inputData: Record<string, unknown> = {
-      prompt: input.prompt,
+      ...input,
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
-      ...(options?.width && { width: options.width }),
-      ...(options?.height && { height: options.height }),
-      ...(options?.aspect_ratio && { aspect_ratio: options.aspect_ratio }),
-      ...(options?.guidance && { guidance: options.guidance }),
-      ...(options?.seed && { seed: options.seed }),
+      ...(input.imageUrl && { image: input.imageUrl }),
       ...(options?.input),
     };
+    
+    // Clean up: remove undefined/null/false values for image references
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      if ((key.includes('image') || key.includes('match')) && value === false) {
+        delete inputData[key];
+      }
+      if (value === undefined || value === null) {
+        delete inputData[key];
+      }
+    });
     
     return this.createPrediction(model, inputData, options);
   }
@@ -170,17 +201,24 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<{ predictionId: string; status: string }> {
     this.validateEnabled();
     
+    // Pass through ALL parameters from input
     const inputData: Record<string, unknown> = {
-      ...(input.prompt && { prompt: input.prompt }),
-      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...input,
+      // Transform specific fields
       ...(input.imageUrl && { image: input.imageUrl }),
+      ...(input.firstImageUrl && { first_image: input.firstImageUrl }),
       ...(input.audioUrl && { audio: input.audioUrl }),
-      ...(input.duration && { duration: input.duration }),
-      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
-      ...(options?.guidance && { guidance: options.guidance }),
-      ...(options?.fps && { fps: options.fps }),
+      ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(options?.input),
     };
+    
+    // Clean up: remove undefined/null/false values
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      if (value === undefined || value === null || value === false) {
+        delete inputData[key];
+      }
+    });
     
     return this.createPrediction(model, inputData, options);
   }
@@ -196,12 +234,16 @@ export class ReplicateProvider extends HealthyProviderWrapper {
   ): Promise<{ predictionId: string; status: string }> {
     this.validateEnabled();
     
-    const inputData: Record<string, unknown> = {
-      text: input.text,
-      ...(input.voice && { voice: input.voice }),
-      ...(input.language && { language: input.language }),
-      ...(input.speed && { speed: input.speed }),
-    };
+    // Pass through ALL parameters from input
+    const inputData: Record<string, unknown> = { ...input };
+    
+    // Clean up: remove undefined/null/false values
+    Object.keys(inputData).forEach(key => {
+      const value = inputData[key];
+      if (value === undefined || value === null || value === false) {
+        delete inputData[key];
+      }
+    });
     
     return this.createPrediction(model, inputData, options);
   }

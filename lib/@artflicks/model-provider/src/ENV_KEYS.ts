@@ -31,6 +31,7 @@ export const ENV_KEYS = {
   
   // Fal.ai
   FAL_API_KEY: 'FAL_API_KEY',
+  FAL_KEY: 'FAL_KEY', // Alias for FAL_API_KEY
   FAL_WEBHOOK_URL: 'FAL_WEBHOOK_URL',
   
   // Cloudflare
@@ -77,8 +78,8 @@ export function getApiKeys(workerEnv?: Record<string, any>): Record<string, stri
     REPLICATE_API_KEY: env?.[ENV_KEYS.REPLICATE_API_KEY] || env?.[ENV_KEYS.REPLICATE_API_TOKEN] || env?.[ENV_KEYS.NEXT_PUBLIC_REPLICATE_API_KEY],
     REPLICATE_WEBHOOK_URL: env?.[ENV_KEYS.REPLICATE_WEBHOOK_URL],
     
-    // Fal.ai
-    FAL_API_KEY: env?.[ENV_KEYS.FAL_API_KEY],
+    // Fal.ai (supports both FAL_API_KEY and FAL_KEY)
+    FAL_API_KEY: env?.[ENV_KEYS.FAL_API_KEY] || env?.[ENV_KEYS.FAL_KEY],
     FAL_WEBHOOK_URL: env?.[ENV_KEYS.FAL_WEBHOOK_URL],
     
     // Cloudflare
