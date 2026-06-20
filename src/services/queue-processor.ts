@@ -5,10 +5,8 @@ import { TemplatePipelineConfig } from '../config/template-config';
 import { generateSceneAudio } from './audio-generation';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
-import { ScriptTemplateIds } from '../script-generator';
 import { getSceneFromCoordinator } from '../utils/coordinator';
 import { Scene } from '../types';
-import { isVideoMediaType } from '../utils/media-type';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -103,18 +101,8 @@ export async function processSceneImage(
   }
 
   try {
-    // Determine image model.
-    // For skeleton + mediaType video (2-step): default to xai/grok-imagine-image for reference images.
-    //   Only honour imageModel (explicit image override), NOT videoConfig.model (that's the video model).
-    // For everything else: imageModel > model > flux-schnell.
-    const isSkeletonVideoRefs = (
-      videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
-      videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS
-    ) && isVideoMediaType(videoConfig.mediaType);
     const defaultImageModel = 'xai/grok-imagine-image';
-    const imageModel = isSkeletonVideoRefs
-      ? (videoConfig.imageModel || defaultImageModel)
-      : (videoConfig.imageModel || defaultImageModel);
+    const imageModel = videoConfig.imageModel || defaultImageModel;
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,

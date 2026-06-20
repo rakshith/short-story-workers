@@ -22,6 +22,8 @@ export const BACKGROUND_MUSIC_COST = pricingData.operations['background-music'] 
 export const IMMERSIVE_AUDIO_COST = pricingData.operations['immersive-audio'] ?? 5;
 export const STORY_EXPORT_COST = pricingData.operations['story-export'] ?? 2;
 export const YOUTUBE_EXTRACT_COST = pricingData.operations['youtube-extract'] ?? 5;
+export const VOICE_CLONE_BASE_COST = pricingData.operations['voice-clone-base'] ?? 5;
+export const VOICE_CLONE_COST_PER_SECOND = pricingData.operations['voice-clone-per-second'] ?? 0.05;
 
 // Default values
 export const DEFAULT_TIER = 'basic';
