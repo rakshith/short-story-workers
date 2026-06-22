@@ -1,22 +1,23 @@
 /**
  * Scene calculation functions
  * Convert video duration to number of scenes/clips
+ *
+ * IMAGE scene counts are sourced from @artflicks/script-generator-templates
+ * (IMAGE_SCENE_COUNTS) — single source of truth. Do NOT hardcode here.
  */
 
+import { IMAGE_SCENE_COUNTS } from '@artflicks/script-generator-templates';
+
 /**
- * Derives the estimated number of AI-image scenes from a video duration.
- * Each AI image scene is ~2.5 s, so scene count scales linearly with duration.
- * Coverage: up to 300 s (5 min).
+ * Returns the estimated number of AI-image scenes for a given duration.
+ * Reads from IMAGE_SCENE_COUNTS (single source of truth).
+ * Falls back to ~5 s per scene for durations not in the lookup table.
  */
 export function imageScenesFromDuration(durationSeconds: number): number {
-  if (durationSeconds <= 15)  return 6;   // ~2.5 s each
-  if (durationSeconds <= 30)  return 12;  // ~2.5 s each
-  if (durationSeconds <= 60)  return 24;  // ~2.5 s each
-  if (durationSeconds <= 120) return 48;  // ~2.5 s each
-  if (durationSeconds <= 180) return 72; // ~2.5 s each (3 min)
-  if (durationSeconds <= 240) return 96; // ~2.5 s each (4 min)
-  if (durationSeconds <= 300) return 120; // ~2.5 s each (5 min)
-  return Math.ceil(durationSeconds / 2.5); // beyond 5 min: ~2.5 s per scene
+  if (durationSeconds in IMAGE_SCENE_COUNTS) {
+    return IMAGE_SCENE_COUNTS[durationSeconds];
+  }
+  return Math.ceil(durationSeconds / 5);
 }
 
 /**

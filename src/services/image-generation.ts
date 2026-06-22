@@ -144,7 +144,17 @@ export async function triggerReplicateGeneration(
     aspect_ratio: input.aspect_ratio,
     guidance: input.guidance_scale,
     seed: input.seed,
-    input: replicateInput,
+    input: {
+      ...replicateInput,
+      ...(input.width && { width: input.width }),
+      ...(input.height && { height: input.height }),
+      ...(input.aspect_ratio && { aspect_ratio: input.aspect_ratio }),
+      ...(input.seed !== undefined && { seed: input.seed }),
+      ...(input.guidance_scale && { guidance_scale: input.guidance_scale }),
+      ...(input.num_outputs && { num_outputs: input.num_outputs }),
+      ...(input.output_format && { output_format: input.output_format }),
+      ...(input.output_quality && { output_quality: input.output_quality }),
+    },
     webhookUrl: webhookWithModel,
     webhookEvents: ["completed"],
   });

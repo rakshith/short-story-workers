@@ -4,18 +4,27 @@ export const NARRATION_WPS = {
     max: 2.8,
 } as const;
 
+// Single source of truth for image scene counts (used by credit tracker too)
+export const IMAGE_SCENE_COUNTS: Record<number, number> = {
+    15: 6,
+    30: 10,
+    60: 16,
+    120: 24,
+    180: 36,
+};
+
 export const SCENE_COUNT_GUIDE: Record<number, { min: number; target: number; max: number }> = {
     15: { min: 5, target: 6, max: 8 },
-    30: { min: 10, target: 12, max: 14 },
-    60: { min: 21, target: 24, max: 28 },
-    120: { min: 41, target: 46, max: 52 },
-    180: { min: 62, target: 68, max: 76 },
+    30: { min: 8, target: 10, max: 12 },
+    60: { min: 14, target: 16, max: 20 },
+    120: { min: 20, target: 24, max: 30 },
+    180: { min: 30, target: 36, max: 42 },
 };
 
 export const SCENE_DURATION_GUIDE = {
-    min: 2,
-    target: 3,
-    max: 4,
+    min: 4,
+    target: 5,
+    max: 7,
 } as const;
 
 export const DURATION_TOLERANCE: Record<number, { min: number; max: number }> = {

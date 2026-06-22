@@ -413,6 +413,7 @@ export async function executeTalkingAvatarPipeline(
                     videoResult = await replicateProvider.generateVideoAsync(REPLICATE_AVATAR_MODEL, {
                         imageUrl: avatarImageUrl,
                         audioUrl: audioUrl,
+                        aspect_ratio: aspectRatio,
                     }, {
                         input: {
                             mode: REPLICATE_MODE_MAP[model] || 'std',

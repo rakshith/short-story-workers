@@ -127,7 +127,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             
             // For image-only stories: images + audio must be done
             // For video stories: videos + audio must be done
-            const isImageOnlyStory = progressStatus.videoConfig?.mediaType !== 'video';
+            const isImageOnlyStory = !isVideoMediaType(progressStatus.videoConfig?.mediaType);
             const allDone = isImageOnlyStory 
                 ? (allImagesDone && audioAllDone)
                 : (allVideosDone && audioAllDone);

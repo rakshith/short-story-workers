@@ -10,7 +10,7 @@ import {
   trackAIUsageInternal,
   trackAndDeductCredits,
 } from "./usage-tracking";
-import { estimateGeneration } from "@artflicks/credit-tracker";
+import { estimateVideoGeneration } from "@artflicks/credit-tracker";
 import type { CostResponse } from "@artflicks/credit-tracker";
 
 export interface StoryOrchestratorInput {
@@ -132,15 +132,21 @@ export async function orchestrateStoryCreation(
       });
     }
 
+    // When template has generateAudio: false, disable voice over so DO doesn't wait for audio
+    const skipAudioFromTemplate = templateConfig?.generateAudio === false;
+    const videoConfigForDo = skipAudioFromTemplate
+      ? { ...videoConfig, enableVoiceOver: false }
+      : videoConfig;
+
     // Initialize coordinator and queue jobs
     try {
-      await initializeCoordinator(storyId, userId, storyData, videoConfig, env);
+      await initializeCoordinator(storyId, userId, storyData, videoConfigForDo, env);
       await queueGenerationJobs({
         jobId,
         userId,
         storyId,
         storyData,
-        videoConfig,
+        videoConfig: videoConfigForDo,
         baseUrl,
         userTier,
         priority,
@@ -508,16 +514,12 @@ function calculateGenerationCost(
     // Calculate script character count for voice pricing
     const scriptCharCount = script?.length || 0;
 
-    const result = estimateGeneration({
-      model: modelTier,
+    const result = estimateVideoGeneration({
+      modelTier,
       duration,
-      mediaType: mediaTypeForCalc,
-      operations: [
-        { type: 'voice', charCount: scriptCharCount },
-        { type: 'music' },
-        { type: 'script' },
-        ...(videoConfig?.enableImmersiveAudio ? [{ type: 'immersive-audio' }] : []),
-      ],
+      mediaType: mediaTypeForCalc as any,
+      enableImmersiveAudio: videoConfig?.enableImmersiveAudio,
+      scriptCharCount,
     });
 
     return {
@@ -603,12 +605,6 @@ async function queueGenerationJobs(
   const shouldQueueVideos =
     mediaType === "image" || (mediaType === "video" && skipsImageStep);
 
-  // When template has generateAudio: false, disable voice over so video can proceed without audio
-  const skipAudioFromTemplate = input.templateConfig?.generateAudio === false;
-  const videoConfigForQueue = skipAudioFromTemplate
-    ? { ...videoConfig, enableVoiceOver: false }
-    : videoConfig;
-
   // Queue visual generation jobs
   const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
     jobId,
@@ -616,7 +612,7 @@ async function queueGenerationJobs(
     seriesId,
     storyId,
     title: storyData.title || title || "",
-    videoConfig: videoConfigForQueue,
+    videoConfig,
     sceneIndex: index,
     type: shouldQueueVideos
       ? ((mediaType === "video" ? "video" : "image") as QueueMessage["type"])
@@ -649,6 +645,7 @@ async function queueGenerationJobs(
 
   // Queue audio generation jobs (only if enableVoiceOver is not false AND template allows audio)
   const enableVoiceOver = videoConfig?.enableVoiceOver !== false;
+  const skipAudioFromTemplate = templateConfig?.generateAudio === false;
 
   if (enableVoiceOver && !skipAudioFromTemplate) {
     const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({

@@ -28,7 +28,9 @@ import {
   IMMERSIVE_AUDIO_COST,
   BASE_DURATION_PER_CREDIT,
   VOICE_GENERATION_COST_PER_CHAR,
-  SPEECH_TO_TEXT_COST
+  SPEECH_TO_TEXT_COST,
+  ESTIMATED_WPS,
+  ESTIMATED_CHARS_PER_WORD,
 } from './operations';
 import { 
   videoScenesFromDuration, 
@@ -64,10 +66,13 @@ function calculateScriptCost(durationSeconds: number): number {
 export function estimateVideoGeneration(
   params: VideoGenerationEstimateParams,
 ): VideoGenerationEstimate {
-  const { duration, modelTier, mediaType, enableImmersiveAudio } = params;
+  const { duration, modelTier, mediaType, enableImmersiveAudio, scriptCharCount } = params;
 
-  const operations: { type: string }[] = [
-    { type: 'voice' },
+  // Estimate char count from duration when not provided (frontend doesn't have script yet)
+  const estimatedCharCount = scriptCharCount ?? Math.ceil(duration * ESTIMATED_WPS * ESTIMATED_CHARS_PER_WORD);
+
+  const operations: { type: string; charCount?: number }[] = [
+    { type: 'voice', charCount: estimatedCharCount },
     { type: 'music' },
     { type: 'script' },
   ];

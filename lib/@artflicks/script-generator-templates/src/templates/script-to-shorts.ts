@@ -37,7 +37,7 @@ export class ScriptToShortsTemplate extends BaseScriptTemplate {
   }
 
   getSystemPrompt(context: ScriptGenerationContext): string {
-    const { language = "en", minSceneDuration = 2, maxSceneDuration = 5 } = context;
+    const { language = "en", minSceneDuration = 3, maxSceneDuration = 5 } = context;
 
     const languageName = this.getLanguageName(language);
     const languageCode = language;

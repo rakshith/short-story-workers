@@ -156,6 +156,7 @@ export class FalProvider extends HealthyProviderWrapper {
       ...input,
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.imageUrl && { image_url: input.imageUrl }),
+      ...(options?.input),
     };
     
     const cleanedInput = this.cleanInput(inputData);
@@ -186,6 +187,7 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(input.firstImageUrl && { first_image_url: input.firstImageUrl }),
       ...(input.audioUrl && { audio_url: input.audioUrl }),
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
+      ...(options?.input),
     };
     
     const cleanedInput = this.cleanInput(inputData);
@@ -210,7 +212,10 @@ export class FalProvider extends HealthyProviderWrapper {
       throw new Error('webhookUrl is required for async mode');
     }
     
-    const inputData: Record<string, unknown> = { ...input };
+    const inputData: Record<string, unknown> = {
+      ...input,
+      ...(options?.input),
+    };
     const cleanedInput = this.cleanInput(inputData);
     
     const result = await this.submitAsync(model, cleanedInput, webhookUrl);

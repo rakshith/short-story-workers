@@ -29,6 +29,7 @@
   "author": "ArtFlicks",
   "license": "MIT",
   "dependencies": {
+    "@artflicks/script-generator-templates": "file:../script-generator-templates",
     "tsup": "^8.0.0",
     "typescript": "^5.3.3",
     "esbuild": "^0.24.0"

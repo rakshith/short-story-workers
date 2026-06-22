@@ -28,3 +28,6 @@ export const VOICE_CLONE_COST_PER_SECOND = pricingData.operations['voice-clone-p
 // Default values
 export const DEFAULT_TIER = 'basic';
 export const BASE_DURATION_PER_CREDIT = 40;
+// Estimated narration words-per-second and avg chars-per-word for voice cost estimation
+export const ESTIMATED_WPS = 2.5;
+export const ESTIMATED_CHARS_PER_WORD = 6;

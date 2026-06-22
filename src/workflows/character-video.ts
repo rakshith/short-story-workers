@@ -11,6 +11,7 @@ import { updateJobStatus } from '../services/queue-processor';
 import { estimateDurationFromText } from '../services/script-parser';
 import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
 import { isImageMediaType } from '../utils/media-type';
+import { getTemplateConfig } from '../config/template-config';
 
 export const characterVideoDefinition: WorkflowDefinition = {
     id: 'character-video',
@@ -148,6 +149,7 @@ async function handleScriptToVideo(
         title: body.title,
         usageData: scriptResult.usage,
         env,
+        templateConfig: getTemplateConfig(body.videoConfig?.templateId),
     });
 
     return {

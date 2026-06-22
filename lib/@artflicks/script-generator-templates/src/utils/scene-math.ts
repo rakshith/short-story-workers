@@ -40,9 +40,9 @@ export function getScenePlan(durationSeconds: number, mediaType: 'image' | 'vide
     const sceneDurationGuide = isVideo ? VIDEO_SCENE_DURATION_GUIDE : SCENE_DURATION_GUIDE;
 
     const sceneGuide = sceneCountGuide[durationSeconds] ?? {
-        min: Math.max(3, Math.ceil(durationSeconds / (isVideo ? 10 : 4))),
-        target: Math.round(durationSeconds / (isVideo ? 7 : 3)),
-        max: Math.ceil(durationSeconds / (isVideo ? 5 : 2.5)),
+        min: Math.max(3, Math.ceil(durationSeconds / (isVideo ? 10 : 8))),
+        target: Math.round(durationSeconds / (isVideo ? 7 : 6)),
+        max: Math.ceil(durationSeconds / (isVideo ? 5 : 5)),
     };
 
     const { min: minScenes, target: targetScenes, max: maxScenes } = sceneGuide;

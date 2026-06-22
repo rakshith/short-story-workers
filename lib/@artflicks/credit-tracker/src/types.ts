@@ -126,6 +126,7 @@ export interface VideoGenerationEstimateParams {
   modelTier: string;
   mediaType: GenerationMediaType;
   enableImmersiveAudio?: boolean;
+  scriptCharCount?: number;
 }
 
 export interface VideoGenerationEstimate {

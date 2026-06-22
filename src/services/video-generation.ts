@@ -133,7 +133,11 @@ export async function triggerVideoGeneration(
       negativePrompt: input.negative_prompt,
       aspect_ratio: input.aspect_ratio,
     }, {
-      input: replicateInput,
+      input: {
+        ...replicateInput,
+        ...modelConfig.defaultInputs,
+        ...(input.seed !== undefined && { seed: input.seed }),
+      },
       webhookUrl: webhookWithModel,
       webhookEvents: ["completed"],
     });
