@@ -38,6 +38,7 @@ export interface TalkingAvatarPipelineInput {
     enhanceWithAI?: boolean;
     enableCaptions?: boolean;
     videoConfig?: VideoConfig; // Full videoConfig from frontend (used for story record and DO init)
+    sceneIndex?: number; // Defaults to 0 for single-scene avatar
 }
 
 export interface TalkingAvatarPipelineResult {
@@ -110,6 +111,7 @@ export async function executeTalkingAvatarPipeline(
         enhanceWithAI,
         enableCaptions,
         videoConfig,
+        sceneIndex = 0,
     } = input;
 
     const { createClient } = await import('@supabase/supabase-js');
@@ -300,7 +302,7 @@ export async function executeTalkingAvatarPipeline(
 
         // Update DO with real audio duration so handleFinalize computes correct totalDuration
         await updateCoordinatorAudio(coordinator, {
-            sceneIndex: 0,
+            sceneIndex,
             audioUrl,
             audioDuration,
             captions,
@@ -370,7 +372,7 @@ export async function executeTalkingAvatarPipeline(
 
         // Webhook URLs — provider-specific endpoints (match queue-processor pattern)
         const origin = new URL(baseUrl).origin;
-        const webhookParams = `storyId=${storyId}&type=avatar&userId=${userId}&jobId=${jobId}&model=${encodeURIComponent(model)}`;
+        const webhookParams = `storyId=${storyId}&sceneIndex=${sceneIndex}&type=avatar&userId=${userId}&jobId=${jobId}&model=${encodeURIComponent(model)}`;
         const falWebhookUrl = `${origin}/webhooks/fal?${webhookParams}`;
         const replicateWebhookUrl = `${origin}/webhooks/replicate?${webhookParams}`;
 

@@ -56,6 +56,12 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
 
     apiLogger.info(`Received ${type} completion`, { storyId, sceneIndex, status: prediction.status });
 
+    // Skip intermediate Replicate statuses (starting, processing, etc.) — don't consume idempotency slot
+    if (['starting', 'processing', 'in_progress'].includes(prediction.status)) {
+        apiLogger.info(`Intermediate status, skipping: ${prediction.status}`, { predictionId: prediction.id, storyId });
+        return new Response('OK', { status: 200 });
+    }
+
     // Idempotency: claim this prediction before we respond (quick DB insert)
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
@@ -98,6 +104,11 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
     const { storyId, sceneIndex, type, userId, seriesId, jobId, model, sceneReviewRequired } = metadata;
 
     try {
+        if (['starting', 'processing', 'in_progress'].includes(prediction.status)) {
+            console.log(`[WEBHOOK] Intermediate status, skipping: ${prediction.status}`, { predictionId: prediction.id, storyId });
+            return;
+        }
+
         if (prediction.status !== 'succeeded') {
             console.error(`[WEBHOOK] Prediction failed: ${prediction.error}`);
             
