@@ -65,7 +65,7 @@ export async function triggerReplicateGeneration(
 
   // Prepare input for generation
   const input: any = {
-    prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt}`,
+    prompt: params.prompt,
     width: params.width,
     height: params.height,
     num_outputs: params.num_outputs || 1,

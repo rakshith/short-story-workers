@@ -12,8 +12,8 @@ import { Scene } from '../types';
 
 /**
  * Build final prompt for image or video generation
- * For video: uses videoPrompt directly if available, appends stylePrompt + characterAnchor
- * For image: combines imagePrompt + stylePrompt + characterAnchor
+ * Style prompt is prepended as the primary instruction so video models
+ * treat it as the dominant visual style directive.
  */
 function buildFinalPrompt(
   scene: Scene,
@@ -22,53 +22,40 @@ function buildFinalPrompt(
   characterAnchor?: string | null,
   templateConfig?: TemplatePipelineConfig
 ): string {
-  // For video: use videoPrompt directly if available (comprehensive video-specific prompt)
-  if (mediaType === 'video' && scene.videoPrompt) {
-    const parts = [scene.videoPrompt];
-    
-    // Append narration if template wants it (e.g., Veo for embedded audio)
-    if (templateConfig?.includeNarrationInVideoPrompt && scene.narration) {
-      parts.push(`Dialogue: ${scene.narration}`);
-    }
-    
-    if (stylePrompt) parts.push(stylePrompt);
-    if (characterAnchor) parts.push(characterAnchor);
-    return parts.filter(p => p).join(', ');
-  }
-  
-  // For image or video fallback: build from individual components
   const parts: string[] = [];
-  
-  // Base image prompt (visual description)
-  if (scene.imagePrompt) {
-    parts.push(scene.imagePrompt);
-  }
-  
-  // Action for video animation
-  if (scene.action) {
-    parts.push(`${scene.action}`);
-  }
-  
-  // Camera angle
-  if (scene.cameraAngle) {
-    parts.push(`${scene.cameraAngle} shot`);
-  }
-  
-  // Mood
-  if (scene.mood) {
-    parts.push(`${scene.mood} mood`);
-  }
-  
-  // Style prompt
+
+  // Style preset first — primary visual directive for the model
   if (stylePrompt) {
     parts.push(stylePrompt);
   }
-  
-  // Character anchor - ensures consistent character across all scenes
+
+  // For video: use videoPrompt directly if available
+  if (mediaType === 'video' && scene.videoPrompt) {
+    parts.push(scene.videoPrompt);
+
+    if (templateConfig?.includeNarrationInVideoPrompt && scene.narration) {
+      parts.push(`Dialogue: ${scene.narration}`);
+    }
+  } else {
+    // For image or video fallback: build from individual components
+    if (scene.imagePrompt) {
+      parts.push(scene.imagePrompt);
+    }
+    if (scene.action) {
+      parts.push(`${scene.action}`);
+    }
+    if (scene.cameraAngle) {
+      parts.push(`${scene.cameraAngle} shot`);
+    }
+    if (scene.mood) {
+      parts.push(`${scene.mood} mood`);
+    }
+  }
+
   if (characterAnchor) {
     parts.push(characterAnchor);
   }
-  
+
   return parts.filter(p => p).join(', ');
 }
 

@@ -8,6 +8,7 @@ import {
   Timeline,
   TimelineItem,
 } from '../types';
+import { DEFAULT_MUSIC_VOLUME } from '../config';
 
 const MIN_SCENE_DURATION = 0.1;
 const DUCKED_MUSIC_VOLUME = 0.25;
@@ -125,7 +126,7 @@ export class TalkingAvatarAdapter implements StoryAdapter {
     const musicUrl =
       typeof videoConfig.music === 'string' ? videoConfig.music.trim() : '';
     if (musicUrl && musicUrl !== 'none' && finalDuration > 0) {
-      const rawVolume = videoConfig.musicVolume ?? 0.2;
+      const rawVolume = videoConfig.musicVolume ?? DEFAULT_MUSIC_VOLUME;
       const volume =
         rawVolume > 1 ? Math.min(1, rawVolume / 100) : Math.max(0, Math.min(1, rawVolume));
       const musicVolume = Math.min(volume, DUCKED_MUSIC_VOLUME);

@@ -69,7 +69,7 @@ export async function triggerVideoGeneration(
 
     // Prepare input for Replicate video models
     const input: any = {
-        prompt: `${params.prompt} ${params.videoConfig?.preset?.stylePrompt || ''}, high quality motion, cinematic`,
+        prompt: params.prompt,
     };
 
     const modelConfig = getModelImageConfig(params.model, params.videoConfig?.enableImmersiveAudio, params.templateConfig);
