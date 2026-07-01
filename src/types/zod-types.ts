@@ -17,7 +17,6 @@ export const SCRIPT_WRITER_SCENE_SCHEMA = z.object({
             // visualDescription: z.string().describe('Detailed visual description for image generation - include setting, characters, mood, lighting, composition, and style'),
             imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English. Include: dramatic lighting (golden hour, cinematic shadows, rim light), vivid high-contrast colors, emotional expressions (intense eyes, dramatic faces), dynamic composition, atmospheric elements (fog, particles, rain, lens flares). Scene 1 must be the MOST visually striking. Avoid flat lighting, static poses, or boring backgrounds. Make viewers STOP scrolling!'),
             cameraAngle: z.string().nullable().describe('Camera angle or shot type (e.g., close-up, wide shot, birds eye view)'),
-            mood: z.string().nullable().describe('Emotional tone or atmosphere of the scene')
         })
     ).describe('Array of scenes breaking down the script')
 });

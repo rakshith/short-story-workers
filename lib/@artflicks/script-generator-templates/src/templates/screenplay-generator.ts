@@ -3,6 +3,32 @@ import { BaseScriptTemplate } from "./base";
 import { ScriptGenerationContext, TemplateManifest } from "../types";
 import { getScenePlan } from "../utils/scene-math";
 import { ScriptTemplateIds } from './index';
+import { skillRegistry, SkillContext } from '../skills';
+
+function buildSkillContext(context: ScriptGenerationContext, plan: ReturnType<typeof getScenePlan>): SkillContext {
+  const languageName = getLanguageName(context.language || 'en');
+  return {
+    prompt: context.prompt,
+    duration: context.duration,
+    language: context.language || 'en',
+    languageName,
+    mediaType: context.mediaType || 'image',
+    scenePlan: plan,
+    hasCharacterImages: false,
+    characterReferenceImages: context.characterReferenceImages,
+    flags: {},
+    intent: context.intent,
+  };
+}
+
+function getLanguageName(code: string): string {
+  const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+  try {
+    return displayNames.of(code) || code;
+  } catch (e) {
+    return code;
+  }
+}
 
 export class ScreenplayGeneratorTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
@@ -15,7 +41,6 @@ export class ScreenplayGeneratorTemplate extends BaseScriptTemplate {
   };
 
   getSchema(context?: ScriptGenerationContext): z.ZodType<any> {
-    // Simple schema - just returns the screenplay text
     return z.object({
       title: z.string(),
       screenplay: z.string(),
@@ -25,20 +50,17 @@ export class ScreenplayGeneratorTemplate extends BaseScriptTemplate {
   getSystemPrompt(context: ScriptGenerationContext): string {
     const { duration = 60, mediaType = "image", language = "en" } = context;
     const plan = getScenePlan(duration, mediaType);
-    const languageName = this.getLanguageName(language);
+    const languageName = getLanguageName(language);
+    const skillCtx = buildSkillContext(context, plan);
 
     return `You are a world-class cinematic storyteller. Your goal is to write simple, engaging scripts where visuals and narration flow together seamlessly.
 
-    ═══════════════════════════════════════════════════════════════
-                        OUTPUT FORMAT
-    ═══════════════════════════════════════════════════════════════
-    [Visual description] The narration text goes here, written as a natural spoken sentence.
-    [Next visual description] The story flows seamlessly into the next thought.
+    ${skillRegistry.compose(['quality-validation'], { ...skillCtx, flags: { validationVariant: 'screenplay' } })}
 
     ═══════════════════════════════════════════════════════════════
                         STRICT CONSTRAINTS
     ═══════════════════════════════════════════════════════════════
-    - PACE: Each scene is a 4-second "beat." 
+    - PACE: Each scene is a 4-second "beat."
     - WORD COUNT: Max ${plan.perSceneWordsMax} words per scene. If a sentence is too long, break it into TWO scenes with TWO different visuals.
     - SCENE COUNT: You MUST provide exactly ${plan.targetScenes} scenes to fill the ${duration}s duration.
     - SIMPLE VISUALS: Describe what the viewer sees in simple terms. Focus on the subject, action, and emotion - not camera movements.
@@ -65,14 +87,5 @@ export class ScreenplayGeneratorTemplate extends BaseScriptTemplate {
     [Brain scan showing reward centers lighting up] Your brain cannot tell the difference between a like and a reward.
 
     [Person putting phone in drawer] The only way to win is to stop playing.`;
-  }
-
-  private getLanguageName(code: string): string {
-    const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
-    try {
-      return displayNames.of(code) || code;
-    } catch (e) {
-      return code;
-    }
   }
 }

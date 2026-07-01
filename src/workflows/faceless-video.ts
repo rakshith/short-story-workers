@@ -10,6 +10,7 @@ import { generateScript } from '../services/script-generation';
 import { updateJobStatus } from '../services/queue-processor';
 import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
 import { Logger } from '../utils/logger';
+import { normalizeMediaType } from '../utils/media-type';
 
 const workflowLogger = new Logger('faceless-video');
 
@@ -97,9 +98,10 @@ async function handleCreateFromScript(
             language: body.language || body.videoConfig?.language || 'en',
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: 'script-to-shorts',
-            mediaType: body.videoConfig?.mediaType || 'ai-images',
+            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
             speed: body.videoConfig?.speed,
+            stylePrompt: body.videoConfig?.preset?.stylePrompt,
         },
         env
     );
@@ -176,9 +178,10 @@ async function handleGenerateAndCreate(
             language: body.language || body.videoConfig?.language || 'en',
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: body.videoConfig?.templateId,
-            mediaType: body.videoConfig?.mediaType || 'image',
+            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
             speed: body.videoConfig?.speed,
+            stylePrompt: body.videoConfig?.preset?.stylePrompt,
         },
         env
     );

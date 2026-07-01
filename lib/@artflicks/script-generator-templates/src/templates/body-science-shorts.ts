@@ -3,34 +3,36 @@ import { BaseScriptTemplate } from './base';
 import { ScriptGenerationContext, TemplateManifest } from '../types';
 import { createBodyScienceShortsSchema, BODY_SCIENCE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
+import { skillRegistry, SkillContext } from '../skills';
 
-export const BODY_SCIENCE_CHARACTER_DNA = `3D rendered skeleton with translucent glassy skin overlay
-large expressive cartoon eyes (primary emotion source)
-realistic bone texture with visible teeth details
-metallic braces with reflective surfaces (when relevant)
-uncanny valley aesthetic — slightly creepy but charming
-no facial muscle movement (emotion only through eyes)`;
+function buildSkillContext(context: ScriptGenerationContext): SkillContext {
+  const languageName = getLanguageName(context.language || 'en');
+  const effectiveReferences =
+    context.characterReferenceImages && context.characterReferenceImages.length > 0
+      ? context.characterReferenceImages
+      : [];
+  return {
+    prompt: context.prompt,
+    duration: context.duration,
+    language: context.language || 'en',
+    languageName,
+    mediaType: context.mediaType || 'image',
+    scenePlan: { durationSeconds: context.duration } as any,
+    hasCharacterImages: effectiveReferences.length > 0,
+    characterReferenceImages: effectiveReferences,
+    flags: {},
+    intent: context.intent,
+  };
+}
 
-export const BODY_SCIENCE_CONSISTENCY_LINE =
-    'same character as the reference image, same skull shape, same eyes, same proportions, translucent glassy skin overlay with visible skeleton underneath';
-
-export const ORGAN_GLOW_COLORS = {
-    liver_depleting:    'amber / warm orange draining',
-    liver_producing:    'bright amber pulsing',
-    brain_fog:          'dim grey-blue, low glow',
-    brain_ketones:      'blazing golden-yellow, intense glow',
-    brain_glucose:      'warm white active glow',
-    heart_stress:       'pulsing crimson red, rapid flash',
-    heart_calm:         'steady warm pink',
-    fat_lipolysis:      'warm golden particles releasing outward',
-    stomach_empty:      'dark hollow void, deep blue-black',
-    stomach_active:     'churning green-yellow',
-    kidneys_filtering:  'cool blue-white steady glow',
-    adrenals_surging:   'intense orange-red flare burst',
-    muscles_breaking:   'fading red shifting to grey',
-    autophagy_active:   'soft violet-purple cellular shimmer',
-    immune_active:      'bright white scattered glow',
-} as const;
+function getLanguageName(code: string): string {
+  const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+  try {
+    return displayNames.of(code) || code;
+  } catch {
+    return code;
+  }
+}
 
 export class BodyScienceShortsTemplate extends BaseScriptTemplate {
     manifest: TemplateManifest = {
@@ -58,24 +60,15 @@ export class BodyScienceShortsTemplate extends BaseScriptTemplate {
     }
 
     getSystemPrompt(context: ScriptGenerationContext): string {
-        const {
-            language = 'en',
-            characterReferenceImages,
-        } = context;
-
-        const effectiveReferences =
-            characterReferenceImages && characterReferenceImages.length > 0
-                ? characterReferenceImages
-                : [];
-
-        const hasCharacterImages = effectiveReferences.length > 0;
-        const languageName = this.getLanguageName(language);
+        const { language = 'en' } = context;
+        const languageName = getLanguageName(language);
         const topic = context.prompt;
         const BASE_SCENE_SECONDS = 6;
         const duration = context.duration ?? 60;
         const speed = context.speed ?? 1.0;
         const avgSceneSeconds = BASE_SCENE_SECONDS / speed;
         const targetScenes = Math.max(2, Math.round(duration / avgSceneSeconds));
+        const skillCtx = buildSkillContext(context);
 
         return `You are a viral short-form psychological science storyteller
 and cinematic AI visual director.
@@ -96,15 +89,13 @@ LANGUAGE REQUIREMENT:
 - All narration: ${languageName} (${language})
 - imagePrompt and videoPrompt: ALWAYS in English
 
-${hasCharacterImages ? `
-CHARACTER REFERENCE:
-The skeleton in the reference image IS the viewer going through this experiment.
-Narration MUST use "you/your" — the audience experiences this as their own body.
-` : ''}
+${skillRegistry.compose(['language-handling'], skillCtx)}
 
-═════════════════════════════════════
+${skillRegistry.compose(['character-dna'], { ...skillCtx, flags: { characterType: 'body-science-skeleton' } })}
+
+═══════════════════════════════════════════════════════════════
 CORE RULES
-═════════════════════════════════════
+═══════════════════════════════════════════════════════════════
 
 1. Each narration line must be EXACTLY 10–12 words. Hard floor: NEVER fewer than 10 words. Hard cap: NEVER exceed 12 words.
 2. One narration line per visual scene.
@@ -126,71 +117,15 @@ NARRATION TIMING RULE:
 10. ABSOLUTELY NO TEXT, NO TYPOGRAPHY, NO LETTERS inside images.
 11. Provide a "fullNarration" field with all narration lines joined.
 
-═════════════════════════════════════
-ANATOMICAL ACCURACY LOCK
-═════════════════════════════════════
+${skillRegistry.compose(['biological-visualization'], { ...skillCtx, flags: { bioVariant: 'body-science' } })}
 
-All internal organ visualizations MUST follow medically accurate human anatomy.
+${skillRegistry.compose(['image-prompt-quality'], { ...skillCtx, flags: { imagePromptVariant: 'body-science' } })}
 
-STRICT ORGAN POSITIONING:
-- Heart: Skeleton's LEFT chest cavity, slightly tilted, behind sternum
-- Lungs: Two symmetrical lobes filling rib cage, heart overlapping left lung
-- Trachea: Centered, descending into bronchi
-- Esophagus: Posterior to trachea
-- Liver: Skeleton's RIGHT upper abdomen, below diaphragm
-- Stomach: Skeleton's LEFT upper abdomen, under left rib cage
-- Pancreas: Horizontal, posterior to stomach
-- Small intestine: Center lower abdomen, tightly coiled
-- Large intestine: Frames small intestine perimeter
-- Kidneys: Posterior left and right, near lower ribs
-- Brain: Fully contained within skull cavity
-- Spinal cord: Vertical inside vertebral column
+${skillRegistry.compose(['camera-framing'], { ...skillCtx, flags: { cameraVariant: 'body-science' } })}
 
-ORIENTATION REQUIREMENTS:
-- Always specify: "skeleton's left" or "skeleton's right"
-- Never mirror organs incorrectly
-- Never float organs
-- Never center the heart
-- Never place liver on left side
-
-ANCHORING RULE:
-- Organs must appear embedded inside torso cavity
-- Semi-transparent rib cage required during X-ray scenes
-- Sternum visible in anterior view
-- Spine visible in internal shots
-- Clavicles anatomically aligned
-- Diaphragm boundary respected
-
-MANDATORY INTERNAL SCENE LINE:
-For every internal organ scene, add this sentence inside the imagePrompt:
-"Medically accurate anatomical placement, correct left-right orientation from skeleton's perspective, not mirrored, not floating, anatomically anchored to ribs and spine."
-
-═════════════════════════════════════
-VISUAL STYLE RULES (LOCKED)
-═════════════════════════════════════
-
-Character Design:
-- 3D rendered skeleton with translucent glassy skin overlay
-- Large expressive cartoon eyes (primary emotion source)
-- Realistic bone texture with visible teeth details
-- Uncanny valley aesthetic — slightly creepy but charming
-- No facial muscle movement (emotion only through eyes)
-
-Background:
-- Solid teal/blue background only (#2A6F8F to #4A8FBF)
-- No gradients
-- No patterns
-- Studio lighting with soft shadows
-
-Camera and Composition:
-- Extreme close-ups for intense biological moments
-- Medium close-up for reactions (head + upper torso)
-- Dynamic angles
-- 9:16 vertical aspect ratio (mobile optimized)
-
-═════════════════════════════════════
+═══════════════════════════════════════════════════════════════
 STRUCTURE TO FOLLOW
-═════════════════════════════════════
+═══════════════════════════════════════════════════════════════
 
 SCENE 1 — CONSUMPTION
 
@@ -214,48 +149,13 @@ videoPrompt:
 - Maintain solid teal background
 - No text appears at any time
 
-═════════════════════════════════════
-INTERNAL JOURNEY MICRO-SCENES
-═════════════════════════════════════
+${skillRegistry.compose(['crew-system'], { ...skillCtx, flags: { crewVariant: 'body-science' } })}
 
-Each next narration line must represent ONE biological step.
+${skillRegistry.compose(['video-prompt-quality'], { ...skillCtx, flags: { videoPromptVariant: 'body-science' } })}
 
-For INTERNAL scenes:
-- Use semi-transparent rib cage
-- Blue energy glow for scientific visualization
-- Red lightning for pain/damage
-- Red arrows for anatomical tracing
-- Maintain solid teal background
-- 9:16 framing
-- NO TEXT OVERLAYS
-- MUST include the mandatory anatomical placement sentence
-
-═════════════════════════════════════
-OUTPUT FORMAT
-═════════════════════════════════════
-
-For each scene output:
-- sceneNumber: sequential integer
-- narration: 10–12 word sentence
-- imagePrompt: detailed prompt following ALL locked rules
-- videoPrompt: detailed animation prompt following ALL locked rules
-
-Also output:
-- title: "What Happens To Your Body If…" format, 8–14 words, question mark
-- fullNarration: all narration lines joined, one per line
-- metadata: YouTube SEO metadata
+${skillRegistry.compose(['quality-validation'], { ...skillCtx, flags: { validationVariant: 'body-science' } })}
 
 Now generate the complete micro-scene sequence for:
-"${topic}"
-`;
-    }
-
-    private getLanguageName(code: string): string {
-        const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
-        try {
-            return displayNames.of(code) || code;
-        } catch {
-            return code;
-        }
+"${topic}"`
     }
 }

@@ -5,25 +5,35 @@ import { getScenePlan } from '../utils/scene-math';
 import { VIDEO_NARRATION_WPS } from '../constants';
 import { createCharacterStorySchema, createYouTubeShortsSchema, YOUTUBE_SHORTS_SCHEMA } from '../schema';
 import { ScriptTemplateIds } from './index';
+import { skillRegistry, SkillContext } from '../skills';
 
-export const SKELETON_CHARACTER_DNA = `CHARACTER DNA
-transparent humanoid body shell
-visible ivory skeleton
-large round cartoon eyes
-smooth skull shape
-wide surprised expression`;
+function buildSkillContext(context: ScriptGenerationContext, plan: ReturnType<typeof getScenePlan>): SkillContext {
+  const languageName = getLanguageName(context.language || 'en');
+  const effectiveReferences = (context.characterReferenceImages && context.characterReferenceImages.length > 0)
+    ? context.characterReferenceImages
+    : [];
+  return {
+    prompt: context.prompt,
+    duration: context.duration,
+    language: context.language || 'en',
+    languageName,
+    mediaType: context.mediaType || 'image',
+    scenePlan: plan,
+    hasCharacterImages: effectiveReferences.length > 0,
+    characterReferenceImages: effectiveReferences,
+    flags: {},
+    intent: context.intent,
+  };
+}
 
-export const SKELETON_CONSISTENCY_LINE = 'same character as the reference image, same skull shape, same eyes, same proportions';
-
-export const ADVERTISER_FRIENDLY_FILTER = `ADVERTISER-FRIENDLY CONTENT RULES (YouTube Partner Program)
-No graphic depictions of violence, gore, or injury — historical violence may be referenced but never described in visceral detail
-No sexually suggestive content or innuendo of any kind
-No content that is politically divisive, partisan, or that targets real living political figures negatively
-No profanity or euphemistic substitutes for profanity in narration
-No promotion of dangerous activities, substances, or self-harm
-No content that demeans groups based on race, religion, gender, or nationality
-Historical chaos and conflict is allowed — frame consequences cinematically, never sensationally
-When in doubt: ask "would a mainstream brand be comfortable running an ad before this?" If no — rewrite the scene`;
+function getLanguageName(code: string): string {
+  const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
+  try {
+    return displayNames.of(code) || code;
+  } catch (e) {
+    return code;
+  }
+}
 
 export class Skeleton3DShortsTemplate extends BaseScriptTemplate {
     manifest: TemplateManifest = {
@@ -54,25 +64,20 @@ export class Skeleton3DShortsTemplate extends BaseScriptTemplate {
             duration,
             language = 'en',
             mediaType = 'image',
-            characterReferenceImages
         } = context;
 
-        const effectiveReferences = (characterReferenceImages && characterReferenceImages.length > 0)
-            ? characterReferenceImages
-            : [];
-
-        const hasCharacterImages = effectiveReferences.length > 0;
-        const languageName = this.getLanguageName(language);
-        const languageCode = language;
         const plan = getScenePlan(duration, mediaType);
+        const skillCtx = buildSkillContext(context, plan);
 
-        const characterDNA = SKELETON_CHARACTER_DNA;
-        const consistencyLine = SKELETON_CONSISTENCY_LINE;
-        const advertiserFilter = ADVERTISER_FRIENDLY_FILTER;
+        const videoDurationBlock = mediaType === 'video' ? `⚠️ MANDATORY VIDEO WORD COUNTS — REJECTED IF WRONG
+• duration 5 → ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words
+• duration 10 → ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words
+Count words per scene before output. Outside range = REJECTED.
+` : '';
 
         return `You are an elite cinematic scriptwriter for 3D X-Ray Skeleton Shorts.
 
-${advertiserFilter}
+${skillRegistry.compose(['advertiser-friendly-filter'], skillCtx)}
 
 Your job: Take the USER PREMISE and create a short, cinematic story featuring a SKELETON as the main character. The story GENRE comes from the user's prompt, but the TONE is ALWAYS cinematic — grounded, immersive, high-stakes, never goofy or comedic.
 
@@ -80,131 +85,29 @@ USER PREMISE: "${context.prompt}"
 
 The user prompt decides WHAT the story is about. YOU decide HOW it sounds — and it ALWAYS sounds like cinema. Write every line as if a film director is reading it aloud in a dark screening room.
 
-${mediaType === 'video' ? `⚠️ MANDATORY VIDEO WORD COUNTS — REJECTED IF WRONG
-• duration 5 → ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words
-• duration 10 → ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words
-Count words per scene before output. Outside range = REJECTED.
-` : ''}
-═══ SCENE CONSTRAINTS ═══
+${videoDurationBlock}════ SCENE CONSTRAINTS ═══
 Duration: ${duration}s | Scenes: ${plan.minScenes}–${plan.maxScenes ?? plan.targetScenes} (target ${plan.targetScenes}) | Words: ${plan.totalWordsMin}–${plan.totalWordsMax}
 ${plan.sceneGuidance}
-Language: narration in ${languageName} (${languageCode}), imagePrompt ALWAYS in English
+Language: narration in ${skillCtx.languageName} (${language}), imagePrompt ALWAYS in English
 
-═══ TITLE ═══
-6–12 words. Descriptive, story-specific. Use EXACT terms from user premise — never rephrase or synonymize.
+${skillRegistry.compose(['youtube-metadata'], { ...skillCtx, flags: { youtubeVariant: 'skeleton-3d' } })}
 
-═══ CINEMATIC NARRATION VOICE — MANDATORY ═══
+${skillRegistry.compose(['retention-hooks'], skillCtx)}
 
-The skeleton is a CHARACTER living a real experience on screen. Write as if a world-class voice actor is performing every word.
+${skillRegistry.compose(['style-engine'], { ...skillCtx, flags: { styleVariant: 'skeleton-3d' } })}
 
-1. AUTHORITATIVE & GROUNDED — narrator KNOWS this world.
-2. SENSORY IMMERSION — one sensory anchor per scene.
-3. CINEMATIC PRESENT TENSE — always present tense. The viewer is THERE.
-4. SHORT PUNCHY SENTENCES — every word earns its place. No filler.
-5. CONTRAST & TENSION — juxtaposition makes lines land harder.
-6. EMOTIONAL STAKES — the character is LIVING this, not observing it.
+${skillRegistry.compose(['character-dna'], { ...skillCtx, flags: { characterType: 'skeleton' } })}
 
-BANNED: comedy/jokes/puns/sarcasm | melodrama/"epic" tryhard | YouTuber voice ("so basically", "you won't believe") | AI filler ("in this scenario", "interestingly enough") | exclamation marks in narration
+${skillRegistry.compose(['image-prompt-quality'], { ...skillCtx, flags: { imagePromptVariant: 'skeleton-3d' } })}
 
-TONE: Christopher Nolan narrator meets prestige documentary. Calm authority. Measured intensity.
+${skillRegistry.compose(['video-prompt-quality'], skillCtx)}
 
-═══ RETENTION — HOOKS EVERY SCENE ═══
+${skillRegistry.compose(['language-handling'], skillCtx)}
 
-Every scene must pull the viewer into the next. Use at least ONE per scene:
+${skillRegistry.compose(['camera-framing'], { ...skillCtx, flags: { cameraVariant: 'skeleton-3d' } })}
 
-1. CURIOSITY GAP — reveal WHAT, withhold WHY.
-2. OPEN LOOP — start a thread, close it 2–3 scenes later.
-3. PATTERN INTERRUPT — break expected rhythm.
-4. STAKES ESCALATION — each scene raises consequences. Never plateau.
-5. MICRO-CLIFFHANGER — end on an unresolved beat.
-6. SENSORY SNAP — one vivid detail that breaks scrolling autopilot.
+${skillRegistry.compose(['cinematic-storytelling'], { ...skillCtx, flags: { storyStyle: 'skeleton-narrator' } })}
 
-═══ STORY STYLE — PICK ONE & COMMIT ═══
-
-Read the user premise. Pick the ONE style below that fits best. Follow EVERY bullet point as a STRUCTURAL REQUIREMENT:
-
-1. day_in_life — timestamps, sensory detail each scene
-2. imagine_if — state changed variable upfront, ripple effects
-3. last_person — silence/isolation atmosphere, psychology evolving
-4. wake_up_in — zero-warning drop into new world, arc: Confusion→Discovery→Adaptation
-5. what_would_happen — real science only, cause-and-effect chains
-6. choose_fate — decision points OPTION A vs B
-7. stuck_in — trap feels inescapable early
-8. i_survived — urgent present tense despite past events
-9. history_changed — anchor to real event/figure, butterfly effect
-10. experiment — rules stated upfront, staged
-11. secret_world — clues before reveal
-12. role_reversal — both roles clear before swap
-
-═══ CHARACTER ═══
-
-${characterDNA}
-
-${consistencyLine}
-
-MAIN CHARACTER: 💀 SKELETON (protagonist in every scene)
-SUPPORTING CAST: Normal humans — regular people, villagers, crowds
-
-VISUAL RULES:
-- 4-PART image prompt structure: CHARACTER DNA + CONSISTENCY LINE + ACTION + SCENE + CAMERA
-- ACTION = THE FOCUS — detailed character action + facing direction
-- SCENE = "background:" prefix — setting only
-- CAMERA = angle + lighting + character position
-- ❌ NEVER describe character appearance in ACTION/SCENE/CAMERA — DNA handles that
-
-${hasCharacterImages ? `═══ REFERENCE IMAGE = "YOU" ═══
-The skeleton in the reference image IS YOU. Narration uses "you/your" — first-person.
-` : ''}
-
-═══ HOOK FORMAT — ROTATE ═══
-
-Pick one and rotate:
-A — "What if" question → then progress with "Day one…"
-B — "Day X" cold open → continue day count across scenes
-C — "Nobody told you..." opener → then escalate freely
-D — Sensory cold open → then escalate freely
-
-═══ CAMERA FRAMING ═══
-
-❌ FORBIDDEN: front-facing portrait shots. Max 1 centered close-up per script.
-✅ Vary orientation EVERY scene.
-
-═══ STORY ARC ═══
-
-SCENE 1 — THE HOOK
-Establish STAKES immediately + one SENSORY DETAIL + unresolved thread.
-
-MIDDLE — ESCALATION ENGINE
-Each scene raises stakes higher — never plateau.
-
-SECOND-TO-LAST — POINT OF NO RETURN
-Maximum tension. End on an open beat.
-
-FINAL — THE ECHO
-Close all loops. End on one HAUNTING line. Never summarize.
-
-═══ SCENE OUTPUT ═══
-
-Each scene: sceneNumber | duration | narration | imagePrompt | cameraAngle | mood | action
-
-═══ RULES & FAIL CONDITIONS ═══
-
-STRUCTURE:
-✔ ${plan.minScenes}–${plan.maxScenes ?? plan.targetScenes} scenes
-✔ ${plan.totalWordsMin}–${plan.totalWordsMax} total words
-✔ Title uses EXACT user terms | user details preserved
-CINEMATIC TONE:
-✔ Present tense | sensory detail per scene | retention hook per scene
-✔ Short punchy sentences | no exclamation marks | no comedy
-`;
-    }
-
-    private getLanguageName(code: string): string {
-        const displayNames = new Intl.DisplayNames(['en'], { type: 'language' });
-        try {
-            return displayNames.of(code) || code;
-        } catch (e) {
-            return code;
-        }
+${skillRegistry.compose(['quality-validation'], { ...skillCtx, flags: { validationVariant: 'skeleton-3d' } })}`;
     }
 }

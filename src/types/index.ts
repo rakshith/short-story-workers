@@ -129,8 +129,6 @@ export interface Scene {
   /** Image-to-video animation prompt (body-science-shorts and similar templates) */
   videoPrompt?: string;
   cameraAngle: string;
-  mood: string;
-  action: string;
   // Image generation tracking
   generatedImageUrl?: string;
   isGenerating?: boolean;

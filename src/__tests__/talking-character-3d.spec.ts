@@ -81,8 +81,6 @@ async function testTalkingCharacter3D() {
     console.log(`imagePrompt: "${scene.imagePrompt}"`);
     console.log(`videoPrompt: "${scene.videoPrompt}"`);
     console.log(`cameraAngle: ${scene.cameraAngle}`);
-    console.log(`mood: ${scene.mood}`);
-    console.log(`action: ${scene.action}`);
 
     // Validate required fields
     if (!scene.sceneNumber) throw new Error("Scene missing sceneNumber");

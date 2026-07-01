@@ -17,6 +17,7 @@ export interface ScriptGenerationParams {
   characterReferenceImages?: string[];
   speed?: number;
   motionInstructions?: string;
+  stylePrompt?: string;
 }
 
 export interface ScriptGenerationResult {
@@ -45,6 +46,7 @@ export async function generateScript(
     characterReferenceImages,
     speed,
     motionInstructions,
+    stylePrompt,
   } = params;
 
   try {
@@ -75,6 +77,7 @@ export async function generateScript(
       characterReferenceImages,
       speed,
       motionInstructions,
+      stylePrompt,
     });
 
     if (!result.success || !result.script) {
@@ -119,8 +122,6 @@ export async function generateScript(
         imagePrompt: scene.imagePrompt,
         videoPrompt: scene.videoPrompt || "",
         cameraAngle: scene.cameraAngle || "",
-        mood: scene.mood || "",
-        action: scene.action || "",
       })),
     };
 

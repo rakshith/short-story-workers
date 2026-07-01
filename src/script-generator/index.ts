@@ -8,9 +8,12 @@ import {
     defaultTemplate,
     DEFAULT_SKELETON_REFERENCES,
     DEFAULT_SKELETON_REFERENCE,
+    skillRegistry,
+    registerAllSkills,
+    LLMIntentAnalyzer,
 } from '@artflicks/script-generator-templates';
 
-import type { ScriptGenerationContext, ScriptGenerationResult, ScriptTemplate, TemplateManifest } from '@artflicks/script-generator-templates';
+import type { ScriptGenerationContext, ScriptGenerationResult, ScriptTemplate, TemplateManifest, SkillContext, SkillOverrides, IntentMetadata } from '@artflicks/script-generator-templates';
 
 export {
     getTemplate,
@@ -19,6 +22,8 @@ export {
     defaultTemplate,
     DEFAULT_SKELETON_REFERENCES,
     DEFAULT_SKELETON_REFERENCE,
+    skillRegistry,
+    registerAllSkills,
 };
 
 export type {
@@ -26,12 +31,25 @@ export type {
     ScriptGenerationResult,
     ScriptTemplate,
     TemplateManifest,
+    SkillContext,
+    SkillOverrides,
+    IntentMetadata,
 };
 
 export { BaseScriptTemplate } from '@artflicks/script-generator-templates';
 
 export class ScriptGenerator {
-    constructor(private model: LanguageModel) { }
+    private intentAnalyzer: LLMIntentAnalyzer;
+
+    constructor(private model: LanguageModel) {
+        this.intentAnalyzer = new LLMIntentAnalyzer(async (prompt: string) => {
+            const { text } = await generateText({
+                model: this.model,
+                prompt,
+            });
+            return text;
+        });
+    }
 
     async generate(
         context: ScriptGenerationContext,
@@ -53,7 +71,10 @@ export class ScriptGenerator {
             };
         }
 
-        const systemPrompt = template.getSystemPrompt(context);
+        const intent = context.intent || await this.intentAnalyzer.analyze(context.prompt);
+        const contextWithIntent = { ...context, intent };
+
+        const systemPrompt = template.getSystemPrompt(contextWithIntent);
         const schema: any = template.getSchema(context);
 
         const jsonSchemaObj = z.toJSONSchema(schema);

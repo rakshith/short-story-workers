@@ -2,9 +2,35 @@ import { z } from "zod";
 import { BaseScriptTemplate } from "./base";
 import { ScriptGenerationContext, TemplateManifest } from "../types";
 import { createCharacterStorySchema, CHARACTER_STORY_SCHEMA } from "../schema";
-import { ScriptTemplateIds } from "./index";
-import { getScenePlan } from "../utils/scene-math";
-import { VIDEO_NARRATION_WPS } from "../constants";
+import { ScriptTemplateIds } from './index';
+import { getScenePlan } from '../utils/scene-math';
+import { VIDEO_NARRATION_WPS } from '../constants';
+import { skillRegistry, SkillContext } from '../skills';
+
+function buildSkillContext(context: ScriptGenerationContext, plan: ReturnType<typeof getScenePlan>): SkillContext {
+  const languageName = getLanguageName(context.language || 'en');
+  return {
+    prompt: context.prompt,
+    duration: context.duration,
+    language: context.language || 'en',
+    languageName,
+    mediaType: context.mediaType || 'image',
+    scenePlan: plan,
+    hasCharacterImages: !!(context.characterReferenceImages && context.characterReferenceImages.length > 0),
+    characterReferenceImages: context.characterReferenceImages,
+    flags: {},
+    intent: context.intent,
+  };
+}
+
+function getLanguageName(code: string): string {
+  const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+  try {
+    return displayNames.of(code) || code;
+  } catch (e) {
+    return code;
+  }
+}
 
 export class CharacterStoryTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
@@ -33,38 +59,36 @@ export class CharacterStoryTemplate extends BaseScriptTemplate {
 
   getSystemPrompt(context: ScriptGenerationContext): string {
     const { duration, characterReferenceImages, mediaType = "image" } = context;
-
-    const hasCharacterImages =
-      characterReferenceImages && characterReferenceImages.length > 0;
+    const hasCharacterImages = characterReferenceImages && characterReferenceImages.length > 0;
     const plan = getScenePlan(duration, mediaType);
+    const skillCtx = buildSkillContext(context, plan);
 
-    return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
-${
-  mediaType === "video"
-    ? `
-═══════════════════════════════════════════════════════════════
+    const videoDurationBlock = mediaType === "video"
+      ? `
+══════════════════════════════════════════════════════════════
     ⚠️ ADJUST YOUR RESPONSE TO MATCH USER REQUEST ⚠️
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 The user requested exactly ${duration} seconds. Always adjust your script so the SUM of all scene durations equals ${duration}s (range ${plan.tolerance.min}–${plan.tolerance.max}s). Never exceed ${plan.tolerance.max}s — if your draft is too long, use fewer scenes or more 5s and fewer 10s until total = ${duration}s.
 
 • duration 5  → narration MUST be ${VIDEO_NARRATION_WPS.minWords5s}–${VIDEO_NARRATION_WPS.maxWords5s} words. Count and fix before output.
 • duration 10 → narration MUST be ${VIDEO_NARRATION_WPS.minWords10s}–${VIDEO_NARRATION_WPS.maxWords10s} words. Count and fix before output.
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 `
-    : ""
-}
-═══════════════════════════════════════════════════════════════
+      : "";
+
+    return `You are a professional film director and screenwriter. You create cinematic, character-driven scripts for AI video generation with rapid visual pacing.
+${videoDurationBlock}══════════════════════════════════════════════════════════════
     ⚠️⚠️⚠️ READ THIS FIRST — MANDATORY SCENE COUNT ⚠️⚠️⚠️
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 VIDEO DURATION: ${duration} seconds
 YOU MUST CREATE: AT LEAST ${plan.minScenes} scenes (target: ${plan.targetScenes})${mediaType === "video" ? `, total duration SUM = ${duration}s` : ""}
 TOTAL WORDS REQUIRED: ~${plan.totalWordsTarget} (range: ${plan.totalWordsMin}–${plan.totalWordsMax})
 
 ${plan.sceneGuidance}
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     PIPELINE
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 1. YOUR OUTPUT: Structured JSON with scenes, narration, image prompts.
 2. Each scene's imagePrompt → AI image generator${hasCharacterImages ? " + character reference images" : ""}.
 3. Each scene's narration → TTS audio (audio length = scene duration).
@@ -76,127 +100,23 @@ PER-SCENE RULES:
 • Target: ~${plan.perSceneWordsTarget} words per scene (~${plan.perSceneDurationTarget}s)
 • Hard max: ${plan.perSceneWordsMax} words (${plan.perSceneDurationMax}s). NEVER exceed this.
 • If a thought needs more → SPLIT into two scenes with two visuals.
-${
-  mediaType === "video"
+${mediaType === "video"
     ? `
 • DURATION: Each scene must be exactly 5 or exactly 10 seconds (no other values).
 • NARRATION LENGTH: 5s scene → at most ${VIDEO_NARRATION_WPS.maxWords5s} words (${VIDEO_NARRATION_WPS.wps5s} wps; never exceed or audio exceeds 5s). 10s scene → at most ${VIDEO_NARRATION_WPS.maxWords10s} words (${VIDEO_NARRATION_WPS.wps10s} wps; never exceed or audio exceeds 10s).`
     : ""
 }
 
-═══════════════════════════════════════════════════════════════
-    🎬 THIS IS NOT A SLIDESHOW — IT'S A CINEMATIC STORY
-═══════════════════════════════════════════════════════════════
-The narration must flow as ONE continuous story. When you read
-ALL scenes aloud back-to-back, it should sound like a single
-seamless voiceover — like a documentary narrator telling a gripping
-character story while the camera keeps cutting to new visuals.
+${skillRegistry.compose(['cinematic-storytelling'], { ...skillCtx, flags: { storyStyle: 'character-driven' } })}
 
-SLIDESHOW (❌ WRONG):
-  Scene 1: "The hero was born in a small village."
-  Scene 2: "He had a difficult childhood."
-  Scene 3: "He found a sword."
-  → Disconnected facts. No momentum. Boring.
+${skillRegistry.compose(['character-dna'], { ...skillCtx, flags: { characterType: 'character-story' } })}
 
-CINEMATIC (✅ RIGHT):
-  Scene 1: "No one expected the boy from the village to become a warrior."
-  Scene 2: "He spent his nights training under the silver moon."
-  Scene 3: "The day he pulled the blade from the stone, the earth trembled."
-  Scene 4: "Everything changed in that single, silent moment."
-  → One flowing story. Each cut = new visual. Voice never stops.
+${skillRegistry.compose(['image-prompt-quality'], { ...skillCtx, flags: { imagePromptVariant: 'character-centric' } })}
 
-KEY PRINCIPLES:
-1. All scene narrations read as ONE flowing monologue
-2. Scene breaks = VISUAL changes, story never pauses
-3. Each scene connects naturally to the next
-4. Each scene MUST contain at least one complete sentence
-5. Tension builds ACROSS scenes through the narrative, not by breaking sentences
+${skillRegistry.compose(['video-prompt-quality'], skillCtx)}
 
-═══════════════════════════════════════════════════════════════
-                    CHARACTER SYSTEM
-═══════════════════════════════════════════════════════════════
-${
-  hasCharacterImages
-    ? `✅ CHARACTER REFERENCE IMAGES PROVIDED (${characterReferenceImages.length})
+${skillRegistry.compose(['narration-rules'], skillCtx)}
 
-The image AI will use these for visual consistency.
-
-imagePrompt RULES:
-1. ❌ DO NOT describe physical appearance (face, hair, body, clothes)
-2. ✅ DO describe: action/pose, emotion, position, environment interaction
-3. ✅ Refer to them as "The character in the reference image"
-4. ✅ Character MUST appear in EVERY imagePrompt`
-    : `⚠️ NO CHARACTER REFERENCE
-
-Define clear physical traits in Scene 1 and repeat EXACTLY in every imagePrompt.
-Example: "A young woman with short silver hair and a red scarf, standing in the rain..."`
-}
-
-═══════════════════════════════════════════════════════════════
-                    VISUAL STYLE
-═══════════════════════════════════════════════════════════════
-- Consistent cinematic style across ALL imagePrompts
-- Dramatic lighting, high contrast, atmospheric
-- EVERY scene must be visually DISTINCT (change angle, setting, or action)
-- The visual must match what's being narrated in that moment
-
-═══════════════════════════════════════════════════════════════
-                    NARRATION RULES
-═══════════════════════════════════════════════════════════════
-${plan.narrationGuidance}
-
-═══════════════════════════════════════════════════════════════
-                    STORY ARC
-═══════════════════════════════════════════════════════════════
-SCENE 1 — HOOK (${plan.perSceneDurationMin}–${plan.perSceneDurationTarget}s)
-Character in a compelling moment. Instant intrigue.
-
-MIDDLE — RAPID CINEMATIC BUILD
-- One complete sentence per scene
-- Character at center of every visual
-- Rising stakes, emotional shifts
-
-FINAL — PAYOFF
-- Resolve the character's journey
-- Emotional closure, complete sentence
-
-═══════════════════════════════════════════════════════════════
-                    OUTPUT FORMAT
-═══════════════════════════════════════════════════════════════
-{
-  "title": "4-8 words",
-  "totalDuration": ${duration},
-  "scenes": [{
-    "sceneNumber": 1,
-    "duration": ${mediaType === "video" ? "5 or 10 only" : "<words ÷ 2.5, rounded>"},
-    "narration": "${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words. One flowing sentence.",
-    "details": "Internal note.",
-    "imagePrompt": "Character-centric. ${hasCharacterImages ? "Actions/pose only." : "Include appearance."} Cinematic.",
-    "cameraAngle": "close-up | medium shot | wide shot | birds-eye | low angle | over-the-shoulder",
-    "mood": "tense | hopeful | melancholic | triumphant | mysterious | peaceful | dramatic | romantic"
-  }]
-}
-
-═══════════════════════════════════════════════════════════════
-                    RULES
-═══════════════════════════════════════════════════════════════
-✓ AT LEAST ${plan.minScenes} scenes (target ${plan.targetScenes})
-✓ Each scene: ${plan.perSceneWordsMin}–${plan.perSceneWordsMax} words MAX
-✓ Total narration: ${plan.totalWordsMin}–${plan.totalWordsMax} words
-✓ All narrations read as ONE flowing story
-✓ No scene over ${plan.perSceneDurationMax}s
-✓ duration: ${mediaType === "video" ? "5 or 10 only per scene" : "word count ÷ 2.5"}
-✓ Sum of durations: ${plan.tolerance.min}–${plan.tolerance.max}s — adjust scene count and 5s/10s mix so total = ${duration}s
-✓ Character in every imagePrompt
-✓ Story resolves — not cut off
-
-ADJUST YOUR OUTPUT so none of these occur (fix before returning):
-❌ Fewer than ${plan.minScenes} scenes — add more scenes to reach ${duration}s
-❌ Total words under ${plan.totalWordsMin} — add more scenes
-❌ Any scene over ${plan.perSceneWordsMax} words — shorten or split
-❌ Sum of scene durations over ${plan.tolerance.max}s — use fewer scenes or more 5s and fewer 10s so total = ${duration}s
-❌ Narration reads like disconnected facts (slideshow)
-❌ Story unfinished
-`;
+${skillRegistry.compose(['quality-validation'], { ...skillCtx, flags: { validationVariant: 'character-story' } })}`;
   }
 }

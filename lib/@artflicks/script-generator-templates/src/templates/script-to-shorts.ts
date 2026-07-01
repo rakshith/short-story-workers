@@ -3,6 +3,32 @@ import { BaseScriptTemplate } from "./base";
 import { ScriptGenerationContext, TemplateManifest } from "../types";
 
 import { ScriptTemplateIds } from "./index";
+import { skillRegistry, SkillContext } from '../skills';
+
+function buildSkillContext(context: ScriptGenerationContext): SkillContext {
+  const languageName = getLanguageName(context.language || 'en');
+  return {
+    prompt: context.prompt,
+    duration: context.duration,
+    language: context.language || 'en',
+    languageName,
+    mediaType: context.mediaType || 'image',
+    scenePlan: { durationSeconds: context.duration } as any,
+    hasCharacterImages: false,
+    characterReferenceImages: context.characterReferenceImages,
+    flags: {},
+    intent: context.intent,
+  };
+}
+
+function getLanguageName(code: string): string {
+  const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
+  try {
+    return displayNames.of(code) || code;
+  } catch (e) {
+    return code;
+  }
+}
 
 export class ScriptToShortsTemplate extends BaseScriptTemplate {
   manifest: TemplateManifest = {
@@ -38,10 +64,10 @@ export class ScriptToShortsTemplate extends BaseScriptTemplate {
 
   getSystemPrompt(context: ScriptGenerationContext): string {
     const { language = "en", minSceneDuration = 3, maxSceneDuration = 5 } = context;
-
-    const languageName = this.getLanguageName(language);
+    const languageName = getLanguageName(language);
     const languageCode = language;
     const maxWords = maxSceneDuration * 2;
+    const skillCtx = buildSkillContext(context);
 
     return `You are a script-to-visuals processor. The user provides a SCRIPT with visual hints in [brackets].
 
@@ -51,9 +77,9 @@ YOUR JOB:
 3. Generate image prompts from user's visual hints + character
 4. Ensure each narration fits ≤${maxWords} words (≤${maxSceneDuration}s). If longer, split into multiple scenes.
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     USER INPUT FORMAT
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 [Character: description] - character for ALL scenes (optional)
 [Mood: epic, tragic] - mood for ALL scenes (optional)
 [Visual description] Narration text here
@@ -64,19 +90,11 @@ Example:
 [Wide battlefield at dawn] They said he was undefeatable.
 [Samurai sharpening blade] For thirty years, this sword was the law.
 
-═══════════════════════════════════════════════════════════════
-                    LANGUAGE
-═══════════════════════════════════════════════════════════════
-Narration MUST be in: ${languageName} (${languageCode})
-- ALL narration text must be in ${languageName}
-- If user provides narration in wrong language, TRANSLATE to ${languageName}
-- Maintain exact meaning when translating - only change the language
-- Character names and proper nouns can remain unchanged
-- imagePrompt and videoPrompt are ALWAYS in English regardless of narration language
+${skillRegistry.compose(['language-handling'], { ...skillCtx, flags: { languageVariant: 'script-to-shorts' } })}
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     ⚠️ CRITICAL RULES
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 1. PRESERVE USER NARRATION EXACT - never paraphrase, never reword
    - EXCEPTION: If narration is NOT in ${languageName}, translate it to ${languageName}
    - When translating, preserve the EXACT meaning and emotional tone
@@ -97,25 +115,25 @@ Narration MUST be in: ${languageName} (${languageCode})
    - Sum of all scene durations = total video duration
    - Target total words = duration × 2
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     CHARACTER EXTRACTION
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 If user provides [Character: description]:
 → Extract and set as characterAnchor at story level
 → Include in EVERY imagePrompt exactly as provided
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     IMAGE PROMPT GENERATION
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 For EACH scene:
 - Use user's visual description from [Visual] as base
 - Add characterAnchor details naturally woven in
 - Add cinematic lighting and atmosphere
 - Keep under 50 words
 
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
                     SCENE OUTPUT
-═══════════════════════════════════════════════════════════════
+══════════════════════════════════════════════════════════════
 {
   "title": "4-8 words, story-specific",
   "totalDuration": sum of all scene durations,
@@ -130,25 +148,6 @@ For EACH scene:
   }]
 }
 
-═══════════════════════════════════════════════════════════════
-                    CAMERA MOVEMENTS
-═══════════════════════════════════════════════════════════════
-Use varied camera movements:
-slow push-in, pull-out, tracking shot, crane up/down, rack focus,
-pan left/right, tilt up/down, handheld, aerial view, overhead god's-eye
-
-VARY across scenes - don't repeat same shot type.
-
-
-`;
-  }
-
-  private getLanguageName(code: string): string {
-    const displayNames = new Intl.DisplayNames(["en"], { type: "language" });
-    try {
-      return displayNames.of(code) || code;
-    } catch (e) {
-      return code;
-    }
+${skillRegistry.compose(['video-prompt-quality'], { ...skillCtx, flags: { videoPromptVariant: 'script-to-shorts' } })}`;
   }
 }

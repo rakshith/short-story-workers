@@ -28,8 +28,6 @@ const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => {
             narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene.', mediaType)),
             imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English.'),
             cameraAngle: z.string().nullable().describe('Camera angle or shot type'),
-            mood: z.string().nullable().describe('Emotional tone or atmosphere'),
-            action: z.string().describe('Character action for video animation'),
             videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
         });
     }
@@ -40,8 +38,6 @@ const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => {
         narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene.', mediaType)),
         imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English.'),
         cameraAngle: z.string().nullable().describe('Camera angle or shot type'),
-        mood: z.string().nullable().describe('Emotional tone or atmosphere'),
-        action: z.string().describe('Character action for video animation'),
     });
 };
 
@@ -53,8 +49,6 @@ const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => {
             narration: z.string().describe(narrationDescribe('Voiceover narration.', mediaType)),
             imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description.'),
             cameraAngle: z.string().describe('Camera angle for this scene'),
-            mood: z.string().describe('Emotional tone of the scene'),
-            action: z.string().describe('Character action for video animation'),
             videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
         });
     }
@@ -65,8 +59,6 @@ const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => {
         narration: z.string().describe(narrationDescribe('Voiceover narration.', mediaType)),
         imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description.'),
         cameraAngle: z.string().describe('Camera angle for this scene'),
-        mood: z.string().describe('Emotional tone of the scene'),
-        action: z.string().describe('Character action for video animation'),
     });
 };
 

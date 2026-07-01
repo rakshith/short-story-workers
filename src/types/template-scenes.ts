@@ -13,7 +13,6 @@ export interface BaseScene {
   imagePrompt: string;
   videoPrompt?: string;
   camera: CameraConfig;
-  mood: string;
 }
 
 // Talking Character 3D template scene
@@ -31,7 +30,6 @@ export interface TalkingCharacterScene extends BaseScene {
 export interface FacelessVideoScene extends BaseScene {
   sceneNumber: number;
   narration: string;
-  action: string;
   details?: string;
 }
 
@@ -39,7 +37,6 @@ export interface FacelessVideoScene extends BaseScene {
 export interface CharacterStoryScene extends BaseScene {
   sceneNumber: number;
   narration: string;
-  action: string;
   details?: string;
   character?: {
     name: string;
@@ -51,7 +48,6 @@ export interface CharacterStoryScene extends BaseScene {
 export interface Skeleton3DShortsScene extends BaseScene {
   sceneNumber: number;
   narration: string;
-  action: string;
   details?: string;
 }
 
@@ -59,7 +55,6 @@ export interface Skeleton3DShortsScene extends BaseScene {
 export interface BodyScienceShortsScene extends BaseScene {
   sceneNumber: number;
   narration: string;
-  action: string;
   details?: string;
 }
 

@@ -7,6 +7,17 @@ export interface AnchorScene {
     mood?: string;
 }
 
+export interface IntentMetadata {
+    contentType: string;
+    contentSubtype?: string;
+    mood: string;
+    atmosphere: string;
+    lightingStyle: string;
+    cameraStyle: string;
+    textureStyle: string;
+    targetModel?: string;
+}
+
 export interface ScriptGenerationContext {
     duration: number;
     prompt: string;
@@ -22,6 +33,8 @@ export interface ScriptGenerationContext {
     minSceneDuration?: number;
     maxSceneDuration?: number;
     motionInstructions?: string;
+    stylePrompt?: string;
+    intent?: IntentMetadata;
 }
 
 export interface ScriptGenerationResult {

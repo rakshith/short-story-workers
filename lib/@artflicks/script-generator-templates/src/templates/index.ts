@@ -8,6 +8,7 @@ import { ScreenplayGeneratorTemplate } from './screenplay-generator';
 import { TalkingCharacter3DTemplate } from './talking-character-3d';
 import { TalkingAvatarTemplate } from './talking-avatar';
 import { registry } from '../registry';
+import { registerAllSkills } from '../skills';
 export * from './base';
 export * from './skeleton-3d-shorts-defaults';
 
@@ -28,6 +29,8 @@ let templatesInitialized = false;
 
 function initializeTemplates() {
     if (templatesInitialized) return;
+    
+    registerAllSkills();
     
     registry.register(new FacelessVideoTemplate());
     registry.register(new CharacterStoryTemplate());

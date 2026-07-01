@@ -12,22 +12,14 @@ import { Scene } from '../types';
 
 /**
  * Build final prompt for image or video generation
- * Style prompt is prepended as the primary instruction so video models
- * treat it as the dominant visual style directive.
  */
 function buildFinalPrompt(
   scene: Scene,
   mediaType: 'image' | 'video',
-  stylePrompt: string,
   characterAnchor?: string | null,
   templateConfig?: TemplatePipelineConfig
 ): string {
   const parts: string[] = [];
-
-  // Style preset first — primary visual directive for the model
-  if (stylePrompt) {
-    parts.push(stylePrompt);
-  }
 
   // For video: use videoPrompt directly if available
   if (mediaType === 'video' && scene.videoPrompt) {
@@ -41,14 +33,8 @@ function buildFinalPrompt(
     if (scene.imagePrompt) {
       parts.push(scene.imagePrompt);
     }
-    if (scene.action) {
-      parts.push(`${scene.action}`);
-    }
     if (scene.cameraAngle) {
       parts.push(`${scene.cameraAngle} shot`);
-    }
-    if (scene.mood) {
-      parts.push(`${scene.mood} mood`);
     }
   }
 
@@ -121,7 +107,7 @@ export async function processSceneImage(
       });
     }
 
-    const prompt = buildFinalPrompt(scene, 'image', videoConfig.preset.stylePrompt, storyData?.characterAnchor);
+    const prompt = buildFinalPrompt(scene, 'image', storyData?.characterAnchor);
 
     // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
@@ -224,7 +210,7 @@ export async function processSceneVideo(
       userId,
     });
 
-    const prompt = buildFinalPrompt(scene, 'video', videoConfig.preset.stylePrompt, storyData?.characterAnchor, message.templateConfig);
+    const prompt = buildFinalPrompt(scene, 'video', storyData?.characterAnchor, message.templateConfig);
     processorLogger.debug(`Video prompt for scene ${sceneIndex}`, {
       sceneIndex,
       prompt: prompt.substring(0, 100),

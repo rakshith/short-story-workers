@@ -10,7 +10,7 @@ import { generateScript } from '../services/script-generation';
 import { updateJobStatus } from '../services/queue-processor';
 import { estimateDurationFromText } from '../services/script-parser';
 import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
-import { isImageMediaType } from '../utils/media-type';
+import { isImageMediaType, normalizeMediaType } from '../utils/media-type';
 import { getTemplateConfig } from '../config/template-config';
 
 export const characterVideoDefinition: WorkflowDefinition = {
@@ -106,8 +106,9 @@ async function handleScriptToVideo(
             duration: estimatedDuration,
             language: body.language || body.videoConfig?.language || 'en',
             templateId: body.videoConfig?.templateId,
-            mediaType: body.videoConfig?.mediaType || 'image',
+            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
+            stylePrompt: body.videoConfig?.preset?.stylePrompt,
         },
         env,
     );

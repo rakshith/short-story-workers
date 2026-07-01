@@ -4,3 +4,4 @@ export * from './schema';
 export * from './registry';
 export * from './templates';
 export * from './utils/scene-math';
+export * from './skills';

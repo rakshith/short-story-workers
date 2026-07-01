@@ -35,8 +35,6 @@ function mapTalkingCharacterScene(
     imagePrompt: scene.imagePrompt,
     videoPrompt: scene.videoPrompt || "",
     cameraAngle: scene.camera.type,
-    mood: scene.mood,
-    action: "",
   }));
 
   return {
@@ -71,8 +69,6 @@ function mapStandardScene(
       imagePrompt: scene.imagePrompt,
       videoPrompt: scene.videoPrompt || "",
       cameraAngle,
-      mood: scene.mood,
-      action: (scene as any).action || "",
     };
   });
 
