@@ -4,9 +4,15 @@ import { R2Bucket } from '@cloudflare/workers-types';
 import { generateUUID } from '../utils/storage';
 import { video_output_format } from '../config/table-config';
 import { VideoConfig } from '../types';
-import { attachImageInputs } from '../utils/replicate-model-config';
 import { ScriptTemplateIds } from '../script-generator';
-import { ModelProviderFactory, PROVIDER_NAMES, type ProviderType } from '@artflicks/model-provider';
+import { 
+  ModelProviderFactory, 
+  type ProviderType,
+  attachImageInputsForProvider,
+  applyDefaultInputs,
+  shouldIgnoreWidthHeight,
+  getExcludedFields,
+} from '@artflicks/model-provider';
 
 export interface ImageGenerationParams {
   prompt: string;
@@ -26,44 +32,24 @@ export interface ImageGenerationResult {
   status: string;
 }
 
-/**
- * Determine provider type based on model ID
- * Supports automatic provider switching between Replicate and Fal.ai
- */
-function getProviderType(model: string): ProviderType {
-  // Fal.ai models start with 'fal-ai/'
-  if (model.startsWith('fal-ai/')) {
-    return PROVIDER_NAMES.FALAI;
-  }
-  // Default to Replicate for all other models
-  return PROVIDER_NAMES.REPLICATE;
-}
-
-export async function triggerReplicateGeneration(
+export async function triggerImageGeneration(
   params: ImageGenerationParams,
   options: {
     userId: string;
     seriesId: string;
     storyId: string;
     sceneIndex: number;
-    replicateApiToken: string;
-    falApiToken?: string;  // Optional Fal.ai API token
+    provider: ProviderType;
+    apiKey: string;
     webhookUrl: string;
   }
 ): Promise<ImageGenerationResult> {
-  const { replicateApiToken, falApiToken, webhookUrl } = options;
+  const { provider, apiKey, webhookUrl } = options;
 
-  // Determine which provider to use based on model
-  const providerType = getProviderType(params.model);
-  console.log(`[IMAGE-GENERATION] Using provider: ${providerType} for model: ${params.model}`);
+  console.log(`[IMAGE-GENERATION] Using provider: ${provider} for model: ${params.model}`);
 
-  // Get the appropriate API key
-  const apiKey = providerType === PROVIDER_NAMES.FALAI ? (falApiToken || replicateApiToken) : replicateApiToken;
+  const providerInstance = ModelProviderFactory.createProvider(provider, { apiKey });
 
-  // Initialize provider using Model Provider Factory
-  const provider = ModelProviderFactory.createProvider(providerType, { apiKey });
-
-  // Prepare input for generation
   const input: any = {
     prompt: params.prompt,
     width: params.width,
@@ -72,26 +58,25 @@ export async function triggerReplicateGeneration(
     output_format: params.output_format || 'jpg',
   };
 
-  // Get model config and apply default inputs
-  const { getModelImageConfig } = await import('../utils/replicate-model-config');
-  const modelConfig = getModelImageConfig(params.model);
-  if (modelConfig.defaultInputs) {
-    Object.assign(input, modelConfig.defaultInputs);
-  }
-  // Remove width/height if model uses size parameter instead
-  if (modelConfig.ignoreWidthHeight) {
+  applyDefaultInputs(input, params.model, provider);
+
+  if (shouldIgnoreWidthHeight(params.model, provider)) {
     delete input.width;
     delete input.height;
   }
 
-  let attachedImageFields: import('../utils/replicate-model-config').AttachedImageFields = {};
+  let attachedImageFields: { singleField?: string; multiField?: string } = {};
   if (params.videoConfig.templateId === ScriptTemplateIds.CHARACTER_STORY || 
       params.videoConfig.templateId === ScriptTemplateIds.SKELETON_3D_SHORTS ||
       params.videoConfig.templateId === ScriptTemplateIds.BODY_SCIENCE_SHORTS) {
-    // Attach image inputs based on model type for CHARACTER_STORY and SKELETON_3D_SHORTS
     console.log('[IMAGE-GEN] Template ID:', params.videoConfig.templateId);
     console.log('[IMAGE-GEN] Character References:', params.videoConfig?.characterReferenceImages);
-    attachedImageFields = attachImageInputs(input, params.model, params.videoConfig?.characterReferenceImages);
+    attachedImageFields = attachImageInputsForProvider(
+      input, 
+      params.model, 
+      provider, 
+      params.videoConfig?.characterReferenceImages
+    );
   }
 
   if (params.output_quality) {
@@ -104,29 +89,20 @@ export async function triggerReplicateGeneration(
     input.seed = params.seed;
   }
 
-  // Filter out excluded fields based on model config
-  if (modelConfig.excludeFields) {
-    for (const field of modelConfig.excludeFields) {
-      if (field in input) {
-        console.log(`[IMAGE-GEN] Excluding field '${field}' for model ${params.model}`);
-        delete input[field];
-      }
+  const excludedFields = getExcludedFields(params.model, provider);
+  for (const field of excludedFields) {
+    if (field in input) {
+      console.log(`[IMAGE-GEN] Excluding field '${field}' for model ${params.model}`);
+      delete input[field];
     }
   }
 
-  // Create prediction with webhook - This returns immediately without waiting
   console.log(`[IMAGE-GENERATION] Creating prediction for image - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 
-  // Append model to webhook for tracking
-  const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
-
-  // Use Model Provider's async generation method
-  // Note: generateImageAsync is available on ReplicateProvider for webhook-based async generation
-  if (!provider.generateImageAsync) {
-    throw new Error(`Provider ${providerType} does not support async image generation`);
+  if (!providerInstance.generateImageAsync) {
+    throw new Error(`Provider ${provider} does not support async image generation`);
   }
 
-  // Build replicateInput with only image fields from replicate-model-config
   const replicateInput: Record<string, unknown> = {};
   if (attachedImageFields.singleField) {
     replicateInput[attachedImageFields.singleField] = input[attachedImageFields.singleField];
@@ -135,7 +111,7 @@ export async function triggerReplicateGeneration(
     replicateInput[attachedImageFields.multiField] = input[attachedImageFields.multiField];
   }
 
-  const result = await provider.generateImageAsync(params.model, {
+  const result = await providerInstance.generateImageAsync(params.model, {
     prompt: input.prompt,
     negativePrompt: input.negative_prompt,
   }, {
@@ -155,11 +131,11 @@ export async function triggerReplicateGeneration(
       ...(input.output_format && { output_format: input.output_format }),
       ...(input.output_quality && { output_quality: input.output_quality }),
     },
-    webhookUrl: webhookWithModel,
+    webhookUrl,
     webhookEvents: ["completed"],
   });
 
-  console.log(`[REPLICATE-ASYNC] Prediction created: ${result.predictionId}`);
+  console.log(`[IMAGE-GENERATION] Prediction created: ${result.predictionId}`);
 
   return {
     predictionId: result.predictionId,

@@ -1,0 +1,31 @@
+{
+  "videoTierModels": {
+    "basic": "wan-2.6-i2v-flash",
+    "pro": "wan-2.5-i2v",
+    "ultra": "kling-v2.6",
+    "max": "kling-v3"
+  },
+  "scriptVideoTierModels": {
+    "basic": "veo-3.1-lite",
+    "pro": "seedance-1.5-pro",
+    "ultra": "kling-v2.5-turbo",
+    "max": "kling-v2.6"
+  },
+  "characterVideoTierModels": {
+    "basic": "wan-2.6-i2v-flash",
+    "pro": "wan-2.5-i2v-fast",
+    "ultra": "kling-v2.6",
+    "max": "kling-v3"
+  },
+  "avatarTierModels": {
+    "standard": "kling-avatar-v2",
+    "pro": "kling-avatar-v2"
+  },
+  "imageTierModels": {
+    "basic": "grok-imagine-image",
+    "pro": "flux-1.1-pro",
+    "ultra": "nano-banana-pro",
+    "max": "flux-2-pro",
+    "ultra-max": "seedream-4.5"
+  }
+}

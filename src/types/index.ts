@@ -113,6 +113,7 @@ export interface VideoConfig {
   videoGenerationTriggered?: boolean; // Track if videos have been initiated
   enableImmersiveAudio?: boolean; // Enable audio generation for supported video models (e.g. Kling, Wan)
   speed?: number; // TTS playback speed (0.7–1.2), default 1.0 — affects scene count calculation
+  provider?: 'falai' | 'replicate'; // Explicit provider selection (defaults to 'falai')
   // Talking avatar fields
   avatarImageUrl?: string; // Face photo URL for avatar video generation
   avatarModel?: string; // Avatar model ID (e.g., 'fal-ai/kling-video/ai-avatar/v2/standard')

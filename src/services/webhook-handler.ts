@@ -1,4 +1,4 @@
-// Webhook handler service for Replicate
+// Webhook handler service for Replicate and FAL
 import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
 import { templateSkipsImageStep } from '../config/template-video-config';
@@ -9,6 +9,7 @@ import { updateCoordinatorImage, updateCoordinatorVideo, getCoordinatorProgress 
 import { calcVideoDelaySeconds } from '../utils/queue-batch';
 import { getTemplateConfig } from '../config/template-config';
 import { isVideoMediaType } from '../utils/media-type';
+import { WebhookStrategyFactory } from '@artflicks/model-provider';
 
 /** Metadata extracted from webhook URL, passed to background work */
 export interface WebhookMetadata {
@@ -39,7 +40,7 @@ export async function handleReplicateWebhook(request: Request, env: Env, ctx?: E
     const rawSeriesId = url.searchParams.get('seriesId') || '';
     const seriesId = (rawSeriesId && rawSeriesId !== 'undefined' && rawSeriesId.trim() !== '') ? rawSeriesId.trim() : '';
     const jobId = url.searchParams.get('jobId') || '';
-    const model = url.searchParams.get('model') || (type === 'video' ? 'bytedance/seedance-1-pro-fast' : 'black-forest-labs/flux-schnell');
+    const model = url.searchParams.get('model') || (type === 'video' ? 'bytedance/seedance-1.5-pro' : 'black-forest-labs/flux-schnell');
     const sceneReviewRequired = url.searchParams.get('sceneReviewRequired') === 'true';
 
     if (!storyId || !sceneIndexStr) {
@@ -512,22 +513,27 @@ function extractVideoUrls(output: any): string[] {
 
 /**
  * Handle incoming FAL.ai webhook POST requests.
- * FAL payloads differ from Replicate: statuses are COMPLETED/OK/completed/success/succeeded,
- * video URL is at result.data.video.url or payload.video.url.
+ * Uses WebhookStrategyFactory for provider-agnostic parsing.
+ * Supports image, video, and avatar types (same as Replicate handler).
  */
 export async function handleFALWebhook(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     const storyId = url.searchParams.get('storyId');
-    const type = (url.searchParams.get('type') || 'avatar') as 'avatar';
+    const sceneIndexStr = url.searchParams.get('sceneIndex');
+    const type = (url.searchParams.get('type') || 'image') as 'image' | 'video' | 'avatar';
     const userId = url.searchParams.get('userId') || '';
+    const rawSeriesId = url.searchParams.get('seriesId') || '';
+    const seriesId = (rawSeriesId && rawSeriesId !== 'undefined' && rawSeriesId.trim() !== '') ? rawSeriesId.trim() : '';
     const jobId = url.searchParams.get('jobId') || '';
-    const model = url.searchParams.get('model') || 'fal-ai/kling-video/ai-avatar/v2/standard';
+    const model = url.searchParams.get('model') || (type === 'video' ? 'bytedance/seedance-2.0' : 'fal-ai/flux/dev');
+    const sceneReviewRequired = url.searchParams.get('sceneReviewRequired') === 'true';
 
-    if (!storyId) {
-        return new Response('Missing storyId', { status: 400 });
+    if (!storyId || !sceneIndexStr) {
+        return new Response('Missing metadata', { status: 400 });
     }
 
+    const sceneIndex = parseInt(sceneIndexStr, 10);
     let body: any;
     try {
         body = await request.json();
@@ -535,17 +541,16 @@ export async function handleFALWebhook(request: Request, env: Env, ctx?: Executi
         return new Response('Invalid JSON body', { status: 400 });
     }
 
-    apiLogger.info(`Received FAL webhook`, { storyId, type, status: body?.status || body?.state });
+    apiLogger.info(`Received FAL ${type} webhook`, { storyId, sceneIndex, status: body?.status || body?.state });
 
-    // Determine FAL status
-    const status = getFALStatus(body);
-    if (status === 'pending' || status === 'in_progress') {
-        // Not done yet, skip
+    const strategy = WebhookStrategyFactory.getStrategy('falai');
+
+    if (strategy.isIntermediateStatus(body)) {
+        apiLogger.info(`FAL intermediate status, skipping`, { storyId });
         return new Response('OK', { status: 200 });
     }
 
-    // Idempotency: claim this request before we respond
-    const requestId = body.request_id || body.requestId || `fal-${storyId}-${jobId}`;
+    const requestId = strategy.extractRequestId(body) || `fal-${storyId}-${jobId}`;
     const { createClient } = await import('@supabase/supabase-js');
     const supabase = createClient(env.SUPABASE_URL, env.SUPABASE_SERVICE_ROLE_KEY);
     const { error: checkError } = await supabase
@@ -553,167 +558,52 @@ export async function handleFALWebhook(request: Request, env: Env, ctx?: Executi
         .insert({
             prediction_id: requestId,
             story_id: storyId,
-            scene_index: 0,
+            scene_index: sceneIndex,
             webhook_type: type,
         });
 
     if (checkError?.code === '23505') {
-        apiLogger.info(`FAL webhook already processed (idempotency)`, { requestId, storyId });
+        apiLogger.info(`FAL webhook already processed (idempotency)`, { requestId, storyId, sceneIndex });
         return new Response('Already processed', { status: 200 });
     }
 
+    const status = strategy.getStatus(body);
+    const urls = strategy.extractUrls(body, type === 'video' || type === 'avatar' ? 'video' : 'image');
+    const error = strategy.getError(body);
+    const predictTime = strategy.getPredictTime(body);
+
+    const normalizedPrediction = {
+        id: requestId,
+        status: status === 'succeeded' ? 'succeeded' : status === 'failed' ? 'failed' : 'processing',
+        output: urls.length === 1 ? urls[0] : urls.length > 1 ? urls : (urls[0] || null),
+        error: error || null,
+        metrics: { predict_time: predictTime || 0 },
+        input: body.input || {},
+    };
+
     const metadata: WebhookMetadata = {
         storyId,
-        sceneIndex: 0,
+        sceneIndex,
         type,
         userId,
-        seriesId: '',
+        seriesId,
         jobId,
         model,
+        sceneReviewRequired,
         source: 'fal',
     };
 
-    // Queue path for durable processing
     if (env.WEBHOOK_QUEUE) {
-        await env.WEBHOOK_QUEUE.send({ prediction: body, metadata, origin: url.origin });
+        const origin = new URL(request.url).origin;
+        await env.WEBHOOK_QUEUE.send({ prediction: normalizedPrediction, metadata, origin });
         return new Response('OK', { status: 200 });
     }
-    // Fallback
     if (ctx) {
-        ctx.waitUntil(processFALWebhookInBackground(body, metadata, env, url.origin));
+        ctx.waitUntil(processWebhookInBackground(normalizedPrediction, metadata, env, new URL(request.url).origin));
         return new Response('OK', { status: 200 });
     }
-    await processFALWebhookInBackground(body, metadata, env, url.origin);
+    await processWebhookInBackground(normalizedPrediction, metadata, env, new URL(request.url).origin);
     return new Response('OK', { status: 200 });
-}
-
-/**
- * Determine FAL webhook status from the payload.
- * FAL has multiple status formats across different model types.
- */
-function getFALStatus(body: any): 'success' | 'failed' | 'pending' | 'in_progress' {
-    if (!body) return 'pending';
-
-    // Check top-level status/state
-    const s = (body.status || body.state || '').toString().toLowerCase();
-    if (['completed', 'ok', 'success', 'succeeded', 'done'].includes(s)) return 'success';
-    if (['failed', 'error', 'cancelled', 'canceled'].includes(s)) return 'failed';
-    if (['in_progress', 'in queue', 'processing', 'queued'].includes(s)) return 'in_progress';
-
-    // Check result.status
-    const rs = (body.result?.status || body.result?.state || '').toString().toLowerCase();
-    if (['completed', 'ok', 'success', 'succeeded'].includes(rs)) return 'success';
-    if (['failed', 'error'].includes(rs)) return 'failed';
-
-    // Check payload.status
-    const ps = (body.payload?.status || body.payload?.state || '').toString().toLowerCase();
-    if (['completed', 'ok', 'success', 'succeeded'].includes(ps)) return 'success';
-    if (['failed', 'error'].includes(ps)) return 'failed';
-
-    // If there's a result.data or payload with video URL, treat as success
-    if (body.result?.data?.video?.url || body.payload?.video?.url || body.data?.video?.url) {
-        return 'success';
-    }
-
-    // If there's an error field, it failed
-    if (body.error || body.detail) return 'failed';
-
-    return 'pending';
-}
-
-/**
- * Extract video URL from FAL payload (4-layer fallback)
- */
-function extractFALVideoUrl(body: any): string | null {
-    if (!body) return null;
-
-    // Layer 1: Direct on body
-    if (body.video?.url) return body.video.url;
-    if (body.videos?.[0]?.url) return body.videos[0].url;
-    if (body.image?.url) return body.image.url;
-    if (body.images?.[0]?.url) return body.images[0].url;
-
-    // Layer 2: Wrapped in result.data
-    if (body.result?.data?.video?.url) return body.result.data.video.url;
-    if (body.result?.data?.videos?.[0]?.url) return body.result.data.videos[0].url;
-    if (body.result?.data?.image?.url) return body.result.data.image.url;
-
-    // Layer 3: Wrapped in data
-    if (body.data?.video?.url) return body.data.video.url;
-    if (body.data?.videos?.[0]?.url) return body.data.videos[0].url;
-
-    // Layer 4: Wrapped in payload
-    if (body.payload?.video?.url) return body.payload.video.url;
-    if (body.payload?.videos?.[0]?.url) return body.payload.videos[0].url;
-
-    return null;
-}
-
-/**
- * Extract error message from FAL payload
- */
-function extractFALError(body: any): string {
-    if (body.error) return String(body.error);
-    if (body.detail) {
-        if (Array.isArray(body.detail) && body.detail.length > 0) {
-            return body.detail[0].msg || body.detail[0].message || JSON.stringify(body.detail[0]);
-        }
-        if (typeof body.detail === 'string') {
-            const errorType = body.error_type ? `${body.error_type}: ` : '';
-            return `${errorType}${body.detail}`;
-        }
-    }
-    if (body.result?.detail) {
-        if (Array.isArray(body.result.detail) && body.result.detail.length > 0) {
-            return body.result.detail[0].msg || body.result.detail[0].message || JSON.stringify(body.result.detail[0]);
-        }
-        if (typeof body.result.detail === 'string') return body.result.detail;
-    }
-    if (body.payload?.error) return String(body.payload.error);
-    return 'Unknown FAL error';
-}
-
-/**
- * Process FAL webhook in background (queue consumer or waitUntil)
- * Reuses the existing avatar success/failure handlers for DB updates + SSE
- */
-export async function processFALWebhookInBackground(body: any, metadata: WebhookMetadata, env: Env, origin?: string): Promise<void> {
-    const { storyId, jobId } = metadata;
-
-    try {
-        const status = getFALStatus(body);
-
-        if (status === 'failed') {
-            const error = extractFALError(body);
-            apiLogger.error(`FAL webhook: generation failed`, { storyId, error });
-            await handleAvatarWebhookFailure({ error }, metadata, env);
-            return;
-        }
-
-        if (status !== 'success') {
-            apiLogger.info(`FAL webhook: unhandled status`, { storyId, status });
-            return;
-        }
-
-        // Extract video URL
-        const videoUrl = extractFALVideoUrl(body);
-        if (!videoUrl) {
-            apiLogger.error(`FAL webhook: no video URL found`, { storyId, bodyKeys: Object.keys(body) });
-            await handleAvatarWebhookFailure({ error: 'No video URL in FAL response' }, metadata, env);
-            return;
-        }
-
-        // Build a prediction-like object for handleAvatarWebhookSuccess
-        const prediction = {
-            output: videoUrl,
-            status: 'succeeded',
-            metrics: { predict_time: body.metrics?.inference_time || 0 },
-        };
-
-        await handleAvatarWebhookSuccess(prediction, metadata, env, origin);
-    } catch (error) {
-        console.error(`[FAL WEBHOOK] Background processing error:`, error);
-    }
 }
 
 /**

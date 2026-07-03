@@ -60,39 +60,12 @@
   "videoTiers": {
     "basic": 30,
     "pro": 50,
-    "influencer": 80,
     "ultra": 100,
-    "max": 150,
-    "ultra-max": 200
-  },
-  "videoTierModels": {
-    "basic": "wan-video/wan2.6-i2v-flash",
-    "lite": "wan-video/wan-2.5-i2v-fast",
-    "pro": "wan-video/wan-2.5-i2v",
-    "influencer": "wan-video/wan-2.6-i2v",
-    "ultra": "kwaivgi/kling-v2.6",
-    "max": "kwaivgi/kling-v3-video",
-    "ultra-max": "kwaivgi/kling-v3-video"
-  },
-  "characterVideoTierModels": {
-    "basic": "wan-video/wan2.6-i2v-flash",
-    "pro": "wan-video/wan-2.5-i2v-fast",
-    "ultra": "kwaivgi/kling-v2.6",
-    "max": "kwaivgi/kling-v3-video"
-  },
-  "scriptVideoTierModels": {
-    "basic": "google/veo-3.1-lite",
-    "pro": "bytedance/seedance-1-pro-fast",
-    "ultra": "kwaivgi/kling-v2.6",
-    "max": "kwaivgi/kling-v3-video"
+    "max": 150
   },
   "avatarTiers": {
     "standard": 15,
     "pro": 25
-  },
-  "avatarTierModels": {
-    "standard": "kling-avatar-v2/standard",
-    "pro": "kling-avatar-v2/pro"
   },
   "migrations": {
     "1.0.0": {

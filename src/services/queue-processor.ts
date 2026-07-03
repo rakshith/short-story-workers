@@ -7,6 +7,14 @@ import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { getSceneFromCoordinator } from '../utils/coordinator';
 import { Scene } from '../types';
+import { 
+  resolveProvider, 
+  buildWebhookUrl, 
+  buildWebhookMetadata,
+  getInputFieldsForModel,
+  shouldIgnoreWidthHeight,
+  type ProviderType 
+} from '@artflicks/model-provider';
 
 // QueueMessage is now defined in types/env.ts to avoid circular dependencies
 
@@ -76,16 +84,32 @@ export async function processSceneImage(
   try {
     const defaultImageModel = 'xai/grok-imagine-image';
     const imageModel = videoConfig.imageModel || defaultImageModel;
+    
+    const provider: ProviderType = videoConfig.provider || 'falai';
 
     processorLogger.debug(`Image generation starting`, {
       sceneIndex,
       imageModel,
+      provider,
       templateId: videoConfig.templateId,
       userId,
     });
 
-    const { getModelImageConfig } = await import('../utils/replicate-model-config');
-    const modelConfig = getModelImageConfig(imageModel);
+    // Build input context for generation type detection
+    const imageInputContext: Record<string, unknown> = {};
+    if (videoConfig.characterReferenceImages && videoConfig.characterReferenceImages.length > 0) {
+      imageInputContext.reference_images = videoConfig.characterReferenceImages;
+    }
+
+    const { actualModelId, providerType } = resolveProvider(
+      imageModel,
+      'image',
+      provider,
+      undefined,
+      imageInputContext
+    );
+
+    const fieldConfig = getInputFieldsForModel(actualModelId, providerType);
 
     const parts = videoConfig.aspectRatio.split(':').map(Number);
     const widthRatio = parts[0] || 16;
@@ -95,13 +119,12 @@ export async function processSceneImage(
     let width = Math.round((widthRatio / Math.max(widthRatio, heightRatio)) * baseSize);
     let height = Math.round((heightRatio / Math.max(widthRatio, heightRatio)) * baseSize);
 
-    // Check minimum width requirement (skip if model ignores width/height)
-    if (!modelConfig.ignoreWidthHeight && modelConfig.minWidth && width < modelConfig.minWidth) {
-      const scaleFactor = modelConfig.minWidth / width;
+    if (!shouldIgnoreWidthHeight(actualModelId, providerType) && fieldConfig.minWidth && width < fieldConfig.minWidth) {
+      const scaleFactor = fieldConfig.minWidth / width;
       width = Math.round(width * scaleFactor);
       height = Math.round(height * scaleFactor);
       processorLogger.debug(`Scaled image dimensions to meet minWidth requirement`, {
-        minWidth: modelConfig.minWidth,
+        minWidth: fieldConfig.minWidth,
         newWidth: width,
         newHeight: height
       });
@@ -109,22 +132,32 @@ export async function processSceneImage(
 
     const prompt = buildFinalPrompt(scene, 'image', storyData?.characterAnchor);
 
-    // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
-    const sceneReviewParam = videoConfig.sceneReviewRequired ? '&sceneReviewRequired=true' : '';
-    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=image&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}${sceneReviewParam}&model=${encodeURIComponent(imageModel)}`;
-
-    processorLogger.debug(`Triggering async Replicate generation`, {
+    const webhookMetadata = buildWebhookMetadata({
+      storyId,
       sceneIndex,
-      imageModel,
+      type: 'image',
+      userId,
+      jobId: message.jobId,
+      model: actualModelId,
+      seriesId: seriesId && seriesId.trim() !== '' ? seriesId : undefined,
+      sceneReviewRequired: videoConfig.sceneReviewRequired,
+    });
+    const webhookUrl = buildWebhookUrl(providerType, baseUrl.origin, webhookMetadata);
+
+    processorLogger.debug(`Triggering async generation`, {
+      sceneIndex,
+      actualModelId,
+      providerType,
       webhookUrl,
     });
 
-    const { triggerReplicateGeneration } = await import('./image-generation');
-    const result = await triggerReplicateGeneration(
+    const { triggerImageGeneration } = await import('./image-generation');
+    const apiKey = providerType === 'falai' ? env.FAL_API_KEY : env.REPLICATE_API_TOKEN;
+    const result = await triggerImageGeneration(
       {
         prompt,
-        model: imageModel,
+        model: actualModelId,
         width,
         height,
         num_outputs: 1,
@@ -139,23 +172,23 @@ export async function processSceneImage(
         seriesId: seriesId ?? '',
         storyId,
         sceneIndex,
-        replicateApiToken: env.REPLICATE_API_TOKEN,
-        falApiToken: env.CF_AIG_TOKEN,
+        provider: providerType,
+        apiKey,
         webhookUrl,
       }
     );
 
-    processorLogger.info(`Replicate generation triggered`, {
+    processorLogger.info(`Generation triggered`, {
       sceneIndex,
       predictionId: result.predictionId,
+      provider: providerType,
     });
 
-    // Track AI Usage for image generation
     await trackAIUsageInternal(env, {
       userId,
       teamId: message.teamId,
-      provider: 'replicate',
-      model: videoConfig.model,
+      provider: providerType,
+      model: actualModelId,
       feature: 'image-generation',
       type: 'image',
       width,
@@ -203,12 +236,32 @@ export async function processSceneVideo(
 
   try {
     const selectedModel = scene.model || videoConfig.model || message.templateConfig?.videoModel;
+    
+    const provider: ProviderType = videoConfig.provider || 'falai';
 
     processorLogger.debug(`Video generation starting`, {
       sceneIndex,
       model: selectedModel,
+      provider,
       userId,
     });
+
+    // Build input context for generation type detection
+    const videoInputContext: Record<string, unknown> = {};
+    if (message.generatedImageUrl) {
+      videoInputContext.image_url = message.generatedImageUrl;
+    }
+    if (videoConfig.characterReferenceImages && videoConfig.characterReferenceImages.length > 0) {
+      videoInputContext.reference_images = videoConfig.characterReferenceImages;
+    }
+
+    const { actualModelId, providerType } = resolveProvider(
+      selectedModel,
+      'video',
+      provider,
+      undefined,
+      videoInputContext
+    );
 
     const prompt = buildFinalPrompt(scene, 'video', storyData?.characterAnchor, message.templateConfig);
     processorLogger.debug(`Video prompt for scene ${sceneIndex}`, {
@@ -216,22 +269,31 @@ export async function processSceneVideo(
       prompt: prompt.substring(0, 100),
     });
 
-    // Construct webhook URL with metadata (omit seriesId when not set to avoid "undefined" in path)
     const baseUrl = new URL(message.baseUrl || 'https://create-story-worker.artflicks.workers.dev');
-    const webhookUrl = `${baseUrl.origin}/webhooks/replicate?storyId=${storyId}&sceneIndex=${sceneIndex}&type=video&userId=${userId}${(seriesId && seriesId.trim() !== '') ? `&seriesId=${seriesId}` : ''}&jobId=${message.jobId}`;
+    const webhookMetadata = buildWebhookMetadata({
+      storyId,
+      sceneIndex,
+      type: 'video',
+      userId,
+      jobId: message.jobId,
+      model: actualModelId,
+      seriesId: seriesId && seriesId.trim() !== '' ? seriesId : undefined,
+    });
+    const webhookUrl = buildWebhookUrl(providerType, baseUrl.origin, webhookMetadata);
 
     processorLogger.debug(`Triggering async video generation`, {
       sceneIndex,
-      model: selectedModel,
+      actualModelId,
+      providerType,
       webhookUrl,
     });
 
-    // Use dedicated video generation service
     const { triggerVideoGeneration } = await import('./video-generation');
+    const apiKey = providerType === 'falai' ? env.FAL_API_KEY : env.REPLICATE_API_TOKEN;
     const result = await triggerVideoGeneration(
       {
         prompt,
-        model: selectedModel,
+        model: actualModelId,
         width: 512,
         height: 512,
         resolution: videoConfig.resolution,
@@ -247,8 +309,8 @@ export async function processSceneVideo(
         seriesId: seriesId ?? '',
         storyId: storyId!,
         sceneIndex,
-        replicateApiToken: env.REPLICATE_API_TOKEN,
-        falApiToken: env.FAL_API_KEY,
+        provider: providerType,
+        apiKey,
         webhookUrl,
       }
     );
@@ -256,14 +318,14 @@ export async function processSceneVideo(
     processorLogger.info(`Video generation triggered`, {
       sceneIndex,
       predictionId: result.predictionId,
+      provider: providerType,
     });
 
-    // Track AI Usage for video generation
     await trackAIUsageInternal(env, {
       userId,
       teamId: message.teamId,
-      provider: 'replicate',
-      model: selectedModel,
+      provider: providerType,
+      model: actualModelId,
       feature: 'video-generation',
       type: 'video',
       durationSeconds: scene.duration ?? 5,

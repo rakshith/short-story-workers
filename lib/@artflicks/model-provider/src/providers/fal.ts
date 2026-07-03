@@ -85,7 +85,8 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(input.imageUrl && { image_url: input.imageUrl }),
     };
     
-    const cleanedInput = this.cleanInput(inputData);
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseImageResponse(result);
@@ -111,7 +112,8 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
     };
     
-    const cleanedInput = this.cleanInput(inputData);
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseVideoResponse(result);
@@ -130,7 +132,8 @@ export class FalProvider extends HealthyProviderWrapper {
     // Pass through ALL parameters from input
     const inputData: Record<string, unknown> = { ...input };
     
-    const cleanedInput = this.cleanInput(inputData);
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.runModel(model, cleanedInput, options?.timeout, options?.retries);
     return parseAudioResponse(result);
@@ -159,7 +162,8 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(options?.input),
     };
     
-    const cleanedInput = this.cleanInput(inputData);
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.submitAsync(model, cleanedInput, webhookUrl);
     return result;
@@ -190,7 +194,8 @@ export class FalProvider extends HealthyProviderWrapper {
       ...(options?.input),
     };
     
-    const cleanedInput = this.cleanInput(inputData);
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.submitAsync(model, cleanedInput, webhookUrl, options?.webhookMetadata);
     return result;
@@ -216,7 +221,9 @@ export class FalProvider extends HealthyProviderWrapper {
       ...input,
       ...(options?.input),
     };
-    const cleanedInput = this.cleanInput(inputData);
+    
+    const normalizedInput = this.normalizeInput(inputData);
+    const cleanedInput = this.cleanInput(normalizedInput);
     
     const result = await this.submitAsync(model, cleanedInput, webhookUrl);
     return result;
@@ -246,6 +253,20 @@ export class FalProvider extends HealthyProviderWrapper {
       predictionId: submission.request_id,
       status: 'queued',
     };
+  }
+  
+  /**
+   * Normalize input - convert format aliases for FAL API compatibility
+   */
+  private normalizeInput(input: Record<string, unknown>): Record<string, unknown> {
+    const normalized = { ...input };
+    
+    // FAL API expects 'jpeg' not 'jpg'
+    if (normalized.output_format === 'jpg') {
+      normalized.output_format = 'jpeg';
+    }
+    
+    return normalized;
   }
   
   /**

@@ -3,9 +3,14 @@
 import { R2Bucket } from '@cloudflare/workers-types';
 import { generateUUID } from '../utils/storage';
 import { VideoConfig } from '../types';
-import { attachImageInputs, getNearestDuration, getModelImageConfig } from '../utils/replicate-model-config';
 import { TemplatePipelineConfig } from '../config/template-config';
-import { ModelProviderFactory, PROVIDER_NAMES, type ProviderType } from '@artflicks/model-provider';
+import { 
+  ModelProviderFactory, 
+  type ProviderType,
+  attachImageInputsForProvider,
+  applyDefaultInputs,
+  getNearestDuration,
+} from '@artflicks/model-provider';
 
 export interface VideoGenerationParams {
     prompt: string;
@@ -28,19 +33,6 @@ export interface VideoGenerationResult {
 }
 
 /**
- * Determine provider type based on model ID
- * Supports automatic provider switching between Replicate and Fal.ai
- */
-function getProviderType(model: string): ProviderType {
-  // Fal.ai models start with 'fal-ai/'
-  if (model.startsWith('fal-ai/')) {
-    return PROVIDER_NAMES.FALAI;
-  }
-  // Default to Replicate for all other models
-  return PROVIDER_NAMES.REPLICATE;
-}
-
-/**
  * Trigger async video generation via Model Provider
  */
 export async function triggerVideoGeneration(
@@ -50,51 +42,36 @@ export async function triggerVideoGeneration(
         seriesId: string;
         storyId: string;
         sceneIndex: number;
-        replicateApiToken: string;
-        falApiToken?: string;  // Optional Fal.ai API token
+        provider: ProviderType;
+        apiKey: string;
         webhookUrl: string;
     }
 ): Promise<VideoGenerationResult> {
-    const { replicateApiToken, falApiToken, webhookUrl } = options;
+    const { provider, apiKey, webhookUrl } = options;
 
-    // Determine which provider to use based on model
-    const providerType = getProviderType(params.model);
-    console.log(`[VIDEO-GENERATION] Using provider: ${providerType} for model: ${params.model}`);
+    console.log(`[VIDEO-GENERATION] Using provider: ${provider} for model: ${params.model}`);
 
-    // Get the appropriate API key
-    const apiKey = providerType === PROVIDER_NAMES.FALAI ? (falApiToken || replicateApiToken) : replicateApiToken;
+    const providerInstance = ModelProviderFactory.createProvider(provider, { apiKey });
 
-    // Initialize provider using Model Provider Factory
-    const provider = ModelProviderFactory.createProvider(providerType, { apiKey });
-
-    // Prepare input for Replicate video models
     const input: any = {
         prompt: params.prompt,
     };
 
-    const modelConfig = getModelImageConfig(params.model, params.videoConfig?.enableImmersiveAudio, params.templateConfig);
-    if (modelConfig.defaultInputs) {
-        Object.assign(input, modelConfig.defaultInputs);
-    }
+    applyDefaultInputs(input, params.model, provider);
 
-    // Attach image inputs - priority: generated image (for templates that use it) > characterReferenceImages
-    // Uses template config to determine which to use
     const usesGeneratedImage = params.templateConfig?.usesGeneratedImage === true;
     const characterRefs = params.videoConfig?.characterReferenceImages;
     const hasCharacterRefs = characterRefs && characterRefs.length > 0;
 
-    let attachedImageFields: import('../utils/replicate-model-config').AttachedImageFields = {};
+    let attachedImageFields: { singleField?: string; multiField?: string } = {};
     if (params.referenceImageUrl && usesGeneratedImage) {
-        // Priority 1: Use generated image from imagePrompt (for templates that use generated image)
         console.log('[VIDEO-GEN] Using generated image as reference:', params.referenceImageUrl);
-        attachedImageFields = attachImageInputs(input, params.model, [params.referenceImageUrl]);
+        attachedImageFields = attachImageInputsForProvider(input, params.model, provider, [params.referenceImageUrl]);
     } else if (hasCharacterRefs && characterRefs) {
-        // Priority 2: Use character reference images from request
         console.log('[VIDEO-GEN] Using character reference images:', params.videoConfig.templateId);
-        attachedImageFields = attachImageInputs(input, params.model, characterRefs);
+        attachedImageFields = attachImageInputsForProvider(input, params.model, provider, characterRefs);
     }
 
-    // Scene duration — snap to model-allowed values (e.g. Veo: 4, 6, 8) when applicable
     if (params.duration !== undefined && params.duration > 0) {
         input.duration = getNearestDuration(params.duration, params.model);
     }
@@ -108,16 +85,10 @@ export async function triggerVideoGeneration(
 
     console.log(`[VIDEO-GENERATION] Creating prediction for video - Story: ${options.storyId}, Scene: ${options.sceneIndex}`);
 
-    // Append model to webhook for tracking
-    const webhookWithModel = `${webhookUrl}&model=${encodeURIComponent(params.model)}`;
-
-    // Use Model Provider's async generation method
-    // Note: generateVideoAsync is available on ReplicateProvider for webhook-based async generation
-    if (!provider.generateVideoAsync) {
-      throw new Error(`Provider ${providerType} does not support async video generation`);
+    if (!providerInstance.generateVideoAsync) {
+      throw new Error(`Provider ${provider} does not support async video generation`);
     }
 
-    // Build replicateInput with only image fields from replicate-model-config
     const replicateInput: Record<string, unknown> = {};
     if (attachedImageFields.singleField) {
       replicateInput[attachedImageFields.singleField] = input[attachedImageFields.singleField];
@@ -126,7 +97,7 @@ export async function triggerVideoGeneration(
       replicateInput[attachedImageFields.multiField] = input[attachedImageFields.multiField];
     }
 
-    const result = await provider.generateVideoAsync(params.model, {
+    const result = await providerInstance.generateVideoAsync(params.model, {
       prompt: input.prompt,
       audioUrl: input.audio,
       duration: input.duration,
@@ -135,10 +106,9 @@ export async function triggerVideoGeneration(
     }, {
       input: {
         ...replicateInput,
-        ...modelConfig.defaultInputs,
         ...(input.seed !== undefined && { seed: input.seed }),
       },
-      webhookUrl: webhookWithModel,
+      webhookUrl,
       webhookEvents: ["completed"],
     });
 

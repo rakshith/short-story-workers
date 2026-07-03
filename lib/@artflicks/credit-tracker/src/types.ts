@@ -29,11 +29,7 @@ export interface ModelPricingSchema {
   operations: Record<string, number>;
   imageTiers: Record<string, number>;
   videoTiers: Record<string, number>;
-  videoTierModels: Record<string, string>;
-  characterVideoTierModels: Record<string, string>;
-  scriptVideoTierModels: Record<string, string>;
   avatarTiers: Record<string, number>;
-  avatarTierModels: Record<string, string>;
 }
 
 // Cost breakdown components

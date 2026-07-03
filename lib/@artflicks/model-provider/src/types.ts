@@ -58,6 +58,7 @@ export interface AudioGenerationOptions extends GenerationOptions {
   voice?: string;
   language?: string;
   speed?: number;
+  input?: Record<string, unknown>;
 }
 
 // ============================================================================

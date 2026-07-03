@@ -580,13 +580,7 @@ export async function handleWebhookQueue(batch: MessageBatch<WebhookQueueMessage
       const { prediction, metadata, origin } = message.body;
       queueLogger.info(`Processing webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
 
-      // Route FAL webhooks to the FAL handler, Replicate to the Replicate handler
-      if (metadata.source === 'fal') {
-        const { processFALWebhookInBackground } = await import('./services/webhook-handler');
-        await processFALWebhookInBackground(prediction, metadata, env, origin);
-      } else {
-        await processWebhookInBackground(prediction as any, metadata, env, origin);
-      }
+      await processWebhookInBackground(prediction as any, metadata, env, origin);
 
       queueLogger.info(`Completed webhook queue for ${metadata.type} - storyId: ${metadata.storyId}, sceneIndex: ${metadata.sceneIndex}`);
       message.ack();

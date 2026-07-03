@@ -58,7 +58,70 @@ export {
   getProviderForAudio,
   checkProviderHealth,
   getProviderAndModelId,
+  resolveProvider,
+  getProviderWithOverride,
 } from './factory';
+
+// ============================================================================
+// Model ID Mapping
+// ============================================================================
+
+export {
+  translateModelId,
+  getCanonicalName,
+  getModelIdForProvider,
+  isKnownModelFormat,
+  detectGenerationType,
+  MODEL_ID_MAP,
+} from './model-map';
+export type { GenerationType, ProviderModelIds } from './model-map';
+
+// ============================================================================
+// Input Field Mapping
+// ============================================================================
+
+export {
+  getInputFieldsForModel,
+  attachImageInputsForProvider,
+  applyDefaultInputs,
+  shouldIgnoreWidthHeight,
+  getExcludedFields,
+  INPUT_FIELD_MAP,
+} from './input-fields';
+export type { ModelFieldConfig } from './input-fields';
+
+// ============================================================================
+// Duration Configuration
+// ============================================================================
+
+export {
+  getNearestDuration,
+  MODEL_DURATION_OPTIONS,
+} from './duration-config';
+
+// ============================================================================
+// Webhook Strategy
+// ============================================================================
+
+export {
+  WebhookStrategyFactory,
+  ReplicateWebhookStrategy,
+  FalWebhookStrategy,
+} from './webhook-strategy';
+export type { IWebhookStrategy, WebhookStatus } from './webhook-strategy';
+
+// ============================================================================
+// Webhook URL
+// ============================================================================
+
+export {
+  buildWebhookUrl,
+  getWebhookEndpoint,
+  detectProviderFromWebhookUrl,
+  buildWebhookMetadata,
+  WEBHOOK_METADATA_KEYS,
+  WEBHOOK_ENDPOINTS,
+} from './webhook-url';
 
 // ============================================================================
 // Providers
@@ -87,6 +150,22 @@ export {
   isVideoModel,
 } from './video-pricing';
 export type { VideoModelConfig } from './video-pricing';
+
+// ============================================================================
+// Tier Pricing (Tier-to-Model Mappings)
+// ============================================================================
+
+export {
+  getTierModel,
+  getTierModelForProvider,
+  getAvatarTierModel,
+  getAvatarTierModelForProvider,
+  getImageTierModel,
+  getImageTierModelForProvider,
+  validateTierModels,
+  tierModels,
+} from './tier-pricing';
+export type { TemplateType } from './tier-pricing';
 
 // ============================================================================
 // Convenience Types

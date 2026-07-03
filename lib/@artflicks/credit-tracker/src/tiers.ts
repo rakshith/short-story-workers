@@ -4,6 +4,11 @@
  */
 
 import { pricingData, TemplateType } from './types';
+import { 
+  getTierModel as getTierModelFromProvider,
+  getAvatarTierModel as getAvatarTierModelFromProvider,
+  type TemplateType as ProviderTemplateType
+} from '@artflicks/model-provider';
 
 /**
  * Get tier cost (video generation cost per scene for a tier)
@@ -34,20 +39,10 @@ export function getVideoTierCost(tier: string): number {
 
 /**
  * Get the model ID for a tier
+ * Delegates to model-provider tier-pricing for canonical model names
  */
 export function getTierModel(tier: string, templateType?: TemplateType): string {
-  const tierModels: Record<string, string> = pricingData.videoTierModels;
-  const characterVideoTierModels: Record<string, string> = pricingData.characterVideoTierModels;
-  const scriptVideoTierModels: Record<string, string> = pricingData.scriptVideoTierModels;
-  
-  if (templateType === 'character-video') {
-    return characterVideoTierModels[tier] || tierModels[tier];
-  }
-  if (templateType === 'faceless-video' || templateType === 'image') {
-    return scriptVideoTierModels[tier] || tierModels[tier];
-  }
-  
-  return tierModels[tier];
+  return getTierModelFromProvider(tier, templateType as ProviderTemplateType);
 }
 
 /**
@@ -68,8 +63,8 @@ export function getAvatarTierCost(model: string): number {
 
 /**
  * Get the model ID for an avatar tier
+ * Delegates to model-provider tier-pricing for canonical model names
  */
 export function getAvatarTierModel(tier: string): string {
-  const avatarTierModels: Record<string, string> = pricingData.avatarTierModels;
-  return avatarTierModels[tier] ?? avatarTierModels.standard;
+  return getAvatarTierModelFromProvider(tier);
 }

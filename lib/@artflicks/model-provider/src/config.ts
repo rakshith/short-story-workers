@@ -58,7 +58,7 @@ export const VIDEO_MODEL_PROVIDER_MAP: Record<string, ProviderType> = {
   'runwayml/gen-4.5': PROVIDER_NAMES.REPLICATE,
   
   // Replicate video models (ByteDance)
-  'bytedance/seedance-1-pro-fast': PROVIDER_NAMES.REPLICATE,
+  'bytedance/seedance-1.5-pro': PROVIDER_NAMES.REPLICATE,
   
   // Replicate video models (OpenAI)
   'openai/sora-2': PROVIDER_NAMES.REPLICATE,

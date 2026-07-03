@@ -35,6 +35,8 @@ import {
   SeedanceGenerationType,
 } from './config';
 
+import { translateModelId, GenerationType, detectGenerationType } from './model-map';
+
 import { ReplicateProvider } from './providers/replicate';
 import { FalProvider } from './providers/fal';
 import { GatewayProvider } from './providers/gateway';
@@ -246,6 +248,78 @@ export class ModelProviderFactory {
   }
   
   /**
+   * Get provider with explicit override
+   * 
+   * @param provider - The explicit provider to use (from frontend request)
+   * @param config - Optional provider config
+   * @returns The provider instance
+   */
+  static getProviderWithOverride(
+    provider: ProviderType,
+    config?: Partial<ProviderConfig>
+  ): ModelProvider {
+    return this.createProvider(provider, config);
+  }
+  
+  /**
+   * Resolve provider and translate model ID in one call
+   * 
+   * This is the main entry point for the worker.
+   * It handles:
+   * 1. Provider resolution (explicit override or default)
+   * 2. Model ID translation (canonical -> provider-specific)
+   * 3. Provider instance creation
+   * 
+   * @param modelId - The model ID (canonical or provider-specific)
+   * @param mediaType - The type of media (video, image, audio)
+   * @param explicitProvider - Optional explicit provider from frontend
+   * @param generationType - Optional generation type for Seedance models
+   * @param inputContext - Optional input context for auto-detecting generation type
+   * @returns Object with provider, translated model ID, and provider type
+   */
+  static resolveProvider(
+    modelId: string,
+    mediaType: 'video' | 'image' | 'audio',
+    explicitProvider?: ProviderType,
+    generationType?: SeedanceGenerationType,
+    inputContext?: Record<string, unknown>
+  ): {
+    provider: ModelProvider;
+    actualModelId: string;
+    providerType: ProviderType;
+  } {
+    const cfg = getFactoryConfig();
+    
+    let resolvedProviderType: ProviderType;
+    
+    if (explicitProvider) {
+      resolvedProviderType = explicitProvider;
+    } else {
+      resolvedProviderType = getProviderForModel(modelId, mediaType) ?? cfg.primary ?? DEFAULT_PROVIDER;
+      
+      const isSeedance = modelId.startsWith('bytedance/seedance');
+      if (isSeedance && cfg.seedanceProvider) {
+        resolvedProviderType = cfg.seedanceProvider;
+      }
+    }
+    
+    // Auto-detect generation type from input context if not provided
+    const effectiveGenerationType = generationType || 
+      (inputContext ? detectGenerationType(inputContext, mediaType) : undefined);
+    
+    const actualModelId = translateModelId(modelId, resolvedProviderType, effectiveGenerationType as any);
+    
+    const providerConfig = cfg.providers?.[resolvedProviderType] ?? { enabled: true };
+    const provider = this.createProvider(resolvedProviderType, providerConfig);
+    
+    return {
+      provider,
+      actualModelId,
+      providerType: resolvedProviderType,
+    };
+  }
+  
+  /**
    * Get health status for all providers
    */
   static async getHealthStatus(): Promise<ProviderHealthMap> {
@@ -299,3 +373,18 @@ export const getProviderAndModelId = (
   mediaType: 'video' | 'image' | 'audio',
   generationType?: SeedanceGenerationType
 ) => ModelProviderFactory.getProviderAndModelId(modelId, mediaType, generationType);
+
+// Resolve provider with explicit override support
+export const resolveProvider = (
+  modelId: string,
+  mediaType: 'video' | 'image' | 'audio',
+  explicitProvider?: ProviderType,
+  generationType?: SeedanceGenerationType,
+  inputContext?: Record<string, unknown>
+) => ModelProviderFactory.resolveProvider(modelId, mediaType, explicitProvider, generationType, inputContext);
+
+// Get provider with explicit override
+export const getProviderWithOverride = (
+  provider: ProviderType,
+  config?: Partial<ProviderConfig>
+) => ModelProviderFactory.getProviderWithOverride(provider, config);

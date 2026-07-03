@@ -33,6 +33,7 @@ export class VideoPromptQualitySkill extends BaseSkill {
     const motionVocab = this.getMotionVocabulary(mood);
     const transitionVocab = this.getTransitionVocabulary(atmosphere);
     const contentAdaptation = this.getContentAdaptation(contentType);
+    const styleIntegration = this.getStyleIntegration(context.stylePrompt);
 
     return `══════════════════════════════════════════════════════════════
 ═══ VIDEO PROMPT QUALITY — DYNAMIC ═══
@@ -46,6 +47,8 @@ ATMOSPHERE: ${atmosphere.toUpperCase()}
 ${transitionVocab}
 
 ${contentAdaptation}
+
+${styleIntegration}
 
 MOTION RULES:
 - Primary subject has intentional, purposeful movement
@@ -307,6 +310,39 @@ MOTION RULES:
     };
 
     return adaptations[contentType] || adaptations.other;
+  }
+
+  private getStyleIntegration(stylePrompt?: string): string {
+    if (!stylePrompt) {
+      return '';
+    }
+
+    return `══════════════════════════════════════════════════════════════
+STYLE PRESET INTEGRATION (MANDATORY — HIGHEST PRIORITY)
+══════════════════════════════════════════════════════════════
+
+A style preset has been provided. You MUST apply it to ALL videoPrompt fields.
+
+STYLE INFLUENCE ON VIDEO PROMPTS:
+- Motion style: Match the movement quality described in the style (bouncy, smooth, mechanical, organic, etc.)
+- Camera behavior: Use camera movements that fit the style aesthetic
+- Transition feel: Choose transitions that match the style mood
+- Animation quality: Match the visual treatment (cartoon, realistic, stylized, etc.)
+- Energy level: Match the pace and intensity described in the style
+
+RULES:
+- Read the style vocabulary carefully
+- Extract motion/animation keywords from the style description
+- Apply those keywords to videoPrompt motion descriptions
+- Do NOT use generic cinematic motion if style specifies a different aesthetic
+- Style consistency across all scenes is mandatory
+
+EXAMPLE:
+If style says "2D cartoon, flat colors, bouncy motion" →
+✅ videoPrompt: "Character bounces into frame, exaggerated cartoon movement, bouncy animation"
+❌ videoPrompt: "Slow push-in, rack focus, cross dissolve" (generic cinematic, ignores style)
+
+══════════════════════════════════════════════════════════════`;
   }
 
   private talkingCharacter3D(): string {
