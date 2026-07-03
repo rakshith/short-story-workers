@@ -17,6 +17,10 @@ export class ImagePromptQualitySkill extends BaseSkill {
       return this.skeleton3D();
     }
 
+    if (variant === 'script-to-shorts') {
+      return this.scriptToShorts(context);
+    }
+
     return this.metadataDriven(context);
   }
 
@@ -49,6 +53,43 @@ COMPOSITION RULES:
 - EVERY scene must look visually DIFFERENT (change angle, setting, lighting, or subject)
 - The visual should match what's being narrated in that moment
 - Strong color palette per scene — avoid washed out`;
+  }
+
+  private scriptToShorts(context: SkillContext): string {
+    const intent = context.intent;
+    const lightingStyle = intent?.lightingStyle || 'cinematic';
+    const textureStyle = intent?.textureStyle || 'premium';
+    const mood = intent?.mood || 'cinematic';
+
+    const lightingVocab = this.getLightingVocabulary(lightingStyle);
+    const textureVocab = this.getTextureVocabulary(textureStyle);
+    const moodAdaptation = this.getMoodAdaptation(mood);
+
+    return `══════════════════════════════════════════════════════════════
+═══ IMAGE PROMPTS — SCRIPT TO SHORTS ═══
+
+For EACH scene:
+- Use user's [Visual] description as the BASE (never replace it)
+- Add characterAnchor details naturally woven in
+- Add composition: rule of thirds, depth of field, leading lines
+- Keep under 50 words
+- ${context.stylePrompt ? 'Apply style vocabulary to maintain visual consistency' : ''}
+
+LIGHTING STYLE: ${lightingStyle.toUpperCase()}
+
+${lightingVocab}
+
+TEXTURE STYLE: ${textureStyle.toUpperCase()}
+
+${textureVocab}
+
+${moodAdaptation}
+
+RULES:
+- ONE imagePrompt per scene (no extra scenes)
+- Visual must match user's [Visual] description
+- Preserve user's visual intent
+- NEVER include duration or aspect ratio (handled separately)`;
   }
 
   private getLightingVocabulary(style: string): string {

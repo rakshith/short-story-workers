@@ -21,44 +21,24 @@ const narrationDescribe = (base: string, mediaType?: 'image' | 'video') =>
         : base;
 
 const createYouTubeShortsSceneSchema = (mediaType?: 'image' | 'video') => {
-    if (mediaType === 'video') {
-        return z.object({
-            sceneNumber: z.number().describe('Scene number in sequence'),
-            duration: sceneDurationSchema(mediaType),
-            narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene.', mediaType)),
-            imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English.'),
-            cameraAngle: z.string().nullable().describe('Camera angle or shot type'),
-            videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
-        });
-    }
-    
     return z.object({
         sceneNumber: z.number().describe('Scene number in sequence'),
         duration: sceneDurationSchema(mediaType),
         narration: z.string().describe(narrationDescribe('Engaging voiceover narration for this scene.', mediaType)),
         imagePrompt: z.string().describe('SCROLL-STOPPING visual description in English.'),
         cameraAngle: z.string().nullable().describe('Camera angle or shot type'),
+        videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
     });
 };
 
 const createCharacterStorySceneSchema = (mediaType?: 'image' | 'video') => {
-    if (mediaType === 'video') {
-        return z.object({
-            sceneNumber: z.number().describe('Scene number in sequence'),
-            duration: sceneDurationSchema(mediaType),
-            narration: z.string().describe(narrationDescribe('Voiceover narration.', mediaType)),
-            imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description.'),
-            cameraAngle: z.string().describe('Camera angle for this scene'),
-            videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
-        });
-    }
-    
     return z.object({
         sceneNumber: z.number().describe('Scene number in sequence'),
         duration: sceneDurationSchema(mediaType),
         narration: z.string().describe(narrationDescribe('Voiceover narration.', mediaType)),
         imagePrompt: z.string().describe('CHARACTER-CENTRIC visual description.'),
         cameraAngle: z.string().describe('Camera angle for this scene'),
+        videoPrompt: z.string().describe('Detailed image-to-video animation prompt'),
     });
 };
 

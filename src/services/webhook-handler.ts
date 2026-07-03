@@ -111,7 +111,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         }
 
         if (prediction.status !== 'succeeded') {
-            console.error(`[WEBHOOK] Prediction failed: ${prediction.error}`);
+            apiLogger.error(`Prediction failed`, { storyId, sceneIndex, type, error: prediction.error });
             
             // Handle avatar failure
             if (type === 'avatar') {
@@ -122,8 +122,10 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             const id = env.STORY_COORDINATOR.idFromName(storyId);
             const coordinator = env.STORY_COORDINATOR.get(id);
             if (type === 'video') {
+                apiLogger.error(`Video scene failed`, { storyId, sceneIndex, error: prediction.error });
                 await updateCoordinatorVideo(coordinator, { sceneIndex, videoError: prediction.error || 'Generation failed' });
             } else {
+                apiLogger.error(`Image scene failed`, { storyId, sceneIndex, error: prediction.error });
                 await updateCoordinatorImage(coordinator, { sceneIndex, imageError: prediction.error || 'Generation failed' });
             }
             
@@ -541,9 +543,9 @@ export async function handleFALWebhook(request: Request, env: Env, ctx?: Executi
         return new Response('Invalid JSON body', { status: 400 });
     }
 
-    apiLogger.info(`Received FAL ${type} webhook`, { storyId, sceneIndex, status: body?.status || body?.state });
-
     const strategy = WebhookStrategyFactory.getStrategy('falai');
+    const initialError = strategy.getError(body);
+    apiLogger.info(`Received FAL ${type} webhook`, { storyId, sceneIndex, status: body?.status || body?.state, error: initialError });
 
     if (strategy.isIntermediateStatus(body)) {
         apiLogger.info(`FAL intermediate status, skipping`, { storyId });

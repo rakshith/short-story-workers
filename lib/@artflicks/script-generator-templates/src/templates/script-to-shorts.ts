@@ -18,6 +18,7 @@ function buildSkillContext(context: ScriptGenerationContext): SkillContext {
     characterReferenceImages: context.characterReferenceImages,
     flags: {},
     intent: context.intent,
+    stylePrompt: context.stylePrompt,
   };
 }
 
@@ -123,15 +124,6 @@ If user provides [Character: description]:
 → Include in EVERY imagePrompt exactly as provided
 
 ══════════════════════════════════════════════════════════════
-                    IMAGE PROMPT GENERATION
-══════════════════════════════════════════════════════════════
-For EACH scene:
-- Use user's visual description from [Visual] as base
-- Add characterAnchor details naturally woven in
-- Add cinematic lighting and atmosphere
-- Keep under 50 words
-
-══════════════════════════════════════════════════════════════
                     SCENE OUTPUT
 ══════════════════════════════════════════════════════════════
 {
@@ -147,6 +139,10 @@ For EACH scene:
     "videoPrompt": "detailed motion/animation description for video generation"
   }]
 }
+
+${skillRegistry.compose(['style-vocabulary'], skillCtx)}
+
+${skillRegistry.compose(['image-prompt-quality'], { ...skillCtx, flags: { imagePromptVariant: 'script-to-shorts' } })}
 
 ${skillRegistry.compose(['video-prompt-quality'], { ...skillCtx, flags: { videoPromptVariant: 'script-to-shorts' } })}`;
   }

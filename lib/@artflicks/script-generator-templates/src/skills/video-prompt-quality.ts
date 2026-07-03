@@ -18,7 +18,7 @@ export class VideoPromptQualitySkill extends BaseSkill {
     }
 
     if (variant === 'script-to-shorts') {
-      return this.scriptToShorts();
+      return this.scriptToShorts(context);
     }
 
     return this.metadataDriven(context);
@@ -478,40 +478,52 @@ RULES:
 - No text, no labels — pure visual storytelling`;
   }
 
-  private scriptToShorts(): string {
+  private scriptToShorts(context: SkillContext): string {
+    const intent = context.intent;
+    const mood = intent?.mood || 'cinematic';
+    const atmosphere = intent?.atmosphere || 'neutral';
+    const contentType = intent?.contentType || 'other';
+
+    const motionVocab = this.getMotionVocabulary(mood);
+    const transitionVocab = this.getTransitionVocabulary(atmosphere);
+    const contentAdaptation = this.getContentAdaptation(contentType);
+    const styleIntegration = this.getStyleIntegration(context.stylePrompt);
+
     return `══════════════════════════════════════════════════════════════
-═══ CAMERA MOVEMENTS — SCRIPT TO SHORTS ═══
+═══ VIDEO PROMPTS — SCRIPT TO SHORTS ═══
 
-CAMERA MOVEMENT VOCABULARY:
-- Slow push-in — dramatic emphasis, intimacy
-- Pull-out — reveal, expand context
-- Tracking shot — follow action laterally
-- Crane up/down — vertical reveal, authority
-- Rack focus — shift attention between subjects
-- Pan left/right — horizontal scanning
-- Tilt up/down — vertical scanning
-- Handheld — organic, documentary energy
-- Aerial view — god-like perspective, scale
-- Overhead god's-eye — patterns, layout, overview
+For EACH scene:
+- Start with user's [Visual] description as base (never replace it)
+- Add motion matching narration emotion
+- Add camera movement (slow push-in, tracking, etc.)
+- Add environmental motion (wind, particles, atmosphere)
+- Match the visual style of the imagePrompt
+- ${context.stylePrompt ? 'Apply style vocabulary to motion and atmosphere' : ''}
 
-TRANSITION VOCABULARY:
-- Match cut — visual continuity (shape, color, motion)
-- Jump cut — temporal jump, energy, urgency
-- Cross dissolve — soft temporal transition
-- Whip pan — fast motion blur between scenes
-- L-cut/J-cut — audio leads/trails visual
-- Fade in/out — scene beginning/ending
+MOOD: ${mood.toUpperCase()}
 
-TIMING:
-- Slow motion — emphasis, beauty, detail
-- Time-lapse — passage of time, transformation
-- Speed ramp — accelerate/decelerate within shot
-- Freeze frame — moment emphasis, title card
+${motionVocab}
 
-VARIETY RULE:
+ATMOSPHERE: ${atmosphere.toUpperCase()}
+
+${transitionVocab}
+
+${contentAdaptation}
+
+${styleIntegration}
+
+ENVIRONMENTAL MOTION:
+- Wind moving fabric, hair, grass, trees
+- Dust particles, light rays, mist floating
+- Steam, smoke, glowing atmosphere
+- Water ripples, reflections shifting
+- Subtle background activity (birds, leaves falling)
+
+RULES:
+- One camera movement per scene (no extra scenes)
+- Motion must serve the story (not random)
 - VARY across scenes — don't repeat same shot type
-- Match movement to content emotion
-- Each scene has distinct camera behavior`;
+- NEVER include duration or aspect ratio (handled separately)`;
   }
 }
 
