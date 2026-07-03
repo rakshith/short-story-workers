@@ -400,8 +400,8 @@ async function createStoryRecord(
       mediaType: videoConfig?.mediaType ?? "image",
     } as VideoConfig;
 
-    // Calculate cost BEFORE story creation — independent of frontend
-    const costResponse = calculateGenerationCost(videoConfig, videoConfig.script);
+    // Calculate cost BEFORE story creation — uses actual scene count for accurate pricing
+    const costResponse = calculateGenerationCost(videoConfig, videoConfig.script, storyData.scenes?.length);
     console.log(`[Story Orchestrator] Calculated cost:`, costResponse);
 
     const createdStory = await storyService.createStory({
@@ -498,14 +498,14 @@ async function createStoryRecord(
 
 function calculateGenerationCost(
   videoConfig: VideoConfig,
-  script?: string
+  script?: string,
+  sceneCount?: number
 ): CostResponse {
   try {
     const mediaType = videoConfig?.mediaType;
     let modelTier = videoConfig?.mediaTier || "basic";
     const duration = videoConfig.duration || 15;
 
-    const mediaTypeStr = String(mediaType || "video");
     const isImage = !isVideoMediaType(videoConfig?.mediaType);
     const mediaTypeForCalc: "ai-images" | "ai-videos" = isImage
       ? "ai-images"
@@ -520,6 +520,7 @@ function calculateGenerationCost(
       mediaType: mediaTypeForCalc as any,
       enableImmersiveAudio: videoConfig?.enableImmersiveAudio,
       scriptCharCount,
+      sceneCount,
     });
 
     return {

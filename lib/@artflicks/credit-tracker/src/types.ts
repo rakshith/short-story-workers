@@ -123,6 +123,7 @@ export interface VideoGenerationEstimateParams {
   mediaType: GenerationMediaType;
   enableImmersiveAudio?: boolean;
   scriptCharCount?: number;
+  sceneCount?: number;
 }
 
 export interface VideoGenerationEstimate {
@@ -144,6 +145,7 @@ export interface GenerationEstimateParams {
   duration: number;        // seconds
   mediaType: GenerationMediaType;  // routes to correct tier table
   operations?: GenerationOperation[];
+  sceneCount?: number;     // actual scene count from generated script (overrides duration-based estimate)
 }
 
 // Unified generation estimate result

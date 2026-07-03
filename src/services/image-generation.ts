@@ -156,13 +156,15 @@ export async function processFinishedPrediction(
     imagesBucket: R2Bucket;
     pathName: string;
     outputFormat?: string;
+    source?: 'replicate' | 'fal';
   }
 ): Promise<string[]> {
-  const { imagesBucket, pathName } = options;
+  const { imagesBucket, pathName, source } = options;
+  const logPrefix = source === 'fal' ? '[FAL-WEBHOOK]' : '[REPLICATE-WEBHOOK]';
 
   // Extract image URLs using the extractImageUrls function
-  const imageUrls = await extractImageUrls(prediction.output, '[REPLICATE-WEBHOOK]');
-  console.log(`[REPLICATE-WEBHOOK] Extracted URLs:`, imageUrls);
+  const imageUrls = await extractImageUrls(prediction.output, logPrefix);
+  console.log(`${logPrefix} Extracted URLs:`, imageUrls);
 
   const storageUrls: string[] = [];
   for (const imageUrl of imageUrls) {

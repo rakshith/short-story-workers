@@ -66,7 +66,7 @@ function calculateScriptCost(durationSeconds: number): number {
 export function estimateVideoGeneration(
   params: VideoGenerationEstimateParams,
 ): VideoGenerationEstimate {
-  const { duration, modelTier, mediaType, enableImmersiveAudio, scriptCharCount } = params;
+  const { duration, modelTier, mediaType, enableImmersiveAudio, scriptCharCount, sceneCount } = params;
 
   // Estimate char count from duration when not provided (frontend doesn't have script yet)
   const estimatedCharCount = scriptCharCount ?? Math.ceil(duration * ESTIMATED_WPS * ESTIMATED_CHARS_PER_WORD);
@@ -83,6 +83,7 @@ export function estimateVideoGeneration(
     duration,
     mediaType,
     operations,
+    sceneCount,
   });
 
   return {
@@ -122,7 +123,7 @@ export function canAfford(
  * Operations (TTS, voice, music, etc.) are added on top from pricing.json.
  */
 export function estimateGeneration(params: GenerationEstimateParams): GenerationEstimate {
-  const { model, duration, mediaType, operations } = params;
+  const { model, duration, mediaType, operations, sceneCount } = params;
 
   let totalCredits = 0;
   let numberOfScenes: number | undefined;
@@ -142,9 +143,12 @@ export function estimateGeneration(params: GenerationEstimateParams): Generation
     };
   } else {
     // Scene-based pricing: credits = costPerScene × scenes
-    const scenes = mediaType === 'ai-videos'
-      ? videoScenesFromDuration(duration)
-      : imageScenesFromDuration(duration);
+    // Use actual sceneCount when provided, otherwise derive from duration
+    const scenes = (sceneCount !== undefined && sceneCount > 0)
+      ? sceneCount
+      : (mediaType === 'ai-videos'
+        ? videoScenesFromDuration(duration)
+        : imageScenesFromDuration(duration));
     numberOfScenes = scenes;
 
     const costPerScene = mediaType === 'ai-images'

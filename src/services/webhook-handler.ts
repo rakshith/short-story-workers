@@ -181,6 +181,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 imagesBucket: env.IMAGES_BUCKET,
                 pathName: path_name,
                 outputFormat,
+                source: metadata.source,
             });
         }
         const resultUrl = storageUrls[0];
