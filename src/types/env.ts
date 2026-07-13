@@ -1,6 +1,6 @@
 // Environment types for Cloudflare Workers
 
-import { R2Bucket, Queue, DurableObjectNamespace } from '@cloudflare/workers-types';
+import { R2Bucket, Queue, DurableObjectNamespace, MediaBinding } from '@cloudflare/workers-types';
 import { StoryTimeline, VideoConfig } from '.';
 import { TemplatePipelineConfig } from '../config/template-config';
 
@@ -58,6 +58,9 @@ export interface Env {
   // Durable Objects
   STORY_COORDINATOR: DurableObjectNamespace;
 
+  // Media Transformations (Cloudflare native frame extraction)
+  MEDIA: MediaBinding;
+
   // Supabase
   SUPABASE_URL: string;
   SUPABASE_ANON_KEY: string;
@@ -79,5 +82,8 @@ export interface Env {
   CF_AI_GATEWAY_URL: string;
   ENVIRONMENT: string;
   APP_URL?: string;
+
+  // Vercel AI Gateway
+  AI_GATEWAY_API_KEY?: string;
 }
 

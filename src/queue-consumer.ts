@@ -5,12 +5,13 @@ import { processSceneImage, processSceneAudio, processSceneVideo } from './servi
 import { processWebhookInBackground } from './services/webhook-handler';
 import { queueLogger } from './utils/logger';
 import { sortMessagesByPriority, canProcessJob } from './services/concurrency-manager';
-import { updateCoordinatorImage, updateCoordinatorVideo, updateCoordinatorAudio, getCoordinatorProgress, finalizeCoordinator } from './utils/coordinator';
+import { updateCoordinatorImage, updateCoordinatorVideo, updateCoordinatorAudio, getCoordinatorProgress, getSceneFromCoordinator, finalizeCoordinator } from './utils/coordinator';
 import { sendStoryCompletionEmail } from './services/email-service';
 import { trackWorkerCpuTime } from './services/usage-tracking';
 import { calcVideoDelaySeconds } from './utils/queue-batch';
 import { getTemplateConfig } from './config/template-config';
-import { isVideoMediaType } from './utils/media-type';
+import { evaluateCondition, executePostAction } from './workflows/pipeline-config';
+import { resolveWorkflow, getVideoTrigger, getNode, type ResolvedWorkflow } from './utils/workflow-resolver';
 
 /**
  * Dead-letter queue handler - Logs and acks messages that exhausted retries or were sent for audit.
@@ -178,12 +179,21 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
         });
 
         // Gate: if audio arrived second (image was already done), queue video now with real duration
+        // Only queue standard video when trigger is "auto" (not "manual" or "post-action")
+        const _resolvedConfig = resolveWorkflow({
+          videoType: data.videoConfig?.videoType || '',
+          templateId: data.videoConfig?.templateId,
+          sceneReviewRequired: data.videoConfig?.sceneReviewRequired,
+          productType: (data.videoConfig as any)?.productType,
+          mediaType: data.videoConfig?.mediaType,
+        });
+        const _videoTrigger = _resolvedConfig ? getVideoTrigger(_resolvedConfig) : null;
+
         if (
           result.success &&
           status.isSceneReadyForVideo &&
           status.sceneImageUrl &&
-          isVideoMediaType(data.videoConfig?.mediaType) &&
-          !data.videoConfig?.sceneReviewRequired
+          _videoTrigger === 'auto'
         ) {
           const videoQueueMessage = {
             jobId: data.jobId,
@@ -246,6 +256,54 @@ export async function handleQueue(batch: MessageBatch<QueueMessage>, env: Env): 
             storyId: data.storyId,
             userId: data.userId
           }, coordinator, env);
+        }
+
+        // Pipeline post-actions: execute configured actions after audio generation
+        if (result.success) {
+          // Resolve workflow config to get post-actions for audio step
+          const _postResolved = resolveWorkflow({
+            videoType: data.videoConfig?.videoType || '',
+            templateId: data.videoConfig?.templateId,
+            sceneReviewRequired: data.videoConfig?.sceneReviewRequired,
+            productType: (data.videoConfig as any)?.productType,
+            mediaType: data.videoConfig?.mediaType,
+          });
+          const _postAudioNode = _postResolved ? getNode(_postResolved, 'audio') : undefined;
+          if (_postAudioNode?.postActions) {
+            // Fetch scene from DO (has composer metadata from workflow)
+            const scene = await getSceneFromCoordinator(data.storyId, data.sceneIndex, env);
+            if (scene) {
+              for (const action of _postAudioNode.postActions) {
+                if (evaluateCondition(action.condition, scene)) {
+                  try {
+                    await executePostAction(action, scene, result, {
+                      jobId: data.jobId,
+                      userId: data.userId,
+                      storyId: data.storyId,
+                      sceneIndex: data.sceneIndex,
+                      totalScenes: status.totalScenes ?? 0,
+                      videoConfig: data.videoConfig,
+                      baseUrl: data.baseUrl || '',
+                      env,
+                    });
+                    queueLogger.info(`Post-action '${action.type}' executed for scene ${data.sceneIndex}`, {
+                      sceneIndex: data.sceneIndex,
+                      actionType: action.type,
+                    });
+                  } catch (postErr) {
+                    queueLogger.error(`Post-action '${action.type}' failed for scene ${data.sceneIndex}`, postErr, {
+                      sceneIndex: data.sceneIndex,
+                    });
+                  }
+                }
+              }
+            } else {
+              queueLogger.warn(`Scene ${data.sceneIndex} not found in DO for post-action`, {
+                sceneIndex: data.sceneIndex,
+                storyId: data.storyId,
+              });
+            }
+          }
         }
 
         await trackWorkerCpuTime(data.jobId, data.userId, data.storyId, Date.now() - startTime, data.sceneIndex, 'audio', env);
@@ -457,42 +515,46 @@ export async function syncStoryToSupabase(
       // Don't fail the job if SSE fails - continue with email
     }
 
-    // Send completion email notification
-    try {
-      // Fetch user profile for email and name
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('email, display_name')
-        .eq('id', data.userId)
-        .single();
+    // Send completion email notification (only when all scenes succeeded)
+    if (!hasErrors) {
+      try {
+        // Fetch user profile for email and name
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('email, display_name')
+          .eq('id', data.userId)
+          .single();
 
-      if (profileError) {
-        queueLogger.error('Failed to fetch user profile for email notification', profileError, { userId: data.userId });
-      } else if (profile?.email) {
-        // Thumbnail URL - use the first scene image that exists
-        let thumbnailUrl = 'https://artflicks.app/short-stories'; // Fallback
+        if (profileError) {
+          queueLogger.error('Failed to fetch user profile for email notification', profileError, { userId: data.userId });
+        } else if (profile?.email) {
+          // Thumbnail URL - use the first scene image that exists
+          let thumbnailUrl = 'https://artflicks.app/short-stories'; // Fallback
 
-        if (updatedStory && updatedStory.scenes && updatedStory.scenes.length > 0) {
-          const firstScene = updatedStory.scenes.find((s: any) => s.imageUrl);
-          if (firstScene) {
-            thumbnailUrl = firstScene.imageUrl;
+          if (updatedStory && updatedStory.scenes && updatedStory.scenes.length > 0) {
+            const firstScene = updatedStory.scenes.find((s: any) => s.imageUrl);
+            if (firstScene) {
+              thumbnailUrl = firstScene.imageUrl;
+            }
           }
+
+          await sendStoryCompletionEmail(profile.email, {
+            DISPLAY_NAME: profile.display_name || 'there',
+            STORY_TITLE: updatedStory?.title || 'Your Story',
+            STORY_URL: `https://artflicks.app/short-stories`,
+            THUMBNAIL_URL: thumbnailUrl
+          });
+
+          queueLogger.info(`Completion email notification sent to ${profile.email}`, { jobId: data.jobId });
+        } else {
+          queueLogger.warn('No email found for user, skipping notification', { userId: data.userId });
         }
-
-        await sendStoryCompletionEmail(profile.email, {
-          DISPLAY_NAME: profile.display_name || 'there',
-          STORY_TITLE: updatedStory?.title || 'Your Story',
-          STORY_URL: `https://artflicks.app/short-stories`,
-          THUMBNAIL_URL: thumbnailUrl
-        });
-
-        queueLogger.info(`Completion email notification sent to ${profile.email}`, { jobId: data.jobId });
-      } else {
-        queueLogger.warn('No email found for user, skipping notification', { userId: data.userId });
+      } catch (emailError) {
+        // Don't fail the whole sync if email fails
+        queueLogger.error('Failed to send completion email', emailError, { jobId: data.jobId });
       }
-    } catch (emailError) {
-      // Don't fail the whole sync if email fails
-      queueLogger.error('Failed to send completion email', emailError, { jobId: data.jobId });
+    } else {
+      queueLogger.info(`Skipping completion email — story has scene errors`, { jobId: data.jobId, errorCount: errorDetails.length });
     }
   } catch (error) {
     queueLogger.error('Error syncing to Supabase', error, { jobId: data.jobId });
@@ -546,7 +608,18 @@ export async function syncPartialStory(
     const totalScenes = progressData.totalScenes || 1;
     const voiceOverEnabled = progressData.videoConfig?.enableVoiceOver !== false;
     const denominator = voiceOverEnabled ? totalScenes * 2 : totalScenes;
-    const useVideoProgress = isVideoMediaType(progressData.videoConfig?.mediaType);
+    // Determine if this is a video-producing story by checking if the resolved workflow has video enabled
+    const _progressResolved = resolveWorkflow({
+      videoType: progressData.videoConfig?.videoType || '',
+      templateId: progressData.videoConfig?.templateId,
+      sceneReviewRequired: progressData.videoConfig?.sceneReviewRequired,
+      mediaType: progressData.videoConfig?.mediaType,
+    });
+    const _progressVideoNode = _progressResolved ? getNode(_progressResolved, 'video') : undefined;
+    const _progressAudioNode = _progressResolved ? getNode(_progressResolved, 'audio') : undefined;
+    // Video progress if: video node enabled (standard) OR audio has producesVideo post-actions
+    const useVideoProgress = (_progressVideoNode?.enabled === true) ||
+      (_progressAudioNode?.postActions?.some((a: any) => a.producesVideo) === true);
     const numerator = useVideoProgress
       ? (progressData.videosCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0)
       : (progressData.imagesCompleted || 0) + (voiceOverEnabled ? (progressData.audioCompleted || 0) : 0);

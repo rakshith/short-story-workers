@@ -83,6 +83,7 @@ export class FalProvider extends HealthyProviderWrapper {
       // Transform specific fields for Fal.ai format
       ...(input.negativePrompt && { negative_prompt: input.negativePrompt }),
       ...(input.imageUrl && { image_url: input.imageUrl }),
+      ...(options?.input),
     };
     
     const normalizedInput = this.normalizeInput(inputData);

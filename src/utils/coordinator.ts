@@ -16,6 +16,7 @@ export function getCoordinator(storyId: string, env: Env): any {
 export async function getSceneFromCoordinator(storyId: string, sceneIndex: number, env: Env): Promise<any | null> {
     const coordinator = getCoordinator(storyId, env);
     const progress = await getCoordinatorProgress(coordinator);
+    if (!progress.scenes || !Array.isArray(progress.scenes)) return null;
     return progress.scenes[sceneIndex] || null;
 }
 
@@ -68,6 +69,10 @@ export interface InitCoordinatorParams {
     videoConfig: any;
     sceneReviewRequired?: boolean;
     skipAudioCheck?: boolean;
+    /** Resolved workflow config (nodes + defaults). DO uses this to compute expectedVideoScenes. */
+    resolvedWorkflow?: any;
+    /** Legacy: scene indices expected to generate video. Used as fallback for in-flight stories. */
+    scenesWithVideo?: number[];
 }
 
 export interface UpdateImageParams {

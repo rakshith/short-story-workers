@@ -6,6 +6,7 @@ import { generateSceneAudio } from './audio-generation';
 import { processorLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { getSceneFromCoordinator } from '../utils/coordinator';
+import { sanitizePrompt } from '../utils/prompt-sanitizer';
 import { Scene } from '../types';
 import { 
   resolveProvider, 
@@ -50,7 +51,7 @@ function buildFinalPrompt(
     parts.push(characterAnchor);
   }
 
-  return parts.filter(p => p).join(', ');
+  return sanitizePrompt(parts.filter(p => p).join(', '));
 }
 
 export interface JobStatus {

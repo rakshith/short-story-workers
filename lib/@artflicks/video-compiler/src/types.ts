@@ -46,6 +46,7 @@ export interface VideoConfig {
   preset?: {
     id: string;
   };
+  aspectRatio?: string;
   music?: string;
   musicVolume?: number;
   enableCaptions?: boolean;

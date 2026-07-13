@@ -1,0 +1,128 @@
+{
+  "version": "1.1.0",
+  "description": "Single source of truth for AI UGC Ads video model selection",
+  "audioModes": {
+    "driving_audio": "Use ElevenLabs TTS via audio parameter (lip-sync to user's voice)",
+    "native": "Use model's native audio generation (future placeholder)"
+  },
+  "models": {
+    "wan-2.7-720p": {
+      "id": "fal-ai/wan/v2.7/image-to-video",
+      "provider": "FAL",
+      "variant": "default",
+      "resolution": "720p",
+      "duration": { "min": 2, "max": 15 },
+      "pricing": { "perSecond": 0.14 },
+      "features": ["driving_audio", "prompt_expansion", "negative_prompt"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_url",
+      "strengths": ["cost-effective", "fast", "good motion"],
+      "bestFor": ["simple products", "static items", "budget-conscious"]
+    },
+    "wan-2.7-1080p": {
+      "id": "fal-ai/wan/v2.7/image-to-video",
+      "provider": "FAL",
+      "variant": "default",
+      "resolution": "1080p",
+      "duration": { "min": 2, "max": 15 },
+      "pricing": { "perSecond": 0.28 },
+      "features": ["driving_audio", "prompt_expansion", "negative_prompt"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_url",
+      "strengths": ["HD quality", "good motion", "cost-effective"],
+      "bestFor": ["simple products", "static items", "high-res output"]
+    },
+    "seedance-mini-720p": {
+      "id": "bytedance/seedance-2.0/mini/reference-to-video",
+      "provider": "FAL",
+      "variant": "mini",
+      "resolution": "720p",
+      "duration": { "min": 4, "max": 15 },
+      "pricing": { "perSecond": 0.1547 },
+      "features": ["driving_audio", "lip_sync", "camera_control", "start_end_frame"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_urls",
+      "audioArray": true,
+      "generateAudio": false,
+      "strengths": ["cheapest seedance", "fast generation", "lip-sync capable"],
+      "bestFor": ["simple products", "budget tier", "quick iterations"]
+    },
+    "seedance-fast-720p": {
+      "id": "bytedance/seedance-2.0/fast/reference-to-video",
+      "provider": "FAL",
+      "variant": "fast",
+      "resolution": "720p",
+      "duration": { "min": 4, "max": 15 },
+      "pricing": { "perSecond": 0.2419 },
+      "features": ["driving_audio", "lip_sync", "camera_control", "start_end_frame"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_urls",
+      "audioArray": true,
+      "generateAudio": false,
+      "strengths": ["low latency", "good quality", "lip-sync capable"],
+      "bestFor": ["moderate complexity", "balanced quality/cost"]
+    },
+    "seedance-standard-720p": {
+      "id": "bytedance/seedance-2.0/reference-to-video",
+      "provider": "FAL",
+      "variant": "standard",
+      "resolution": "720p",
+      "duration": { "min": 4, "max": 15 },
+      "pricing": { "perSecond": 0.3024 },
+      "features": ["driving_audio", "lip_sync", "camera_control", "start_end_frame", "multi_shot"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_urls",
+      "audioArray": true,
+      "generateAudio": false,
+      "strengths": ["best quality", "cinematic", "multi-shot editing"],
+      "bestFor": ["luxury products", "complex motion", "cinematic output"]
+    },
+    "seedance-standard-1080p": {
+      "id": "bytedance/seedance-2.0/reference-to-video",
+      "provider": "FAL",
+      "variant": "standard",
+      "resolution": "1080p",
+      "duration": { "min": 4, "max": 15 },
+      "pricing": { "perSecond": 0.6048 },
+      "features": ["driving_audio", "lip_sync", "camera_control", "start_end_frame", "multi_shot"],
+      "audioInput": "driving_audio",
+      "audioParam": "audio_urls",
+      "audioArray": true,
+      "generateAudio": false,
+      "strengths": ["best quality HD", "cinematic", "multi-shot editing"],
+      "bestFor": ["luxury products", "premium brands", "cinematic 1080p"]
+    }
+  },
+  "decisionTree": {
+    "field": "selectedTier",
+    "branches": {
+      "auto": {
+        "field": "productComplexity",
+        "branches": {
+          "simple": {
+            "field": "userTier",
+            "branches": {
+              "tier1": { "ref": "wan-2.7-720p" },
+              "tier2": { "ref": "wan-2.7-720p" },
+              "tier3": { "ref": "wan-2.7-1080p" },
+              "tier4": { "ref": "wan-2.7-1080p" }
+            }
+          },
+          "complex": {
+            "field": "userTier",
+            "branches": {
+              "tier1": { "ref": "seedance-mini-720p" },
+              "tier2": { "ref": "seedance-fast-720p" },
+              "tier3": { "ref": "seedance-standard-720p" },
+              "tier4": { "ref": "seedance-standard-1080p" }
+            }
+          }
+        }
+      },
+      "basic": { "ref": "wan-2.7-720p" },
+      "pro": { "ref": "wan-2.7-1080p" },
+      "ultra": { "ref": "seedance-fast-720p" },
+      "max": { "ref": "seedance-standard-1080p" }
+    }
+  }
+}

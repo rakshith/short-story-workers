@@ -25,6 +25,13 @@ export const YOUTUBE_EXTRACT_COST = pricingData.operations['youtube-extract'] ??
 export const VOICE_CLONE_BASE_COST = pricingData.operations['voice-clone-base'] ?? 5;
 export const VOICE_CLONE_COST_PER_SECOND = pricingData.operations['voice-clone-per-second'] ?? 0.05;
 
+// AI UGC Ads operation costs
+export const AI_UGC_ADS_VISION_COST = pricingData.operations['ai-ugc-ads-vision-analysis'] ?? 1;
+export const AI_UGC_ADS_DIRECTOR_COST = pricingData.operations['ai-ugc-ads-director'] ?? 2;
+export const AI_UGC_ADS_COMPOSITE_COST = pricingData.operations['ai-ugc-ads-composite'] ?? 10;
+export const AI_UGC_ADS_FRAME_EXTRACTION_COST = pricingData.operations['ai-ugc-ads-frame-extraction'] ?? 1;
+export const AI_UGC_ADS_VIDEO_COMPILATION_COST = pricingData.operations['ai-ugc-ads-video-compilation'] ?? 5;
+
 // Default values
 export const DEFAULT_TIER = 'basic';
 export const BASE_DURATION_PER_CREDIT = 40;

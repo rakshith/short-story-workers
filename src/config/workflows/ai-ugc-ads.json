@@ -1,0 +1,53 @@
+{
+  "field": "productType",
+  "branches": {
+    "physical": {
+      "resolve": {
+        "nodes": [
+          {
+            "id": "audio",
+            "type": "audio",
+            "enabled": true,
+            "postActions": [
+              {
+                "type": "avatar-video",
+                "agent": "AvatarAgent",
+                "condition": "physical-intro-outro",
+                "producesVideo": true
+              },
+              {
+                "type": "video-model",
+                "agent": "VideoModelAgent",
+                "condition": "physical-demo",
+                "producesVideo": true
+              }
+            ]
+          },
+          { "id": "image", "type": "image", "enabled": false },
+          { "id": "video", "type": "video", "enabled": false, "trigger": "post-action" }
+        ]
+      }
+    },
+    "default": {
+      "resolve": {
+        "nodes": [
+          {
+            "id": "audio",
+            "type": "audio",
+            "enabled": true,
+            "postActions": [
+              {
+                "type": "avatar-video",
+                "agent": "AvatarAgent",
+                "condition": "intro-or-outro",
+                "producesVideo": true
+              }
+            ]
+          },
+          { "id": "image", "type": "image", "enabled": false },
+          { "id": "video", "type": "video", "enabled": false, "trigger": "post-action" }
+        ]
+      }
+    }
+  }
+}

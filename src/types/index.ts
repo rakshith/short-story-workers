@@ -118,6 +118,15 @@ export interface VideoConfig {
   avatarImageUrl?: string; // Face photo URL for avatar video generation
   avatarModel?: string; // Avatar model ID (e.g., 'fal-ai/kling-video/ai-avatar/v2/standard')
   isAvatarGeneration?: boolean; // Flag to indicate this is an avatar video (not a story)
+  // AI UGC Ads video model fields
+  videoModel?: string; // FAL endpoint (e.g., 'fal-ai/wan/v2.7/image-to-video')
+  videoVariant?: string; // 'mini' | 'fast' | 'standard' | 'default'
+  videoModelKey?: string; // Key from decision tree (e.g., 'wan-2.7-720p')
+  // Audio handling for video model (ElevenLabs TTS lip-sync)
+  audioInput?: 'driving_audio' | 'native';  // driving_audio = ElevenLabs TTS, native = model's own audio
+  audioParam?: 'audio_url' | 'audio_urls';  // Parameter name for audio input
+  audioArray?: boolean;                      // If true, audioParam expects array format
+  generateAudio?: boolean;                   // For Seedance: set false when using driving_audio
 }
 
 export interface Scene {
@@ -138,6 +147,8 @@ export interface Scene {
   generatedVideoUrl?: string;
   isGeneratingVideo?: boolean;
   videoGenerationError?: string;
+  // User-uploaded source media (screen recording, product photo, product video)
+  sourceMediaUrl?: string;
   // Voice-over and captions
   audioUrl?: string; // Generated voice-over audio URL
   audioDuration?: number; // Actual duration of generated audio

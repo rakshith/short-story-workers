@@ -39,7 +39,12 @@
     "story-export": 2,
     "youtube-extract": 5,
     "voice-clone-base": 5,
-    "voice-clone-per-second": 0.05
+    "voice-clone-per-second": 0.05,
+    "ai-ugc-ads-vision-analysis": 1,
+    "ai-ugc-ads-director": 2,
+    "ai-ugc-ads-composite": 10,
+    "ai-ugc-ads-frame-extraction": 1,
+    "ai-ugc-ads-video-compilation": 5
   },
   "voiceModels": {
     "eleven_multilingual_v2": 0.002,
@@ -65,7 +70,8 @@
   },
   "avatarTiers": {
     "standard": 15,
-    "pro": 25
+    "pro": 25,
+    "omnihuman": 35
   },
   "migrations": {
     "1.0.0": {

@@ -1,0 +1,32 @@
+{
+  "field": "mediaType",
+  "branches": {
+    "ai-images": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": true },
+          { "id": "video", "type": "video", "enabled": false }
+        ]
+      }
+    },
+    "ai-videos": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": false },
+          { "id": "video", "type": "video", "enabled": true, "trigger": "auto" }
+        ]
+      }
+    },
+    "default": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": true },
+          { "id": "video", "type": "video", "enabled": true, "trigger": "auto" }
+        ]
+      }
+    }
+  }
+}

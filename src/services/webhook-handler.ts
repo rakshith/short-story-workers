@@ -1,14 +1,13 @@
 // Webhook handler service for Replicate and FAL
 import { Env } from '../types/env';
 import { processFinishedPrediction } from './image-generation';
-import { templateSkipsImageStep } from '../config/template-video-config';
 import { FOLDER_NAMES, SHORT_STORIES_FOLDER_NAMES } from '../config/table-config';
 import { apiLogger } from '../utils/logger';
 import { trackAIUsageInternal } from './usage-tracking';
 import { updateCoordinatorImage, updateCoordinatorVideo, getCoordinatorProgress } from '../utils/coordinator';
 import { calcVideoDelaySeconds } from '../utils/queue-batch';
 import { getTemplateConfig } from '../config/template-config';
-import { isVideoMediaType } from '../utils/media-type';
+import { resolveWorkflow, getVideoTrigger, getNode } from '../utils/workflow-resolver';
 import { WebhookStrategyFactory } from '@artflicks/model-provider';
 
 /** Metadata extracted from webhook URL, passed to background work */
@@ -111,7 +110,8 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
         }
 
         if (prediction.status !== 'succeeded') {
-            apiLogger.error(`Prediction failed`, { storyId, sceneIndex, type, error: prediction.error });
+            const errorStr = normalizePredictionError(prediction.error);
+            apiLogger.error(`Prediction failed`, { storyId, sceneIndex, type, error: errorStr });
             
             // Handle avatar failure
             if (type === 'avatar') {
@@ -121,33 +121,17 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
             
             const id = env.STORY_COORDINATOR.idFromName(storyId);
             const coordinator = env.STORY_COORDINATOR.get(id);
+            let updateStatus;
             if (type === 'video') {
-                apiLogger.error(`Video scene failed`, { storyId, sceneIndex, error: prediction.error });
-                await updateCoordinatorVideo(coordinator, { sceneIndex, videoError: prediction.error || 'Generation failed' });
+                apiLogger.error(`Video scene failed`, { storyId, sceneIndex, error: errorStr });
+                updateStatus = await updateCoordinatorVideo(coordinator, { sceneIndex, videoError: errorStr || 'Generation failed' });
             } else {
-                apiLogger.error(`Image scene failed`, { storyId, sceneIndex, error: prediction.error });
-                await updateCoordinatorImage(coordinator, { sceneIndex, imageError: prediction.error || 'Generation failed' });
+                apiLogger.error(`Image scene failed`, { storyId, sceneIndex, error: errorStr });
+                updateStatus = await updateCoordinatorImage(coordinator, { sceneIndex, imageError: errorStr || 'Generation failed' });
             }
-            
-            // Check if all scenes are accounted for (success or failure) - don't block story completion
-            const { getCoordinatorProgress } = await import('../utils/coordinator');
-            const progressStatus = await getCoordinatorProgress(coordinator);
-            
-            const allImagesDone = progressStatus.imagesCompleted >= progressStatus.totalScenes;
-            const allAudioDone = progressStatus.audioCompleted >= progressStatus.totalScenes;
-            const allVideosDone = progressStatus.videosCompleted >= progressStatus.totalScenes;
-            const voiceOverEnabled = progressStatus.videoConfig?.enableVoiceOver !== false;
-            const audioAllDone = !voiceOverEnabled || allAudioDone;
-            
-            // For image-only stories: images + audio must be done
-            // For video stories: videos + audio must be done
-            const isImageOnlyStory = !isVideoMediaType(progressStatus.videoConfig?.mediaType);
-            const allDone = isImageOnlyStory 
-                ? (allImagesDone && audioAllDone)
-                : (allVideosDone && audioAllDone);
-            
-            if (allDone) {
-                apiLogger.info(`${type} failed but all scenes done, completing story`, { storyId, sceneIndex, error: prediction.error });
+
+            if (updateStatus?.isComplete) {
+                apiLogger.info(`${type} failed and DO signals complete, syncing story`, { storyId, sceneIndex, error: errorStr });
                 const { syncStoryToSupabase } = await import('../queue-consumer');
                 await syncStoryToSupabase({ jobId, storyId, userId }, coordinator, env);
             }
@@ -227,10 +211,21 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                 .in('status', ['processing', 'awaiting_review'])
                 .single();
 
-            const mediaType = storyData?.video_config?.mediaType;
-            const templateId = storyData?.video_config?.templateId;
-            const videoType = storyData?.video_config?.videoType;
-            if (isVideoMediaType(mediaType) && !templateSkipsImageStep(templateId, videoType) && storyData?.video_config && jobData?.job_id) {
+            const videoConfig = storyData?.video_config;
+            const templateId = videoConfig?.templateId;
+            // Resolve workflow config to check if standard video should be queued after image
+            const _whResolved = resolveWorkflow({
+                videoType: videoConfig?.videoType || '',
+                templateId,
+                sceneReviewRequired,
+                mediaType: videoConfig?.mediaType,
+            });
+            const _whVideoNode = _whResolved ? getNode(_whResolved, 'video') : undefined;
+            const _whImageNode = _whResolved ? getNode(_whResolved, 'image') : undefined;
+            const _whTrigger = _whResolved ? getVideoTrigger(_whResolved) : null;
+            // Queue video after image only when: video enabled + image enabled + trigger auto
+            // (post-action and manual triggers don't auto-queue standard video)
+            if (_whVideoNode?.enabled === true && _whImageNode?.enabled === true && _whTrigger === 'auto' && videoConfig && jobData?.job_id) {
                 const existingVideoUrl = storyData.story?.scenes?.[sceneIndex]?.generatedVideoUrl;
                 if (existingVideoUrl) {
                     apiLogger.info(`Scene ${sceneIndex} already has generatedVideoUrl (manual from UI), skipping video queue`, { storyId });
@@ -245,14 +240,13 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
                     return;
                 }
 
-                const videoConfig = storyData.video_config;
-                const jobId = jobData.job_id;
+                const _jobId = jobData.job_id;
 
                 if (status.isSceneReadyForVideo) {
                     // Audio already done for this scene — queue video now with real audio duration
                     apiLogger.info(`Scene ${sceneIndex} image+audio both ready, queueing video (audioDuration: ${status.sceneAudioDuration}s)`, { storyId });
                     const queueMessage = {
-                        jobId,
+                        jobId: _jobId,
                         userId: jobData.user_id,
                         seriesId: videoConfig.seriesId,
                         storyId,
@@ -281,7 +275,7 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
 
                 // Incrementally sync image to DB regardless of whether video was queued
                 const { syncPartialStory } = await import('../queue-consumer');
-                await syncPartialStory({ jobId, storyId, userId }, coordinator, env);
+                await syncPartialStory({ jobId: _jobId, storyId, userId }, coordinator, env);
 
                 // Return early — completion handled by the video webhook
                 return;
@@ -322,6 +316,23 @@ export async function processWebhookInBackground(prediction: any, metadata: Webh
     } catch (error) {
         console.error(`[WEBHOOK] Background processing error:`, error);
     }
+}
+
+function normalizePredictionError(error: unknown): string {
+    if (typeof error === 'string') return error;
+    if (error instanceof Error) return error.message;
+    if (error && typeof error === 'object') {
+        const maybeMsg = (error as any).msg || (error as any).message || (error as any).error;
+        if (typeof maybeMsg === 'string' && maybeMsg.trim().length > 0) {
+            return maybeMsg;
+        }
+        try {
+            return JSON.stringify(error);
+        } catch {
+            return String(error);
+        }
+    }
+    return 'Unknown prediction error';
 }
 
 /**

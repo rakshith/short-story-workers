@@ -53,3 +53,7 @@ registerWorkflow(facelessVideoDefinition);
 // Character Video — imported here to auto-register
 import { characterVideoDefinition } from './character-video';
 registerWorkflow(characterVideoDefinition);
+
+// Showcase Presenter — AI-driven scene composition with avatar
+import { aiUgcAdsDefinition } from './ai-ugc-ads';
+registerWorkflow(aiUgcAdsDefinition);

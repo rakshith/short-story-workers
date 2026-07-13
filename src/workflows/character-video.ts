@@ -9,8 +9,7 @@ import { orchestrateStoryCreation, orchestrateVideoResume } from '../services/st
 import { generateScript } from '../services/script-generation';
 import { updateJobStatus } from '../services/queue-processor';
 import { estimateDurationFromText } from '../services/script-parser';
-import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
-import { isImageMediaType, normalizeMediaType } from '../utils/media-type';
+import { isImageMediaType } from '../utils/media-type';
 import { getTemplateConfig } from '../config/template-config';
 
 export const characterVideoDefinition: WorkflowDefinition = {
@@ -94,11 +93,6 @@ async function handleScriptToVideo(
         }
     }
 
-    // Auto-inject skeleton references if needed
-    if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages?.length)) {
-        body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
-    }
-
     // Generate script from text using template-aware router
     const scriptResult = await generateScript(
         {
@@ -106,7 +100,7 @@ async function handleScriptToVideo(
             duration: estimatedDuration,
             language: body.language || body.videoConfig?.language || 'en',
             templateId: body.videoConfig?.templateId,
-            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
+            mediaType: (body.videoConfig?.mediaType === 'ai-videos' ? 'video' : 'image') as any,
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
             stylePrompt: body.videoConfig?.preset?.stylePrompt,
         },

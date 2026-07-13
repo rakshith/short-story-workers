@@ -1,0 +1,68 @@
+{
+  "field": "templateId",
+  "branches": {
+    "skeleton-3d-shorts": {
+      "baseNodes": [
+        { "id": "audio", "type": "audio", "enabled": true },
+        { "id": "image", "type": "image", "enabled": true },
+        { "id": "video", "type": "video", "enabled": true }
+      ],
+      "defaults": {
+        "imageModel": "nano-banana-pro",
+        "characterReferences": [
+          "https://image.artflicks.app/custom_characters/skeleton-3d-real.jpg"
+        ],
+        "mediaType": "ai-videos"
+      },
+      "field": "sceneReviewRequired",
+      "branches": {
+        "true": { "videoTrigger": "manual" },
+        "false": { "videoTrigger": "auto" }
+      }
+    },
+    "talking-character-3d": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": true },
+          { "id": "video", "type": "video", "enabled": true, "trigger": "auto" }
+        ],
+        "defaults": {
+          "generateAudio": false,
+          "videoModel": "google/veo-3.1-fast",
+          "imageModel": "xai/grok-imagine-image",
+          "includeNarrationInVideoPrompt": true,
+          "enableVoiceOver": false,
+          "immersiveAudio": true,
+          "mediaType": "ai-videos"
+        }
+      }
+    },
+    "body-science-shorts": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": true },
+          { "id": "video", "type": "video", "enabled": true, "trigger": "auto" }
+        ],
+        "defaults": {
+          "usesGeneratedImage": true,
+          "mediaType": "ai-videos"
+        }
+      }
+    },
+    "default": {
+      "resolve": {
+        "nodes": [
+          { "id": "audio", "type": "audio", "enabled": true },
+          { "id": "image", "type": "image", "enabled": true },
+          { "id": "video", "type": "video", "enabled": true, "trigger": "auto" }
+        ],
+        "defaults": {
+          "usesGeneratedImage": true,
+          "mediaType": "ai-videos"
+        }
+      }
+    }
+  }
+}

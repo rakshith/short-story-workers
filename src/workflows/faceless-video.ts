@@ -8,9 +8,8 @@ import { WorkflowDefinition } from './registry';
 import { orchestrateStoryCreation, orchestrateVideoResume } from '../services/story-orchestrator';
 import { generateScript } from '../services/script-generation';
 import { updateJobStatus } from '../services/queue-processor';
-import { DEFAULT_SKELETON_REFERENCES } from '../script-generator';
 import { Logger } from '../utils/logger';
-import { normalizeMediaType } from '../utils/media-type';
+import { resolveWorkflow } from '../utils/workflow-resolver';
 
 const workflowLogger = new Logger('faceless-video');
 
@@ -98,7 +97,7 @@ async function handleCreateFromScript(
             language: body.language || body.videoConfig?.language || 'en',
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: 'script-to-shorts',
-            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
+            mediaType: (body.videoConfig?.mediaType === 'ai-videos' ? 'video' : 'image') as any,
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
             speed: body.videoConfig?.speed,
             stylePrompt: body.videoConfig?.preset?.stylePrompt,
@@ -164,11 +163,6 @@ async function handleGenerateAndCreate(
         body.videoConfig.audioModel = 'eleven_multilingual_v2';
     }
 
-    // Auto-inject skeleton references if needed
-    if (body.videoConfig?.templateId === 'skeleton-3d-shorts' && (!body.videoConfig?.characterReferenceImages?.length)) {
-        body.videoConfig = { ...body.videoConfig, characterReferenceImages: DEFAULT_SKELETON_REFERENCES };
-    }
-
     // Generate script using AI
     const scriptStart = Date.now();
     const scriptResult = await generateScript(
@@ -178,7 +172,7 @@ async function handleGenerateAndCreate(
             language: body.language || body.videoConfig?.language || 'en',
             model: body.model || body.videoConfig?.model || 'gpt-5.2',
             templateId: body.videoConfig?.templateId,
-            mediaType: normalizeMediaType(body.videoConfig?.mediaType),
+            mediaType: (body.videoConfig?.mediaType === 'ai-videos' ? 'video' : 'image') as any,
             characterReferenceImages: body.videoConfig?.characterReferenceImages,
             speed: body.videoConfig?.speed,
             stylePrompt: body.videoConfig?.preset?.stylePrompt,

@@ -90,6 +90,11 @@ max_batch_size = 10
 max_batch_timeout = 30
 max_concurrency = 1
 
+# Media Transformations for staging
+[env.staging.media]
+binding = "MEDIA"
+remote = true
+
 [env.staging.vars]
 ENVIRONMENT = "staging"
 TIER1_CONCURRENCY = 2
@@ -173,6 +178,11 @@ max_batch_size = 10
 max_batch_timeout = 30
 max_concurrency = 1
 
+# Media Transformations for production
+[env.production.media]
+binding = "MEDIA"
+remote = true
+
 [env.production.vars]
 ENVIRONMENT = "production"
 TIER1_CONCURRENCY = 2
@@ -188,6 +198,11 @@ TIER4_CONCURRENCY = 20
 TIER4_BATCH_SIZE = 15
 TIER4_PRIORITY = 4
 APP_URL = "https://artflicks.app"
+
+# Media Transformations binding (Cloudflare Stream)
+[media]
+binding = "MEDIA"
+remote = true  # Enable for local development
 
 # Environment variables (set via wrangler secret put or dashboard)
 [vars]

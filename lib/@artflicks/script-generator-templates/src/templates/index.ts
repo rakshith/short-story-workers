@@ -7,6 +7,7 @@ import { ScriptToShortsTemplate } from './script-to-shorts';
 import { ScreenplayGeneratorTemplate } from './screenplay-generator';
 import { TalkingCharacter3DTemplate } from './talking-character-3d';
 import { TalkingAvatarTemplate } from './talking-avatar';
+import { AiUgcAdsTemplate } from './ai-ugc-ads';
 import { registry } from '../registry';
 import { registerAllSkills } from '../skills';
 export * from './base';
@@ -21,6 +22,7 @@ export const ScriptTemplateIds = {
     SCREENPLAY_GENERATOR: 'screenplay-generator',
     TALKING_CHARACTER_3D: 'talking-character-3d',
     TALKING_AVATAR: 'talking-avatar',
+    AI_UGC_ADS: 'ai-ugc-ads',
 } as const;
 
 export type ScriptTemplateId = typeof ScriptTemplateIds[keyof typeof ScriptTemplateIds];
@@ -40,6 +42,7 @@ function initializeTemplates() {
     registry.register(new ScreenplayGeneratorTemplate());
     registry.register(new TalkingCharacter3DTemplate());
     registry.register(new TalkingAvatarTemplate());
+    registry.register(new AiUgcAdsTemplate());
     
     templatesInitialized = true;
 }

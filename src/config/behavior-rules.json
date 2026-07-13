@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "description": "Behavior decision tree for AI UGC Ads — system rules (mandatory) + user rules (opt-in)",
+  "scope": "ai-ugc-ads",
+  "conditions": {
+    "is-avatar-video": "generatedVideoUrl exists AND avatarBehavior === 'avatar-holds-product'",
+    "is-product-animation": "generatedVideoUrl exists AND avatarBehavior === 'no-avatar'",
+    "is-user-content": "no generatedVideoUrl AND (generatedImageUrl OR sourceMediaUrl) exists"
+  },
+  "defaults": {
+    "playEmbeddedAudio": false,
+    "useDrivingAudio": false
+  },
+  "systemRules": [
+    {
+      "id": "avatar-no-embedded-audio",
+      "description": "Avatar lip-sync videos never play embedded audio — TTS voiceover track handles audio",
+      "condition": "is-avatar-video",
+      "behavior": { "playEmbeddedAudio": false }
+    },
+    {
+      "id": "avatar-always-driving-audio",
+      "description": "Avatar scenes always send TTS as driving audio for lip-sync",
+      "condition": "is-avatar-video",
+      "behavior": { "useDrivingAudio": true }
+    },
+    {
+      "id": "product-animation-no-driving-audio",
+      "description": "Product animation never sends driving audio — product cannot lip-sync",
+      "condition": "is-product-animation",
+      "behavior": { "useDrivingAudio": false }
+    }
+  ],
+  "userRules": [
+    {
+      "id": "immersive-audio-product-animation",
+      "description": "Enable embedded audio for product animation videos (Wan 2.7/Seedance ambient effects)",
+      "condition": "is-product-animation",
+      "optInFlag": "enableImmersiveAudio",
+      "behavior": { "playEmbeddedAudio": true }
+    }
+  ]
+}

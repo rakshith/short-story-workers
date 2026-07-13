@@ -31,11 +31,40 @@ import {
   SPEECH_TO_TEXT_COST,
   ESTIMATED_WPS,
   ESTIMATED_CHARS_PER_WORD,
+  AI_UGC_ADS_VISION_COST,
+  AI_UGC_ADS_DIRECTOR_COST,
+  AI_UGC_ADS_COMPOSITE_COST,
+  AI_UGC_ADS_FRAME_EXTRACTION_COST,
+  AI_UGC_ADS_VIDEO_COMPILATION_COST,
 } from './operations';
 import { 
   videoScenesFromDuration, 
   imageScenesFromDuration 
 } from './scenes';
+
+export type AiUgcAdsVideoBillingTier = 'basic' | 'pro' | 'ultra' | 'max';
+
+/**
+ * Resolve the existing AI UGC Ads billing tier from a concrete model key.
+ * This keeps billing aligned with the resolved model path and avoids
+ * duplicating mapping logic in callers.
+ */
+export function resolveAiUgcAdsVideoBillingTier(modelKey: string): AiUgcAdsVideoBillingTier {
+  switch (modelKey) {
+    case 'wan-2.7-720p':
+      return 'basic';
+    case 'wan-2.7-1080p':
+      return 'pro';
+    case 'seedance-mini-720p':
+    case 'seedance-fast-720p':
+      return 'ultra';
+    case 'seedance-standard-720p':
+    case 'seedance-standard-1080p':
+      return 'max';
+    default:
+      return 'basic';
+  }
+}
 
 /**
  * Get cost per scene for a model tier
@@ -268,4 +297,122 @@ export function estimateGeneration(params: GenerationEstimateParams): Generation
   }
 
   return { totalCredits, breakdown, numberOfScenes };
+}
+
+/**
+ * Estimate credits for AI UGC Ads workflow
+ * Calculates total credits based on workflow operations
+ */
+export function estimateAiUgcAdsGeneration(params: {
+  duration: number;
+  sceneCount: number;
+  enableComposite: boolean;
+  enableVoiceover: boolean;
+  enableMusic: boolean;
+  videoModelKey?: string;
+  selectedVideoTier?: string;
+  videoStrategy?: 'luxury-fullscreen' | 'simple-composite' | 'unusable' | 'not-applicable';
+  scriptCharCount?: number;
+}): GenerationEstimate {
+  const {
+    duration,
+    sceneCount,
+    enableComposite,
+    enableVoiceover,
+    enableMusic,
+    videoModelKey,
+    selectedVideoTier,
+    videoStrategy,
+    scriptCharCount,
+  } = params;
+
+  let totalCredits = 0;
+  const breakdown: CostBreakdown = {};
+
+  // 1. Vision analysis (1 per product)
+  totalCredits += AI_UGC_ADS_VISION_COST;
+  breakdown.visionAnalysis = {
+    type: 'visionAnalysis',
+    total: AI_UGC_ADS_VISION_COST,
+  };
+
+  // 2. AI Director (1 per workflow)
+  totalCredits += AI_UGC_ADS_DIRECTOR_COST;
+  breakdown.aiDirector = {
+    type: 'aiDirector',
+    total: AI_UGC_ADS_DIRECTOR_COST,
+  };
+
+  // 3. Composite generation (if needed)
+  if (enableComposite) {
+    totalCredits += AI_UGC_ADS_COMPOSITE_COST;
+    breakdown.compositeImage = {
+      type: 'compositeImage',
+      total: AI_UGC_ADS_COMPOSITE_COST,
+    };
+  }
+
+  // 4. Frame extraction (if simple-composite video)
+  if (videoStrategy === 'simple-composite') {
+    totalCredits += AI_UGC_ADS_FRAME_EXTRACTION_COST;
+    breakdown.frameExtraction = {
+      type: 'frameExtraction',
+      total: AI_UGC_ADS_FRAME_EXTRACTION_COST,
+    };
+  }
+
+  // 5. Voice generation (if enabled)
+  if (enableVoiceover) {
+    const charCount = scriptCharCount ?? Math.ceil(duration * 2.5 * 6);
+    const voiceCredits = Math.ceil(charCount * VOICE_GENERATION_COST_PER_CHAR);
+    totalCredits += voiceCredits;
+    breakdown.voiceGeneration = {
+      type: 'voiceGeneration',
+      perScene: voiceCredits,
+      scenes: 1,
+      total: voiceCredits,
+    };
+  }
+
+  // 6. Music (if enabled)
+  if (enableMusic) {
+    totalCredits += BACKGROUND_MUSIC_COST;
+    breakdown.backgroundMusic = {
+      type: 'backgroundMusic',
+      total: BACKGROUND_MUSIC_COST,
+    };
+  }
+
+  // 7. Video generation (tier-based pricing)
+  const resolvedVideoTier = videoModelKey
+    ? resolveAiUgcAdsVideoBillingTier(videoModelKey)
+    : (selectedVideoTier && selectedVideoTier !== 'auto'
+      ? selectedVideoTier
+      : 'basic');
+  const videoGenerationPerScene = getVideoTierCost(resolvedVideoTier);
+  const videoGenerationCredits = videoGenerationPerScene * sceneCount;
+  totalCredits += videoGenerationCredits;
+  breakdown.videoGeneration = {
+    type: 'videoGeneration',
+    model: resolvedVideoTier,
+    perScene: videoGenerationPerScene,
+    scenes: sceneCount,
+    total: videoGenerationCredits,
+  };
+
+  // 8. Video compilation (based on scene count)
+  const compilationCredits = AI_UGC_ADS_VIDEO_COMPILATION_COST * sceneCount;
+  totalCredits += compilationCredits;
+  breakdown.videoCompilation = {
+    type: 'videoCompilation',
+    perScene: AI_UGC_ADS_VIDEO_COMPILATION_COST,
+    scenes: sceneCount,
+    total: compilationCredits,
+  };
+
+  return {
+    totalCredits,
+    breakdown,
+    numberOfScenes: sceneCount,
+  };
 }

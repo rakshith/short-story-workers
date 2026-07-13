@@ -2,6 +2,7 @@
 // Controls what gets generated (audio, video, images) and which models to use
 
 export interface TemplatePipelineConfig {
+  generateVisuals?: boolean;   // Whether to queue image/video generation (default: true)
   generateAudio: boolean;     // Whether to generate audio for this template
   imageModel?: string;        // Optional - uses system default if not provided
   videoModel?: string;        // Optional - uses system default if not provided

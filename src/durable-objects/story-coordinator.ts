@@ -3,7 +3,6 @@
 
 import { Env } from '../types/env';
 import { compile } from '../../lib/@artflicks/video-compiler';
-import { isVideoMediaType } from '../utils/media-type';
 
 interface SceneUpdate {
   sceneIndex: number;
@@ -37,6 +36,10 @@ interface StoryState {
   completionSignaled?: boolean;
   /** Whether this story requires scene review before video generation */
   sceneReviewRequired?: boolean;
+  /** Scene indices that are expected to generate video. Empty array = no scenes need video. */
+  expectedVideoScenes?: number[];
+  /** Legacy field for backward compat — used when resolvedWorkflow is not available */
+  scenesWithVideo?: number[];
 }
 
 export class StoryCoordinator {
@@ -99,11 +102,11 @@ export class StoryCoordinator {
   }
 
   private async handleInit(request: Request): Promise<Response> {
-    const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck, sceneReviewRequired } = await request.json() as any;
+    const { storyId, userId, scenes, totalScenes, videoConfig, skipAudioCheck, sceneReviewRequired, scenesWithVideo, resolvedWorkflow } = await request.json() as any;
 
     // Count and collect actual completed scene indices (for resume flow - Step 2)
     const sceneList = scenes || [];
-    const imageScenesDone = sceneList.map((s: any, i: number) => (s?.generatedImageUrl ? i : -1)).filter((i: number) => i >= 0);
+    const imageScenesDone = sceneList.map((s: any, i: number) => (s?.generatedImageUrl || s?.sourceMediaUrl ? i : -1)).filter((i: number) => i >= 0);
     const videoScenesDone = sceneList.map((s: any, i: number) => (s?.generatedVideoUrl ? i : -1)).filter((i: number) => i >= 0);
     const audioScenesDone = skipAudioCheck
       ? Array.from({ length: totalScenes }, (_, i) => i)
@@ -112,6 +115,14 @@ export class StoryCoordinator {
     const imagesDone = imageScenesDone.length;
     const videosDone = videoScenesDone.length;
     const audioDone = audioScenesDone.length;
+
+    // Compute expectedVideoScenes from resolvedWorkflow, or fall back to scenesWithVideo
+    let expectedVideoScenes: number[] = [];
+    if (resolvedWorkflow?.nodes) {
+      expectedVideoScenes = computeExpectedVideoScenesInternal(resolvedWorkflow.nodes, sceneList);
+    } else if (scenesWithVideo) {
+      expectedVideoScenes = scenesWithVideo;
+    }
 
     this.storyState = {
       storyId,
@@ -127,6 +138,8 @@ export class StoryCoordinator {
       audioScenesDone,
       completionSignaled: false,
       sceneReviewRequired: sceneReviewRequired || false,
+      expectedVideoScenes,
+      scenesWithVideo: scenesWithVideo || [],
     };
 
     // Persist to durable storage
@@ -135,7 +148,7 @@ export class StoryCoordinator {
     // Reset idle alarm for new story activity
     await this.resetIdleAlarm();
 
-    console.log(`[StoryCoordinator] Initialized for story ${storyId} with ${totalScenes} scenes (images: ${imagesDone}, audio: ${audioDone}, videos: ${videosDone}, skipAudioCheck: ${skipAudioCheck})`);
+    console.log(`[StoryCoordinator] Initialized for story ${storyId} with ${totalScenes} scenes (images: ${imagesDone}, audio: ${audioDone}, videos: ${videosDone}, expectedVideoScenes: ${expectedVideoScenes.length}, skipAudioCheck: ${skipAudioCheck})`);
     return new Response(JSON.stringify({ success: true }));
   }
 
@@ -187,15 +200,15 @@ export class StoryCoordinator {
     }
 
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
-    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const videoExpected = this.storyState.expectedVideoScenes || this.storyState.scenesWithVideo || [];
+    const videosAllDone = videoExpected.length === 0
+      ? true
+      : this.storyState.videosCompleted >= videoExpected.length;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isImageOnlyStory = !isVideoMediaType(this.storyState.videoConfig?.mediaType);
 
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    const allDone = isImageOnlyStory
-      ? (imagesAllDone && audioAllDone)
-      : (videosAllDone && audioAllDone);
+    const allDone = imagesAllDone && videosAllDone && audioAllDone;
 
     const isComplete = this.storyState.sceneReviewRequired
       ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
@@ -216,10 +229,10 @@ export class StoryCoordinator {
 
     // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
     const updatedSceneForGate = this.storyState.scenes[update.sceneIndex];
-    const sceneHasImage = !!(updatedSceneForGate?.generatedImageUrl);
+    const sceneHasImage = !!(updatedSceneForGate?.generatedImageUrl || updatedSceneForGate?.sourceMediaUrl);
     const sceneHasAudio = !!(updatedSceneForGate?.audioDuration && updatedSceneForGate.audioDuration > 0);
     const isSceneReadyForVideo = sceneHasImage && (sceneHasAudio || !voiceOverEnabled);
-    const sceneImageUrl = updatedSceneForGate?.generatedImageUrl || null;
+    const sceneImageUrl = updatedSceneForGate?.generatedImageUrl || updatedSceneForGate?.sourceMediaUrl || null;
     const sceneAudioDuration: number = updatedSceneForGate?.audioDuration || 0;
 
     return new Response(JSON.stringify({
@@ -282,8 +295,11 @@ export class StoryCoordinator {
       this.storyState.videosCompleted++;
     }
 
-    // Check completion: videos + audio
-    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    // Check completion: videos (only expected scenes) + audio
+    const videoExpected = this.storyState.expectedVideoScenes || this.storyState.scenesWithVideo || [];
+    const videosAllDone = videoExpected.length === 0
+      ? true  // no scenes expected to have video → don't wait
+      : this.storyState.videosCompleted >= videoExpected.length;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
     const allDone = videosAllDone && audioAllDone;
@@ -299,7 +315,7 @@ export class StoryCoordinator {
     // Reset idle alarm for active processing
     await this.resetIdleAlarm();
 
-    console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.videosCompleted}/${this.storyState.totalScenes}`);
+    console.log(`[StoryCoordinator] Video updated for scene ${update.sceneIndex}, total: ${this.storyState.videosCompleted}/${videoExpected.length} expected`);
 
     // Note: Progress updates removed - only completion is broadcasted
 
@@ -366,15 +382,15 @@ export class StoryCoordinator {
     }
 
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
-    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const videoExpected = this.storyState.expectedVideoScenes || this.storyState.scenesWithVideo || [];
+    const videosAllDone = videoExpected.length === 0
+      ? true
+      : this.storyState.videosCompleted >= videoExpected.length;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isImageOnlyStory = !isVideoMediaType(this.storyState.videoConfig?.mediaType);
 
     const isImagesCompleteForReview = imagesAllDone && audioAllDone;
-    const allDone = isImageOnlyStory
-      ? (imagesAllDone && audioAllDone)
-      : (videosAllDone && audioAllDone);
+    const allDone = imagesAllDone && videosAllDone && audioAllDone;
 
     const isComplete = this.storyState.sceneReviewRequired
       ? (isImagesCompleteForReview && !this.storyState.completionSignaled)
@@ -397,10 +413,10 @@ export class StoryCoordinator {
     // Gate: scene is ready to queue video when it has both a generated image AND real audio duration
     const voiceOverEnabledAudio = this.storyState.videoConfig?.enableVoiceOver !== false;
     const updatedSceneForAudioGate = this.storyState.scenes[update.sceneIndex];
-    const sceneHasImageAudio = !!(updatedSceneForAudioGate?.generatedImageUrl);
+    const sceneHasImageAudio = !!(updatedSceneForAudioGate?.generatedImageUrl || updatedSceneForAudioGate?.sourceMediaUrl);
     const sceneHasAudioAudio = !!(updatedSceneForAudioGate?.audioDuration && updatedSceneForAudioGate.audioDuration > 0);
     const isSceneReadyForVideoAudio = sceneHasImageAudio && (sceneHasAudioAudio || !voiceOverEnabledAudio);
-    const sceneImageUrlAudio = updatedSceneForAudioGate?.generatedImageUrl || null;
+    const sceneImageUrlAudio = updatedSceneForAudioGate?.generatedImageUrl || updatedSceneForAudioGate?.sourceMediaUrl || null;
     const sceneAudioDurationAudio: number = updatedSceneForAudioGate?.audioDuration || 0;
 
     return new Response(JSON.stringify({
@@ -434,10 +450,15 @@ export class StoryCoordinator {
     }
 
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
-    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const videoExpected = this.storyState.expectedVideoScenes || this.storyState.scenesWithVideo || [];
+    const videosAllDone = videoExpected.length === 0
+      ? true
+      : this.storyState.videosCompleted >= videoExpected.length;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
-    const isComplete = (imagesAllDone && audioAllDone) || (videosAllDone && audioAllDone);
+    const isComplete = this.storyState.sceneReviewRequired
+      ? (imagesAllDone && audioAllDone)
+      : (videoExpected.length > 0 ? (videosAllDone && audioAllDone) : (imagesAllDone && audioAllDone));
 
     return new Response(JSON.stringify({
       imagesCompleted: this.storyState.imagesCompleted,
@@ -484,14 +505,20 @@ export class StoryCoordinator {
       return new Response(JSON.stringify({ error: 'Job cancelled', isCancelled: true }), { status: 499 });
     }
 
-    const videosAllDone = this.storyState.videosCompleted >= this.storyState.totalScenes;
+    const videoExpected = this.storyState.expectedVideoScenes || this.storyState.scenesWithVideo || [];
+    const videosAllDone = videoExpected.length === 0
+      ? true
+      : this.storyState.videosCompleted >= videoExpected.length;
     const imagesAllDone = this.storyState.imagesCompleted >= this.storyState.totalScenes;
     const voiceOverEnabled = this.storyState.videoConfig?.enableVoiceOver !== false;
     const audioAllDone = !voiceOverEnabled || this.storyState.audioCompleted >= this.storyState.totalScenes;
 
-    // For two-step flow: can finalize when images + audio done
-    // For auto flow: can finalize when videos + audio done
-    const isComplete = (imagesAllDone && audioAllDone) || (videosAllDone && audioAllDone);
+    // sceneReview flow: finalize after images+audio
+    // auto flow: finalize after videos+audio when scenes are expected to produce video
+    // no-video workflows: finalize after images+audio
+    const isComplete = this.storyState.sceneReviewRequired
+      ? (imagesAllDone && audioAllDone)
+      : (videoExpected.length > 0 ? (videosAllDone && audioAllDone) : (imagesAllDone && audioAllDone));
 
     if (!isComplete) {
       return new Response(JSON.stringify({
@@ -759,3 +786,64 @@ export class StoryCoordinator {
   }
 }
 
+// ── Helper: Compute expected video scenes from resolved workflow nodes ──────
+
+function computeExpectedVideoScenesInternal(nodes: any[], scenes: any[]): number[] {
+  const videoNode = nodes.find((n: any) => n.type === 'video');
+  const audioNode = nodes.find((n: any) => n.type === 'audio');
+
+  // Case 1: Video node enabled with auto/manual trigger → all scenes produce video
+  if (videoNode?.enabled && (videoNode.trigger === 'auto' || videoNode.trigger === 'manual' || !videoNode.trigger)) {
+    return scenes.map((_, i) => i);
+  }
+
+  // Case 2: Post-action based video generation
+  if (audioNode?.postActions) {
+    const videoScenes: number[] = [];
+    for (let i = 0; i < scenes.length; i++) {
+      const scene = scenes[i];
+      for (const action of audioNode.postActions) {
+        if (action.producesVideo === true) {
+          const condition = action.condition;
+          if (!condition || condition === 'always') {
+            videoScenes.push(i);
+            break;
+          }
+          if (evaluateConditionInternal(condition, scene)) {
+            videoScenes.push(i);
+            break;
+          }
+        }
+      }
+    }
+    return videoScenes;
+  }
+
+  return [];
+}
+
+function evaluateConditionInternal(condition: string, scene: any): boolean {
+  if (!condition || condition === 'always') return true;
+  if (condition === 'never') return false;
+
+  const productType = scene?.composer?.classification?.productType;
+  const sceneType = scene?.composer?.sceneType;
+
+  switch (condition) {
+    case 'physical': return productType === 'physical';
+    case 'screenshot': return productType === 'screenshot';
+    case 'screen-recording': return productType === 'screen-recording';
+    case 'mixed': return productType === 'mixed';
+    case 'has-avatar': return scene?.composer?.avatarBehavior !== 'no-avatar';
+    case 'intro': return sceneType === 'intro';
+    case 'outro': return sceneType === 'outro';
+    case 'demo': return sceneType === 'demo';
+    case 'intro-or-outro':
+      return (sceneType === 'intro' || sceneType === 'outro') && productType !== 'physical';
+    case 'physical-or-intro-outro':
+      return productType === 'physical' || sceneType === 'intro' || sceneType === 'outro';
+    case 'physical-intro-outro': return productType === 'physical' && (sceneType === 'intro' || sceneType === 'outro');
+    case 'physical-demo': return productType === 'physical' && sceneType !== 'intro' && sceneType !== 'outro';
+    default: return false;
+  }
+}

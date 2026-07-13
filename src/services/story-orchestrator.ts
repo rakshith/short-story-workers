@@ -3,9 +3,8 @@ import { StoryTimeline, VideoConfig, ProjectStatus } from "../types";
 import { updateJobStatus } from "./queue-processor";
 import { initCoordinator } from "../utils/coordinator";
 import { sendQueueBatch } from "../utils/queue-batch";
-import { templateSkipsImageStep } from "../config/template-video-config";
 import { TemplatePipelineConfig, getTemplateConfig } from "../config/template-config";
-import { normalizeMediaType, isVideoMediaType } from "../utils/media-type";
+import { resolveWorkflow, getVideoTrigger, getNode, type ResolvedWorkflow } from "../utils/workflow-resolver";
 import {
   trackAIUsageInternal,
   trackAndDeductCredits,
@@ -32,6 +31,13 @@ export interface StoryOrchestratorInput {
   durationSeconds?: number;
   env: Env;
   templateConfig?: TemplatePipelineConfig;
+  /** Pre-calculated cost from workflow (e.g., AI UGC Ads). If provided, skips internal cost calculation. */
+  preCalculatedCost?: {
+    credits: number;
+    breakdown: Record<string, unknown>;
+  };
+  /** Resolved workflow config (nodes + defaults). If provided, passed to DO. If not, orchestrator resolves it. */
+  resolvedWorkflow?: ResolvedWorkflow;
 }
 
 export interface StoryOrchestratorResult {
@@ -89,6 +95,7 @@ export async function orchestrateStoryCreation(
       seriesId,
       teamId,
       env,
+      preCalculatedCost: input.preCalculatedCost,
     });
 
     if ("error" in createResult) {
@@ -138,9 +145,18 @@ export async function orchestrateStoryCreation(
       ? { ...videoConfig, enableVoiceOver: false }
       : videoConfig;
 
+    // Resolve workflow config from decision tree (if not already provided by workflow)
+    const resolvedWorkflow = input.resolvedWorkflow ?? resolveWorkflow({
+      videoType: videoConfig?.videoType || '',
+      templateId: videoConfig?.templateId,
+      sceneReviewRequired: videoConfig?.sceneReviewRequired,
+      productType: (videoConfig as any)?.productType,
+      mediaType: videoConfig?.mediaType,
+    }) ?? undefined;
+
     // Initialize coordinator and queue jobs
     try {
-      await initializeCoordinator(storyId, userId, storyData, videoConfigForDo, env);
+      await initializeCoordinator(storyId, userId, storyData, videoConfigForDo, env, resolvedWorkflow);
       await queueGenerationJobs({
         jobId,
         userId,
@@ -155,6 +171,7 @@ export async function orchestrateStoryCreation(
         title,
         env,
         templateConfig,
+        resolvedWorkflow,
       });
     } catch (error) {
       console.error("[Story Orchestrator] Error in coordinator/queue:", error);
@@ -308,14 +325,25 @@ export async function orchestrateVideoResume(
     const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
     const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
 
+    // Resolve workflow config for resume — all scenes produce video on resume
+    const effectiveVideoConfig = videoConfig || (story.video_config as VideoConfig);
+    const resolvedWorkflow = resolveWorkflow({
+      videoType: effectiveVideoConfig?.videoType || '',
+      templateId: effectiveVideoConfig?.templateId,
+      sceneReviewRequired: false, // Resume always uses auto trigger
+      productType: (effectiveVideoConfig as any)?.productType,
+      mediaType: effectiveVideoConfig?.mediaType,
+    });
+
     await initCoordinator(coordinator, {
       storyId,
       userId,
       scenes: storyData.scenes,
       totalScenes: storyData.scenes.length,
-      videoConfig: videoConfig || (story.video_config as VideoConfig),
+      videoConfig: effectiveVideoConfig,
       skipAudioCheck: true,
       sceneReviewRequired: false,
+      resolvedWorkflow,
     });
 
     // Queue video generation jobs only for scenes needing video
@@ -368,6 +396,11 @@ interface CreateStoryRecordInput {
   seriesId?: string;
   teamId?: string;
   env: Env;
+  /** Pre-calculated cost from workflow (e.g., AI UGC Ads). If provided, skips internal cost calculation. */
+  preCalculatedCost?: {
+    credits: number;
+    breakdown: Record<string, unknown>;
+  };
 }
 
 interface CreateStoryRecordSuccess {
@@ -394,14 +427,36 @@ async function createStoryRecord(
       env.SUPABASE_SERVICE_ROLE_KEY
     );
 
-    // Persist videoConfig with mediaType set
+    const fallbackDuration =
+      typeof storyData?.totalDuration === "number" && Number.isFinite(storyData.totalDuration)
+        ? storyData.totalDuration
+        : storyData?.scenes?.reduce((sum, scene) => {
+            const sceneDuration = typeof scene?.duration === "number" && Number.isFinite(scene.duration)
+              ? scene.duration
+              : 0;
+            return sum + sceneDuration;
+          }, 0) || 0;
+
+    // Persist videoConfig with mediaType and duration set
     const videoConfigToPersist = {
       ...videoConfig,
       mediaType: videoConfig?.mediaType ?? "image",
+      duration:
+        typeof videoConfig?.duration === "number" && Number.isFinite(videoConfig.duration)
+          ? videoConfig.duration
+          : fallbackDuration,
     } as VideoConfig;
 
     // Calculate cost BEFORE story creation — uses actual scene count for accurate pricing
-    const costResponse = calculateGenerationCost(videoConfig, videoConfig.script, storyData.scenes?.length);
+    // If preCalculatedCost is provided (e.g., from AI UGC Ads workflow), use it instead
+    const costResponse = input.preCalculatedCost
+      ? {
+          credits: input.preCalculatedCost.credits,
+          breakdown: input.preCalculatedCost.breakdown,
+          currency: "credits" as const,
+          valid: true,
+        }
+      : calculateGenerationCost(videoConfig, videoConfig.script, storyData.scenes?.length);
     console.log(`[Story Orchestrator] Calculated cost:`, costResponse);
 
     const createdStory = await storyService.createStory({
@@ -506,7 +561,7 @@ function calculateGenerationCost(
     let modelTier = videoConfig?.mediaTier || "basic";
     const duration = videoConfig.duration || 15;
 
-    const isImage = !isVideoMediaType(videoConfig?.mediaType);
+    const isImage = videoConfig?.mediaType !== 'ai-videos';
     const mediaTypeForCalc: "ai-images" | "ai-videos" = isImage
       ? "ai-images"
       : "ai-videos";
@@ -547,7 +602,8 @@ async function initializeCoordinator(
   userId: string,
   storyData: StoryTimeline,
   videoConfig: VideoConfig,
-  env: Env
+  env: Env,
+  resolvedWorkflow?: ResolvedWorkflow
 ): Promise<void> {
   const coordinatorId = env.STORY_COORDINATOR.idFromName(storyId);
   const coordinator = env.STORY_COORDINATOR.get(coordinatorId);
@@ -558,6 +614,7 @@ async function initializeCoordinator(
     totalScenes: storyData.scenes.length,
     videoConfig,
     sceneReviewRequired: videoConfig?.sceneReviewRequired || false,
+    resolvedWorkflow,
   });
   console.log(
     `[Story Orchestrator] Durable Object initialized for story ${storyId}`
@@ -578,6 +635,7 @@ interface QueueGenerationJobsInput {
   title?: string;
   env: Env;
   templateConfig?: TemplatePipelineConfig;
+  resolvedWorkflow?: ResolvedWorkflow;
 }
 
 async function queueGenerationJobs(
@@ -597,58 +655,69 @@ async function queueGenerationJobs(
     title,
     env,
     templateConfig,
+    resolvedWorkflow,
   } = input;
 
-  const mediaType = normalizeMediaType(videoConfig?.mediaType);
-  const sceneReviewRequired = videoConfig?.sceneReviewRequired === true;
-  const templateId = videoConfig?.templateId;
-  const skipsImageStep = templateSkipsImageStep(templateId, videoConfig?.videoType);
-  const shouldQueueVideos =
-    mediaType === "image" || (mediaType === "video" && skipsImageStep);
+  // Read node enabled flags from resolved workflow config
+  const audioNode = resolvedWorkflow ? getNode(resolvedWorkflow, 'audio') : undefined;
+  const imageNode = resolvedWorkflow ? getNode(resolvedWorkflow, 'image') : undefined;
+  const videoNode = resolvedWorkflow ? getNode(resolvedWorkflow, 'video') : undefined;
+  const videoTrigger = resolvedWorkflow ? getVideoTrigger(resolvedWorkflow) : null;
 
-  // Queue visual generation jobs
-  const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
-    jobId,
-    userId,
-    seriesId,
-    storyId,
-    title: storyData.title || title || "",
-    videoConfig,
-    sceneIndex: index,
-    type: shouldQueueVideos
-      ? ((mediaType === "video" ? "video" : "image") as QueueMessage["type"])
-      : ("image" as const),
-    baseUrl,
-    teamId,
-    userTier,
-    priority,
-    templateConfig,
-  }));
+  const shouldQueueAudio = audioNode?.enabled ?? (templateConfig?.generateAudio !== false);
+  const shouldQueueImages = imageNode?.enabled ?? (templateConfig?.generateVisuals !== false);
+  const shouldQueueVideos = videoNode?.enabled ?? true;
+  const enableVoiceOver = videoConfig?.enableVoiceOver !== false;
 
-  await sendQueueBatch(env.STORY_QUEUE, visualMessages);
-  console.log(
-    `[Story Orchestrator] Queued ${storyData.scenes.length} ${shouldQueueVideos ? mediaType : "image"} generation jobs (Priority: ${priority})`
-  );
-
-  if (mediaType === "video" && !shouldQueueVideos) {
-    if (!sceneReviewRequired) {
-      console.log(
-        `[Story Orchestrator] Videos will be queued after image completion (sceneReviewRequired=false)`
-      );
-    } else {
-      console.log(
-        `[Story Orchestrator] Videos will be queued after user triggers with storyId (sceneReviewRequired=true)`
-      );
-    }
-  } else if (mediaType === "video" && skipsImageStep) {
-    console.log(`[Story Orchestrator] Template uses direct text-to-video`);
+  // Determine queue type for visual jobs:
+  // - video node enabled + image node disabled → queue "video" directly (skipsImageStep)
+  // - video node enabled + image node enabled + trigger "auto" → queue "image" first, videos queued after
+  // - video node enabled + trigger "manual" → queue "image" only (videos on resume)
+  // - only image node enabled → queue "image"
+  // - only video node enabled → queue "video"
+  let queueType: QueueMessage["type"] = "image";
+  if (shouldQueueVideos && !shouldQueueImages) {
+    queueType = "video";
   }
 
-  // Queue audio generation jobs (only if enableVoiceOver is not false AND template allows audio)
-  const enableVoiceOver = videoConfig?.enableVoiceOver !== false;
-  const skipAudioFromTemplate = templateConfig?.generateAudio === false;
+  // Queue visual generation jobs
+  if (shouldQueueImages || shouldQueueVideos) {
+    const visualMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
+      jobId,
+      userId,
+      seriesId,
+      storyId,
+      title: storyData.title || title || "",
+      videoConfig,
+      sceneIndex: index,
+      type: queueType,
+      baseUrl,
+      teamId,
+      userTier,
+      priority,
+      templateConfig,
+    }));
 
-  if (enableVoiceOver && !skipAudioFromTemplate) {
+    await sendQueueBatch(env.STORY_QUEUE, visualMessages);
+    console.log(
+      `[Story Orchestrator] Queued ${storyData.scenes.length} ${queueType} generation jobs (Priority: ${priority})`
+    );
+  } else {
+    console.log("[Story Orchestrator] Visual generation skipped (pipeline config: visuals disabled)");
+  }
+
+  if (shouldQueueImages && shouldQueueVideos && videoTrigger === 'auto') {
+    console.log(`[Story Orchestrator] Videos will be queued after image completion (trigger: auto)`);
+  } else if (shouldQueueImages && shouldQueueVideos && videoTrigger === 'manual') {
+    console.log(`[Story Orchestrator] Videos will be queued after user triggers with storyId (trigger: manual)`);
+  } else if (shouldQueueVideos && !shouldQueueImages) {
+    console.log(`[Story Orchestrator] Template uses direct text-to-video`);
+  } else if (videoTrigger === 'post-action') {
+    console.log(`[Story Orchestrator] Videos generated via post-actions (trigger: post-action)`);
+  }
+
+  // Queue audio generation jobs
+  if (shouldQueueAudio && enableVoiceOver) {
     const audioMessages: QueueMessage[] = storyData.scenes.map((scene, index) => ({
       jobId,
       userId,
@@ -669,8 +738,8 @@ async function queueGenerationJobs(
     console.log(
       `[Story Orchestrator] Queued ${storyData.scenes.length} audio generation jobs (Priority: ${priority})`
     );
-  } else if (skipAudioFromTemplate) {
-    console.log(`[Story Orchestrator] Audio generation skipped (template config: generateAudio=false)`);
+  } else if (!shouldQueueAudio) {
+    console.log(`[Story Orchestrator] Audio generation skipped (pipeline config: audio disabled)`);
   } else {
     console.log(`[Story Orchestrator] Audio generation skipped (enableVoiceOver=false)`);
   }

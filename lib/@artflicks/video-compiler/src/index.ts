@@ -2,5 +2,5 @@
 // Script-generator moved to main project src/script-generator/
 export { compile } from './compile';
 export type { Timeline, TimelineItem, Story, VideoConfig, StoryAdapter } from './types';
-export { SceneAdapter } from './adapters';
+export { SceneAdapter, AiUgcAdsAdapter, computeSceneDuration } from './adapters';
 // NOTE: Pricing moved to @artflicks/credit-tracker

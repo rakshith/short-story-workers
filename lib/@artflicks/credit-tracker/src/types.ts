@@ -85,6 +85,33 @@ export interface YouTubeExtractCost {
   total: number;
 }
 
+export interface VisionAnalysisCost {
+  type: 'visionAnalysis';
+  total: number;
+}
+
+export interface AiDirectorCost {
+  type: 'aiDirector';
+  total: number;
+}
+
+export interface CompositeImageCost {
+  type: 'compositeImage';
+  total: number;
+}
+
+export interface FrameExtractionCost {
+  type: 'frameExtraction';
+  total: number;
+}
+
+export interface VideoCompilationCost {
+  type: 'videoCompilation';
+  perScene: number;
+  scenes: number;
+  total: number;
+}
+
 // Union type for all cost components
 export type CostComponent =
   | VideoGenerationCost
@@ -93,7 +120,12 @@ export type CostComponent =
   | VoiceGenerationCost
   | BackgroundMusicCost
   | ImmersiveAudioCost
-  | YouTubeExtractCost;
+  | YouTubeExtractCost
+  | VisionAnalysisCost
+  | AiDirectorCost
+  | CompositeImageCost
+  | FrameExtractionCost
+  | VideoCompilationCost;
 
 // Full cost breakdown
 export interface CostBreakdown {
@@ -105,6 +137,11 @@ export interface CostBreakdown {
   immersiveAudio?: ImmersiveAudioCost;
   speechToText?: SpeechToTextCost;
   youtubeExtract?: YouTubeExtractCost;
+  visionAnalysis?: VisionAnalysisCost;
+  aiDirector?: AiDirectorCost;
+  compositeImage?: CompositeImageCost;
+  frameExtraction?: FrameExtractionCost;
+  videoCompilation?: VideoCompilationCost;
 }
 
 // Cost response

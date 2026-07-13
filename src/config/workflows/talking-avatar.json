@@ -1,0 +1,21 @@
+{
+  "resolve": {
+    "nodes": [
+      {
+        "id": "audio",
+        "type": "audio",
+        "enabled": true,
+        "postActions": [
+          {
+            "type": "avatar-video",
+            "agent": "AvatarAgent",
+            "condition": "always",
+            "producesVideo": true
+          }
+        ]
+      },
+      { "id": "image", "type": "image", "enabled": false },
+      { "id": "video", "type": "video", "enabled": false, "trigger": "post-action" }
+    ]
+  }
+}
