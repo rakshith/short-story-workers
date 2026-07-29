@@ -6,6 +6,7 @@ import { analyzeProductMediaBatch, ProductAnalysis, VisionAnalyzerResult } from 
 
 export interface VisionAgentInput {
   items: Array<{ url: string; type: 'image' | 'video' }>;
+  userTier?: string;
 }
 
 export interface VisionAgentOutput {
@@ -28,7 +29,7 @@ export class VisionAgent extends BaseAgent<VisionAgentInput, VisionAgentOutput> 
 
     this.log(`Analyzing ${input.items.length} product media items...`);
 
-    const results = await analyzeProductMediaBatch(input.items, apiKey);
+    const results = await analyzeProductMediaBatch(input.items, apiKey, input.userTier);
     const analyses = results
       .filter(r => r.success && r.analysis)
       .map(r => r.analysis!);

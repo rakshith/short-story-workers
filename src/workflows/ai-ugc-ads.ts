@@ -93,6 +93,7 @@ export const aiUgcAdsDefinition: WorkflowDefinition = {
       targetDuration,
       userId: request.userId,
       title: request.title,
+      userTier: resolved.tier,
     });
 
     if (!directorResult.success || !directorResult.plan) {
@@ -326,6 +327,12 @@ export const aiUgcAdsDefinition: WorkflowDefinition = {
               ...(showcaseItem.type === 'video' && {
                 videoAspectRatio: videoAspectRatio,
                 videoStrategy: creativePlan.videoProductAnalysis?.videoStrategy,
+              }),
+              // SaaS explainer: trim range for the source video segment this scene covers
+              // Only set for demo scenes when Creative Director assigned sourceStart/sourceEnd
+              ...(creativeScene.sourceStart != null && creativeScene.sourceEnd != null && {
+                sourceStart: creativeScene.sourceStart,
+                sourceEnd: creativeScene.sourceEnd,
               }),
             },
           },

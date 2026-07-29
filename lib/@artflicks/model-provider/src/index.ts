@@ -139,6 +139,16 @@ export { FalProvider, createFalProvider } from './providers/fal';
 export { GatewayProvider, createGatewayProvider } from './providers/gateway';
 
 // ============================================================================
+// LLM Model Resolution (Decision Tree)
+// ============================================================================
+
+export {
+  resolveLLMModel,
+  resolveVisionModel,
+} from './llm-model-resolver';
+export type { LLMModelResolutionInput, LLMModelResolution } from './llm-model-resolver';
+
+// ============================================================================
 // Video Pricing (Shared with Cloudflare Workers)
 // ============================================================================
 

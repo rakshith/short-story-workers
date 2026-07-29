@@ -6,6 +6,7 @@ import { generateUUID } from '../utils/storage';
 import { updateJobStatus } from './queue-processor';
 import { deductCredits, trackAIUsageInternal } from './usage-tracking';
 import { getCoordinator, initCoordinator, updateCoordinatorAudio } from '../utils/coordinator';
+import { resolveWorkflow } from '../utils/workflow-resolver';
 import { generateSceneAudio, transcribeUploadedAudio } from './audio-generation';
 import type { Caption, VideoConfig } from '../types';
 import type { CostResponse } from '@artflicks/credit-tracker';
@@ -226,8 +227,7 @@ export async function executeTalkingAvatarPipeline(
         // request (step 5) before video is triggered. The DO should mark audio as
         // done at init time and only track video completion via the async webhook.
         const coordinator = getCoordinator(storyId, env);
-        // Ensure mediaType is always 'ai-videos' so the DO knows this is a video story
-        // (prevents premature completionSignaled from audio update)
+        // mediaType is read by queue-consumer/webhook-handler progress paths (not by the DO)
         const effectiveVideoConfig = {
             ...(videoConfig || {
                 videoType: VIDEO_TYPE,
@@ -245,6 +245,10 @@ export async function executeTalkingAvatarPipeline(
             }),
             mediaType: 'ai-videos' as const,
         };
+        // Resolve workflow so the DO derives expectedVideoScenes from talking-avatar.json
+        // (audio postActions: producesVideo) — without this the audio update claims
+        // completionSignaled prematurely and the video webhook can never finalize.
+        const resolvedWorkflow = resolveWorkflow({ videoType: VIDEO_TYPE }) ?? undefined;
         await initCoordinator(coordinator, {
             storyId,
             userId,
@@ -252,6 +256,7 @@ export async function executeTalkingAvatarPipeline(
             totalScenes: 1,
             videoConfig: effectiveVideoConfig,
             skipAudioCheck: true,
+            resolvedWorkflow,
         });
 
         // 5. Generate TTS audio or transcribe uploaded audio

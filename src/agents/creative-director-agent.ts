@@ -8,6 +8,7 @@ import { ProductAnalysis } from '../services/vision-analyzer';
 import { generateText, Output } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { z } from 'zod';
+import { resolveLLMModel } from '@artflicks/model-provider';
 
 // ── Schema ─────────────────────────────────────────────────
 
@@ -18,6 +19,9 @@ const CreativeSceneSchema = z.object({
   narration: z.string(),
   shotDescription: z.string(),
   cameraStyle: z.string(),
+  // SaaS explainer: trim range (seconds) into the uploaded demo video for this scene
+  sourceStart: z.number().nullable().describe('For SaaS demo scenes: start time in seconds into the source video. null for intro/outro or non-SaaS.'),
+  sourceEnd: z.number().nullable().describe('For SaaS demo scenes: end time in seconds into the source video. null for intro/outro or non-SaaS.'),
 });
 
 const CreativePlanSchema = z.object({
@@ -52,7 +56,7 @@ const CreativePlanSchema = z.object({
 
 // ── Model ──────────────────────────────────────────────────
 
-const CREATIVE_DIRECTOR_MODEL = 'openai/gpt-5.6-luna'; // openai/gpt-5.6-luna ($6.00/M), openai/gpt-5.6-sol ($30.00/M), openai/gpt-5.6-terra ($15.00/M)
+const CREATIVE_DIRECTOR_MODEL = 'openai/gpt-5.6-luna'; // Fallback if tier resolution fails
 
 // ── Types ──────────────────────────────────────────────────
 
@@ -62,6 +66,7 @@ export interface CreativeDirectorInput {
   targetDuration: number;
   title?: string;
   aspectRatio: string;
+  userTier?: string;
 }
 
 export interface CreativeDirectorOutput {
@@ -85,8 +90,19 @@ export class CreativeDirectorAgent extends BaseAgent<CreativeDirectorInput, Crea
 
     const gateway = createGateway({ apiKey });
 
+    const resolved = resolveLLMModel({ userTier: input.userTier || 'tier2' });
+    const modelId = resolved?.id || CREATIVE_DIRECTOR_MODEL;
+    this.log(`Using LLM model: ${modelId} (tier: ${input.userTier || 'tier2'})`);
+
     // Build product context from vision analyses
     const productContext = input.analyses.map((a, i) => {
+      const hasVideoEvents = a.videoEvents && a.videoEvents.length > 0;
+      const eventTimeline = hasVideoEvents
+        ? a.videoEvents!.map((e, idx) =>
+            `  Event ${idx + 1}: [${e.start} → ${e.end}] ${e.eventType} — ${e.naturalDescription}`
+          ).join('\n')
+        : null;
+
       return `Product ${i + 1}:
 - Description: ${a.description}
 - Category: ${a.productCategory}
@@ -94,14 +110,17 @@ export class CreativeDirectorAgent extends BaseAgent<CreativeDirectorInput, Crea
 - Key Features: ${a.keyFeatures.join(', ')}
 - Benefits: ${a.benefits.join(', ')}
 - Selling Points: ${a.sellingPoints.join(', ')}
-- Visual Style: ${a.visualStyle}`;
+- Visual Style: ${a.visualStyle}${hasVideoEvents ? `
+- Video Duration: ${a.videoDurationSeconds ?? 'unknown'} seconds
+- DETECTED SAAS EXPLAINER EVENTS (${a.videoEvents!.length} meaningful on-screen moments):
+${eventTimeline}` : ''}`;
     }).join('\n\n');
 
-    const systemPrompt = this.buildSystemPrompt(input.creativeFreedom, input.targetDuration);
+    const systemPrompt = this.buildSystemPrompt(input.creativeFreedom, input.targetDuration, input.analyses);
 
     try {
       const { output } = await generateText({
-        model: gateway(CREATIVE_DIRECTOR_MODEL),
+        model: gateway(modelId),
         system: systemPrompt,
         messages: [
           {
@@ -124,15 +143,35 @@ Generate the complete creative plan now.`,
       });
 
       this.log(`Creative plan generated: ${output.story.scenes.length} scenes, ${output.story.totalDuration}s`);
-      return { success: true, plan: output as CreativePlan };
+
+      // Merge videoEvents + videoDurationSeconds from vision analysis into the plan
+      // (LLM doesn't generate these — they come from the vision model)
+      const mergedPlan = output as CreativePlan;
+      const saasAnalysis = input.analyses.find(a => a.videoEvents && a.videoEvents.length > 0);
+      if (saasAnalysis && saasAnalysis.videoEvents) {
+        mergedPlan.videoProductAnalysis = {
+          ...mergedPlan.videoProductAnalysis,
+          videoEvents: saasAnalysis.videoEvents,
+          videoDurationSeconds: saasAnalysis.videoDurationSeconds,
+        };
+        this.log(`Merged ${saasAnalysis.videoEvents.length} SaaS events into creative plan`);
+      }
+
+      return { success: true, plan: mergedPlan };
     } catch (err) {
       this.error('Failed to generate creative plan:', err);
       return { success: false, error: err instanceof Error ? err.message : 'Creative plan generation failed' };
     }
   }
 
-  private buildSystemPrompt(freedom: CreativeFreedom, targetDuration: number): string {
+  private buildSystemPrompt(freedom: CreativeFreedom, targetDuration: number, analyses?: ProductAnalysis[]): string {
     const freedomGuidance = this.getFreedomGuidance(freedom);
+
+    // Detect SaaS explainer: vision auto-detected screen recording + software + video events
+    const saasEvents = analyses?.flatMap(a => a.videoEvents ?? []);
+    const hasSaaSEvents = saasEvents && saasEvents.length > 0;
+    const videoDuration = analyses?.find(a => a.videoDurationSeconds)?.videoDurationSeconds;
+    const saasSection = hasSaaSEvents ? this.buildSaaSExplainerSection(saasEvents!, videoDuration, targetDuration) : '';
 
     return `You are an elite AI Creative Director for UGC (user-generated content) advertisement videos.
 
@@ -147,6 +186,8 @@ Your job is to:
 ═════════════════════════════════════════════════════════════
 
 ${freedomGuidance}
+
+${saasSection}
 
 ═════════════════════════════════════════════════════════════
     PRODUCT TYPE DETECTION
@@ -270,6 +311,11 @@ Camera styles to include:
 - Sound like a real person, not a salesperson
 - Hook must grab attention in first 3 seconds
 - CTA must be clear and actionable
+- CRITICAL: Intro and outro narration MUST fill the full scene duration.
+  An intro scene of 4 seconds needs AT LEAST 8-10 words of narration.
+  Short narration (e.g., 2-3 words) produces a very short audio clip,
+  resulting in minimal avatar lip movement that looks unnatural.
+  Always write enough narration to match the scene's duration (~2.5 words/sec).
 
 ═════════════════════════════════════════════════════════════
     REQUIREMENTS
@@ -287,6 +333,86 @@ TITLE:
 - Examples: "This Perfume Stops Scrolling", "The Skincare Secret Nobody Shares"
 
 OUTPUT: JSON with the complete creative plan.`;
+  }
+
+  private buildSaaSExplainerSection(
+    events: Array<{ start: string; end: string; eventType: string; naturalDescription: string }>,
+    videoDuration: number | undefined,
+    targetDuration: number
+  ): string {
+    const eventList = events.map((e, i) =>
+      `  ${i + 1}. [${e.start} → ${e.end}] (${e.eventType}) ${e.naturalDescription}`
+    ).join('\n');
+
+    // When SaaS events are present, total duration = intro + demo coverage + outro
+    // The demo portion should cover the full video (or as much as possible)
+    // This OVERRIDES the Creative Freedom slider duration
+    const introOutroBudget = 8; // ~4s intro + ~4s outro
+    const demoBudget = videoDuration
+      ? Math.round(videoDuration)
+      : Math.max(targetDuration - introOutroBudget, 15);
+    const totalEstimated = introOutroBudget + demoBudget;
+
+    return `═════════════════════════════════════════════════════════════
+    SAAS EXPLAINER MODE — AUTO-DETECTED
+═════════════════════════════════════════════════════════════
+
+The vision analysis detected a SaaS/software screen recording with ${events.length} meaningful
+on-screen events. This is a SaaS explainer video — follow these rules INSTEAD of the
+generic narration rules for DEMO scenes.
+
+DETECTED EVENTS (chronological):
+${eventList}
+
+Source video duration: ${videoDuration ? `${videoDuration}s` : 'unknown'}
+Estimated total output: ~${totalEstimated}s (intro ~4s + demo ~${demoBudget}s + outro ~4s)
+
+═══ DURATION OVERRIDE ═══
+When SaaS events are present, the Creative Freedom duration is OVERRIDDEN:
+- Intro scene: ~4 seconds (avatar talking head)
+- Demo scenes: cover the FULL source video by assigning events to scenes
+- Outro scene: ~4 seconds (avatar talking head, CTA)
+- Total = intro + demo coverage + outro (may exceed the slider target)
+
+═══ SCENE STRUCTURE FOR SAAS ═══
+1. INTRO (~4s): Avatar introduces the tool. Keep it short and engaging.
+   - "Let me show you how [tool] works..."
+   - "I've been using [tool] and it's been a game changer..."
+   - No sourceStart/sourceEnd for intro.
+
+2. DEMO SCENES: Split the detected events across 2-5 demo scenes.
+   - Each demo scene covers a contiguous range of events
+   - Set sourceStart = first event's start time (in seconds)
+   - Set sourceEnd = last event's end time (in seconds)
+   - Scene duration = sourceEnd - sourceStart (the event window duration)
+   - Narration for each demo scene: combine the naturalDescriptions of the
+     events it covers into a flowing, natural explanation
+   - Sound like a real person showing the tool to a friend
+   - NO timestamps in narration. NO "at 00:07 I click...". 
+   - Instead: "Here I'm creating a new project...", "Now watch what happens
+     when you add a task...", "And just like that, everything updates in real time..."
+   - Do NOT invent features or actions not in the event list
+   - Do NOT quote exact UI text unless clearly part of the event description
+
+3. OUTRO (~4s): Avatar wraps up with a clear CTA.
+   - "Try [tool] free today...", "Link in bio to get started..."
+   - No sourceStart/sourceEnd for outro.
+
+═══ SOURCE START/END FORMAT ═══
+Parse event timestamps (format "MM:SS.SS" or "SS.SS") to seconds:
+- "00:03.50" → 3.5 seconds → sourceStart: 3.5
+- "00:15.00" → 15.0 seconds → sourceEnd: 15.0
+Set sourceStart and sourceEnd ONLY on demo scenes. Omit on intro/outro.
+
+═══ NARRATION STYLE FOR DEMO SCENES ═══
+- Write as if you ARE the user demonstrating the tool
+- Natural, conversational, authentic — not scripted or salesy
+- Explain WHAT is happening on screen, not WHY to buy
+- The avatar is narrating while the viewer watches the screen recording
+- Flow naturally between events within a scene
+- Each scene's narration should fit its duration (~2.5 words/second)
+
+`;
   }
 
   private getFreedomGuidance(freedom: CreativeFreedom): string {

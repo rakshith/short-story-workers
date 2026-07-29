@@ -17,6 +17,7 @@ export interface AIDirectorAgentInput {
   targetDuration?: number;
   userId: string;
   title?: string;
+  userTier?: string;
 }
 
 export interface AIDirectorAgentOutput {
@@ -44,7 +45,7 @@ export class AIDirectorAgent extends BaseAgent<AIDirectorAgentInput, AIDirectorA
     this.log(`Starting AI Director for user ${input.userId}, freedom: ${input.creativeFreedom}`);
 
     // ── Step 1: Vision Analysis (Gemini) ────────────────
-    const visionResults = await this.analyzeProductMedia(input.productImages);
+    const visionResults = await this.analyzeProductMedia(input.productImages, input.userTier);
     const successfulAnalyses = visionResults
       .filter(r => r.success && r.analysis)
       .map(r => r.analysis!);
@@ -69,6 +70,7 @@ export class AIDirectorAgent extends BaseAgent<AIDirectorAgentInput, AIDirectorA
       targetDuration,
       title: input.title,
       aspectRatio: input.aspectRatio,
+      userTier: input.userTier,
     });
 
     if (!creativeResult.success || !creativeResult.plan) {
@@ -89,7 +91,8 @@ export class AIDirectorAgent extends BaseAgent<AIDirectorAgentInput, AIDirectorA
   }
 
   private async analyzeProductMedia(
-    items: Array<{ url: string; type: 'image' | 'video' }>
+    items: Array<{ url: string; type: 'image' | 'video' }>,
+    userTier?: string
   ): Promise<VisionAnalyzerResult[]> {
     const apiKey = this.env.AI_GATEWAY_API_KEY;
     if (!apiKey) {
@@ -97,6 +100,6 @@ export class AIDirectorAgent extends BaseAgent<AIDirectorAgentInput, AIDirectorA
       return [];
     }
 
-    return analyzeProductMediaBatch(items, apiKey);
+    return analyzeProductMediaBatch(items, apiKey, userTier);
   }
 }

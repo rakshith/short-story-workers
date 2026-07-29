@@ -428,7 +428,7 @@ async function handleAvatarWebhookSuccess(
             throw new Error(`Failed to fetch video: ${videoResponse.statusText}`);
         }
         const videoBlob = await videoResponse.arrayBuffer();
-        const key = `talking-avatar/${userId}/${storyId}.mp4`;
+        const key = `talking-avatar/${userId}/${storyId}/scene-${sceneIndex}.mp4`;
         await env.VIDEO_BUCKET.put(key, videoBlob, {
             httpMetadata: { contentType: 'video/mp4' },
         });
@@ -485,17 +485,13 @@ async function handleAvatarWebhookFailure(
         // 1. Update DO with error
         const id = env.STORY_COORDINATOR.idFromName(storyId);
         const coordinator = env.STORY_COORDINATOR.get(id);
-        await updateCoordinatorVideo(coordinator, {
+        const status = await updateCoordinatorVideo(coordinator, {
             sceneIndex,
             videoError: prediction.error || 'Avatar generation failed',
         });
 
-        // 2. Check if all scenes done (single scene = always done after error)
-        const { getCoordinatorProgress } = await import('../utils/coordinator');
-        const progress = await getCoordinatorProgress(coordinator);
-        const allDone = progress.videosCompleted >= progress.totalScenes;
-
-        if (allDone) {
+        // 2. Finalize when the DO reports completion (errors count toward expected video scenes)
+        if (status.isComplete) {
             const { syncStoryToSupabase } = await import('../queue-consumer');
             await syncStoryToSupabase({ jobId, storyId, userId }, coordinator, env);
         }

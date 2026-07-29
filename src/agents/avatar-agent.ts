@@ -131,58 +131,42 @@ export class AvatarAgent extends BaseAgent<AvatarAgentInput, AvatarAgentOutput> 
   }
 
   /**
-   * Build enhanced motion instructions based on display strategy and product context.
-   * Kling Avatar v2 accepts a prompt field for motion/scene instructions.
-   * Now uses shotDescription and cameraStyle from AI Director when available.
+   * Build motion instructions for Kling Avatar v2 lip-sync.
+   *
+   * CRITICAL: Complex motion instructions (zoom, pan, dynamic camera, high energy)
+   * cause Kling to prioritize motion generation over lip sync, resulting in
+   * unnatural mouth movements. For avatar talking-head scenes (intro/outro),
+   * we use ONLY minimal, lip-sync-friendly instructions.
+   *
+   * The Creative Director's shotDescription/cameraStyle are designed for
+   * product animation scenes (video-model agent), NOT for avatar lip-sync.
+   * Passing them to Kling Avatar degrades lip sync quality.
    */
   private buildMotionInstructions(input: AvatarAgentInput): string | undefined {
     const parts: string[] = [];
 
-    // Base motion instructions from user
+    // User-provided motion instructions (from talking-avatar workflow — keep as-is)
     if (input.motionInstructions) {
       parts.push(input.motionInstructions);
     }
 
-    // AI Director shot description (primary creative direction)
-    if (input.shotDescription) {
-      parts.push(input.shotDescription);
-    }
-
-    // AI Director camera style
-    if (input.cameraStyle) {
-      parts.push(`Camera: ${input.cameraStyle}`);
-    }
-
-    // Strategy-specific instructions (fallback if no shotDescription)
-    if (!input.shotDescription) {
+    // For AI UGC Ads avatar scenes: use ONLY minimal lip-sync instructions.
+    // Do NOT pass shotDescription or cameraStyle — they cause Kling to
+    // prioritize motion over lip sync, degrading quality.
+    if (!input.motionInstructions) {
+      // Simple, lip-sync-focused instruction for all avatar scenes
       switch (input.displayStrategy) {
         case 'composite':
-          parts.push('Maintain natural pose, speak directly to camera');
+          parts.push('Natural head movement, subtle facial expressions, speak directly to camera');
           break;
-
         case 'pip-overlay':
-          parts.push('Speak to camera with occasional hand gestures');
+          parts.push('Natural head movement, subtle facial expressions, speak directly to camera');
           break;
-
         case 'full-screen-overlay':
-          parts.push('Present enthusiastically, gesture toward product');
+          parts.push('Natural head movement, occasional hand gestures, speak directly to camera');
           break;
-
         default:
-          parts.push('Speak directly to camera');
-      }
-    } else {
-      // Add display strategy context to shot description
-      switch (input.displayStrategy) {
-        case 'composite':
-          parts.push('Avatar is holding the product, maintain natural pose');
-          break;
-        case 'pip-overlay':
-          parts.push('Avatar in corner, speak to camera with gestures');
-          break;
-        case 'full-screen-overlay':
-          parts.push('Present enthusiastically');
-          break;
+          parts.push('Natural head movement, subtle facial expressions, speak directly to camera');
       }
     }
 

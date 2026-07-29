@@ -1,11 +1,13 @@
 // Vision Analyzer — AI-powered product media analysis using Vercel AI Gateway + Gemini Flash
 // Uses generateText + Output.object() with Zod schema for structured, validated output
+// Vision model is resolved from decision tree based on user tier
 
 import { generateText, Output } from 'ai';
 import { createGateway } from '@ai-sdk/gateway';
 import { z } from 'zod';
+import { resolveVisionModel } from '@artflicks/model-provider';
 
-const VISION_MODEL = 'google/gemini-2.5-flash-lite';// google/gemini-3.1-flash-lite
+const VISION_MODEL = 'google/gemini-2.5-flash-lite'; // Fallback if tier resolution fails
 
 // ── System Prompt ──────────────────────────────────────────────
 
@@ -76,7 +78,49 @@ Also detect and return the video's native aspect ratio:
 - "16:9" — horizontal (YouTube, presentations)
 - "1:1" — square (Instagram feed)
 - "4:5" — portrait (Instagram feed)
-- "other" — non-standard`;
+- "other" — non-standard
+
+## SaaS Explainer Event Extraction (VIDEO ONLY — auto-detected)
+
+When the video shows a SOFTWARE / SaaS product demo (screen recording, UI walkthrough,
+dashboard tour, app tutorial — detected automatically from visualContentType being
+"screen-recording" or "screenshot" AND productCategory being "software"):
+
+Extract a chronological list of MEANINGFUL on-screen events in the videoEvents array.
+
+An event is "meaningful" when something CHANGES on screen that a viewer would need
+to understand the demo. Do NOT extract at fixed intervals — only when something happens.
+
+Event types to capture:
+- "click" — User clicks a button, tab, menu item, or interactive element
+- "scroll" — User scrolls to reveal new content or section
+- "navigation" — Page/view changes (navigating to a different screen)
+- "modal" — A modal, dialog, or popup opens or closes
+- "form-submit" — A form is submitted (e.g., creating, saving, updating something)
+- "toggle" — A toggle/switch/checkbox changes state
+- "success" — A success message, toast, or confirmation appears
+- "feature-reveal" — A key feature or section becomes visible for the first time
+- "data-change" — Data updates (table loads, chart renders, list refreshes)
+
+For each event provide:
+- start: exact timestamp "MM:SS.SS" (e.g., "00:03.50" = 3.5 seconds)
+- end: exact timestamp when the action/result completes
+- eventType: one of the types above
+- naturalDescription: What a real person would say to explain this moment
+  naturally to an audience. Write it as if showing the tool to a friend.
+  Examples: "Here I'm creating a new project", "Now watch the dashboard update
+  in real time", "And just like that, your task is added to the board"
+  DO NOT include timestamps in the description. DO NOT quote exact UI text
+  unless it's clearly readable. DO NOT invent actions not visible in the video.
+
+Rules:
+- Extract 5-15 events (not too few, not too granular)
+- Events MUST be chronologically ordered by start time
+- Only include events you actually observe — never guess or invent
+- Cover the full video duration — don't skip large gaps without at least one event
+- For non-SaaS videos (physical products, beauty, etc.): leave videoEvents EMPTY`;
+
+
 
 // ── Zod Schema ─────────────────────────────────────────────────
 
@@ -97,6 +141,17 @@ export const ProductAnalysisSchema = z.object({
     .describe('For videos: 0=simple static shot, 10=cinematic multi-shot production. For images: 0'),
   detectedAspectRatio: z.enum(['9:16', '16:9', '1:1', '4:5', 'other'])
     .describe('Video native aspect ratio. For images: "other"'),
+  // SaaS explainer events — auto-extracted when vision detects screen recording + software
+  videoEvents: z.array(z.object({
+    start: z.string().describe('Start timestamp "MM:SS.SS" (e.g., "00:03.50")'),
+    end: z.string().describe('End timestamp "MM:SS.SS"'),
+    eventType: z.enum([
+      'click', 'scroll', 'navigation', 'modal', 'form-submit',
+      'toggle', 'success', 'feature-reveal', 'data-change', 'other',
+    ]).describe('Type of on-screen event'),
+    naturalDescription: z.string().describe('What a real person would say to explain this moment naturally. No timestamps. No invented actions.'),
+  })).optional().describe('For SaaS screen recordings: chronological meaningful events. Empty/omitted for non-SaaS videos.'),
+  videoDurationSeconds: z.number().optional().describe('Total video duration in seconds (for SaaS explainer timing). Omitted for images.'),
 });
 
 export type ProductAnalysis = z.infer<typeof ProductAnalysisSchema>;
@@ -104,6 +159,7 @@ export type VisualContentType = ProductAnalysis['visualContentType'];
 export type ProductCategory = ProductAnalysis['productCategory'];
 export type VideoStrategy = NonNullable<ProductAnalysis['videoStrategy']>;
 export type DetectedAspectRatio = NonNullable<ProductAnalysis['detectedAspectRatio']>;
+export type VideoEvent = NonNullable<ProductAnalysis['videoEvents']>[number];
 
 // ── Result Type ────────────────────────────────────────────────
 
@@ -119,15 +175,22 @@ export interface VisionAnalyzerResult {
  * Analyze a product image URL using Gemini Flash vision via Vercel AI Gateway.
  * Uses generateText + Output.object() for structured, Zod-validated output.
  */
+function resolveVisionModelId(userTier?: string): string {
+  const resolved = resolveVisionModel({ userTier: userTier || 'tier2' });
+  return resolved?.id || VISION_MODEL;
+}
+
 export async function analyzeProductImage(
   imageUrl: string,
-  apiKey: string
+  apiKey: string,
+  userTier?: string
 ): Promise<VisionAnalyzerResult> {
   try {
     const gateway = createGateway({ apiKey });
+    const modelId = resolveVisionModelId(userTier);
 
     const { output } = await generateText({
-      model: gateway(VISION_MODEL),
+      model: gateway(modelId),
       system: VISION_SYSTEM_PROMPT,
       messages: [
         {
@@ -149,6 +212,7 @@ export async function analyzeProductImage(
       }),
     });
 
+    console.log(`[VisionAnalyzer] Analyzed image with model: ${modelId}`);
     return { success: true, analysis: output };
   } catch (err) {
     console.error('[VisionAnalyzer] Failed to analyze image:', err);
@@ -167,13 +231,15 @@ export async function analyzeProductImage(
  */
 export async function analyzeProductVideo(
   videoUrl: string,
-  apiKey: string
+  apiKey: string,
+  userTier?: string
 ): Promise<VisionAnalyzerResult> {
   try {
     const gateway = createGateway({ apiKey });
+    const modelId = resolveVisionModelId(userTier);
 
     const { output } = await generateText({
-      model: gateway(VISION_MODEL),
+      model: gateway(modelId),
       system: VISION_SYSTEM_PROMPT,
       messages: [
         {
@@ -196,6 +262,7 @@ export async function analyzeProductVideo(
       }),
     });
 
+    console.log(`[VisionAnalyzer] Analyzed video with model: ${modelId}`);
     return { success: true, analysis: output };
   } catch (err) {
     console.error('[VisionAnalyzer] Failed to analyze video:', err);
@@ -214,12 +281,13 @@ export async function analyzeProductVideo(
  */
 export async function analyzeProductMediaBatch(
   items: Array<{ url: string; type: 'image' | 'video' }>,
-  apiKey: string
+  apiKey: string,
+  userTier?: string
 ): Promise<VisionAnalyzerResult[]> {
   const promises = items.map((item) =>
     item.type === 'video'
-      ? analyzeProductVideo(item.url, apiKey)
-      : analyzeProductImage(item.url, apiKey)
+      ? analyzeProductVideo(item.url, apiKey, userTier)
+      : analyzeProductImage(item.url, apiKey, userTier)
   );
 
   return Promise.all(promises);

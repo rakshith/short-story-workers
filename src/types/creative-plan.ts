@@ -12,6 +12,13 @@ export type DetectedAspectRatio = '9:16' | '16:9' | '1:1' | '4:5' | 'other';
 
 export type ProductAudioHandling = 'replace' | 'mix' | 'strip';
 
+export interface VideoEvent {
+  start: string;
+  end: string;
+  eventType: string;
+  naturalDescription: string;
+}
+
 export interface CreativeScene {
   sceneNumber: number;
   sceneType: SceneType;
@@ -19,6 +26,10 @@ export interface CreativeScene {
   narration: string;
   shotDescription: string;
   cameraStyle: string;
+  // SaaS explainer: trim range for the uploaded demo video segment this scene covers
+  // Only set for demo scenes when videoEvents are present (auto-detected SaaS screen recordings)
+  sourceStart: number | null;  // seconds into the source video
+  sourceEnd: number | null;    // seconds into the source video
 }
 
 export interface VideoProductAnalysis {
@@ -26,6 +37,10 @@ export interface VideoProductAnalysis {
   bestProductTimestamp: string;
   videoComplexityScore: number;
   detectedAspectRatio: DetectedAspectRatio;
+  // SaaS explainer: meaningful on-screen events extracted by Gemini vision
+  // Present only when vision auto-detected a SaaS screen recording
+  videoEvents?: VideoEvent[];
+  videoDurationSeconds?: number;
 }
 
 export interface CreativePlan {

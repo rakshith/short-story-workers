@@ -46,9 +46,16 @@ export function computeSceneDuration(
   const captionDuration = getCaptionDuration(scene);
   const narrationDuration = Math.max(resolvedAudioDuration, captionDuration);
 
+  // Avatar lip-sync videos (generatedVideoUrl) have EXACT audio duration.
+  // Adding TRANSITION_BUFFER creates a frozen frame at the end (lip sync stops
+  // but video keeps playing for 0.2s). Skip buffer for avatar-video scenes.
+  const isAvatarVideoScene = Boolean((scene as any).generatedVideoUrl);
+
   return Math.max(
     sceneDuration,
-    narrationDuration > 0 && !isLastScene ? narrationDuration + TRANSITION_BUFFER : narrationDuration,
+    narrationDuration > 0 && !isLastScene && !isAvatarVideoScene
+      ? narrationDuration + TRANSITION_BUFFER
+      : narrationDuration,
     MIN_SCENE_DURATION
   );
 }
@@ -73,6 +80,7 @@ export class AiUgcAdsAdapter implements StoryAdapter {
 
     let currentTime = 0;
     let lastVisualIndex = -1;
+    const sourceCursor = new Map<string, number>();
     const isLastScene = (index: number) => index === story.scenes.length - 1;
 
     for (let sceneIndex = 0; sceneIndex < story.scenes.length; sceneIndex++) {
@@ -124,9 +132,32 @@ export class AiUgcAdsAdapter implements StoryAdapter {
       } else if ((scene as any).sourceMediaUrl) {
         // User-uploaded media — screen recording, product photo, product video
         const showcaseItem = composer?.showcaseItem;
-        const isVideoItem = showcaseItem?.type === 'video';
+        const sourceUrl = (scene as any).sourceMediaUrl as string;
+        // Detect video by composer metadata OR URL extension (fallback when composer is missing)
+        const isVideoItem = showcaseItem?.type === 'video'
+          || /\.(mp4|webm|mov|mkv)$/i.test(sourceUrl);
         const videoStrategy = composer?.displayPipeline?.videoStrategy;
         const videoAspectRatio = composer?.displayPipeline?.videoAspectRatio;
+        const plannedSourceStart = composer?.displayPipeline?.sourceStart;
+        const plannedSourceEnd = composer?.displayPipeline?.sourceEnd;
+
+        let trimmedSourceStart: number | undefined = plannedSourceStart;
+        let trimmedSourceEnd: number | undefined = plannedSourceEnd;
+        if (isVideoItem && plannedSourceStart != null && plannedSourceEnd != null) {
+          const slotDuration = sceneEnd - sceneStart;
+          const sourceDuration = (scene as any).composer?.visionAnalysis?.videoDurationSeconds;
+          const prevCursor = sourceCursor.get(sourceUrl);
+          let newStart = plannedSourceStart;
+          if (prevCursor != null && prevCursor > newStart) newStart = prevCursor;
+          let newEnd = newStart + slotDuration;
+          if (sourceDuration != null && newEnd > sourceDuration) {
+            newEnd = sourceDuration;
+            if (newStart > newEnd) newStart = newEnd;
+          }
+          trimmedSourceStart = newStart;
+          trimmedSourceEnd = newEnd;
+          sourceCursor.set(sourceUrl, newEnd);
+        }
 
         visual.push({
           start: sceneStart,
@@ -136,11 +167,14 @@ export class AiUgcAdsAdapter implements StoryAdapter {
             url: (scene as any).sourceMediaUrl,
             prompt: scene.imagePrompt ?? null,
             sceneNumber: scene.sceneNumber,
-            // Video-specific options for luxury-fullscreen strategy
             ...(isVideoItem && {
               playEmbeddedAudio: videoStrategy === 'luxury-fullscreen',
               videoVolume: videoStrategy === 'luxury-fullscreen' ? 0.25 : undefined,
               aspectRatio: videoAspectRatio || videoConfig.aspectRatio || '9:16',
+            }),
+            ...(isVideoItem && trimmedSourceStart != null && trimmedSourceEnd != null && {
+              sourceStart: trimmedSourceStart,
+              sourceEnd: trimmedSourceEnd,
             }),
           },
         });
